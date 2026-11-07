@@ -1,0 +1,229 @@
+// AI Visibility / GEO & SEO platform — core data model.
+//
+// Development uses SQLite. For production switch `provider` to "postgresql"
+// and point DATABASE_URL to Postgres; the model only uses portable types
+// (enum-like values are stored as String and validated in src/lib/constants.ts).
+// Json columns are nullable: Prisma 6 cannot emit Json defaults for SQLite, so
+// readers treat null as {} / [].
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// A tracked website (a "project" in the UI).
+model Site {
+  id             String   @id @default(cuid())
+  url            String   @unique // normalized origin, e.g. https://example.com
+  title          String
+  description    String?
+  /// Free-form settings: crawl depth, rate limits, locale, etc.
+  settings       Json?     
+  /// Target keywords / prompts the site wants to rank for in AI answers.
+  targetKeywords Json?     
+  /// Platform integration keys (IndexNow, GSC, ...). Never returned unmasked by the API.
+  integrations   Json?     
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  crawlSessions    CrawlSession[]
+  pages            CrawledPage[]
+  entities         GraphEntity[]
+  relations        GraphRelation[]
+  audits           GeoAudit[]
+  visibilityChecks LlmVisibilityRecord[]
+  actionItems      ActionItem[]
+  scheduledReports ScheduledReport[]
+  submissions      PlatformSubmission[]
+}
+
+/// One crawl run over a site. status: queued | running | completed | failed | cancelled
+model CrawlSession {
+  id           String    @id @default(cuid())
+  siteId       String
+  status       String    @default("queued")
+  trigger      String    @default("manual") // manual | scheduled | api
+  maxPages     Int       @default(500)
+  maxDepth     Int       @default(5)
+  pagesCrawled Int       @default(0)
+  pagesFailed  Int       @default(0)
+  error        String?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  site     Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  pages    CrawledPage[]
+  audits   GeoAudit[]
+  entities GraphEntity[]
+
+  @@index([siteId, createdAt])
+}
+
+/// Raw technical SEO facts for a crawled URL (latest snapshot per site+url).
+model CrawledPage {
+  id             String   @id @default(cuid())
+  siteId         String
+  crawlSessionId String?
+  url            String
+  statusCode     Int?
+  pageType       String? // home | product | category | article | about | contact | faq | other
+  title          String?
+  metaDescription String?
+  canonical      String?
+  h1             String?
+  wordCount      Int      @default(0)
+  depth          Int      @default(0)
+  /// Extracted structured data / headings / OpenGraph etc.
+  data           Json?     
+  crawledAt      DateTime @default(now())
+
+  site         Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  crawlSession CrawlSession? @relation(fields: [crawlSessionId], references: [id], onDelete: SetNull)
+
+  @@unique([siteId, url])
+}
+
+/// Knowledge-graph node. entityType: Page | Product | Category | FAQ | Organization | Author | Brand | Concept | Article
+model GraphEntity {
+  id             String   @id @default(cuid())
+  siteId         String
+  crawlSessionId String?
+  /// Stable key inside a site (e.g. canonical URL or "product:sku-123") — used for idempotent upserts.
+  key            String
+  entityType     String
+  name           String
+  url            String?
+  properties     Json?     
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  site         Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  crawlSession CrawlSession? @relation(fields: [crawlSessionId], references: [id], onDelete: SetNull)
+  outgoing     GraphRelation[] @relation("RelationSource")
+  incoming     GraphRelation[] @relation("RelationTarget")
+
+  @@unique([siteId, key])
+  @@index([siteId, entityType])
+}
+
+/// Knowledge-graph edge. relationType: links_to | has_category | contains_product | written_by | mentions_entity | answers_question | same_as | part_of
+model GraphRelation {
+  id           String   @id @default(cuid())
+  siteId       String
+  sourceId     String
+  targetId     String
+  relationType String
+  weight       Float    @default(1)
+  properties   Json?     
+  createdAt    DateTime @default(now())
+
+  site   Site        @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  source GraphEntity @relation("RelationSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  target GraphEntity @relation("RelationTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, targetId, relationType])
+  @@index([siteId])
+}
+
+/// Score snapshot of an audit run. All scores 0-100. status: pending | running | completed | failed
+model GeoAudit {
+  id             String    @id @default(cuid())
+  siteId         String
+  crawlSessionId String?
+  status         String    @default("pending")
+  geoScore       Int?
+  seoScore       Int?
+  eeatScore      Int?
+  /// Sub-metrics, e.g. { schemaCoverage: 72, crawlerAccess: 100, contentDepth: 55, ... }
+  metrics        Json?      
+  summary        String?
+  error          String?
+  createdAt      DateTime  @default(now())
+  completedAt    DateTime?
+
+  site         Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  crawlSession CrawlSession? @relation(fields: [crawlSessionId], references: [id], onDelete: SetNull)
+  actionItems  ActionItem[]
+
+  @@index([siteId, createdAt])
+}
+
+/// Result of asking an LLM a query and checking if the site appears.
+/// model: chatgpt | gemini | claude | perplexity | ... ; citationStatus: cited | mentioned | none
+model LlmVisibilityRecord {
+  id             String   @id @default(cuid())
+  siteId         String
+  model          String
+  query          String
+  citationStatus String
+  position       Int?
+  excerpt        String?
+  responseMeta   Json?     
+  checkedAt      DateTime @default(now())
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, model, checkedAt])
+}
+
+/// Recommended improvement. category: crawler | schema | content | authority | technical
+/// impact: high | medium | low ; status: open | in_progress | resolved | dismissed
+model ActionItem {
+  id          String    @id @default(cuid())
+  siteId      String
+  auditId     String?
+  title       String
+  description String?
+  category    String
+  impact      String
+  status      String    @default("open")
+  /// Optional URL / entity this recommendation targets.
+  targetUrl   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  resolvedAt  DateTime?
+
+  site  Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  audit GeoAudit? @relation(fields: [auditId], references: [id], onDelete: SetNull)
+
+  @@index([siteId, status])
+}
+
+/// Recurring report delivery. frequency: daily | weekly
+model ScheduledReport {
+  id         String    @id @default(cuid())
+  siteId     String
+  frequency  String
+  recipients Json?      
+  enabled    Boolean   @default(true)
+  lastRunAt  DateTime?
+  nextRunAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([enabled, nextRunAt])
+}
+
+/// Log of content/URL pushes to external platforms (IndexNow, AI platforms).
+/// status: queued | sent | failed
+model PlatformSubmission {
+  id         String   @id @default(cuid())
+  siteId     String
+  platform   String
+  urls       Json?     
+  payload    Json?     
+  status     String   @default("queued")
+  response   Json?     
+  createdAt  DateTime @default(now())
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, createdAt])
+}
