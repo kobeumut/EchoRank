@@ -2,10 +2,10 @@ import { prisma } from "@/lib/db";
 
 export const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 
-export function req(path: string, init: { method?: string; body?: unknown } = {}) {
+export function req(path: string, init: { method?: string; body?: unknown; token?: string } = {}) {
   return new Request(`http://localhost${path}`, {
     method: init.method ?? "GET",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...(init.token ? { authorization: `Bearer ${init.token}` } : {}) },
     body: init.body === undefined ? undefined : typeof init.body === "string" ? init.body : JSON.stringify(init.body),
   });
 }

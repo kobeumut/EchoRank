@@ -79,9 +79,13 @@ export const reportQuerySchema = z.object({
 
 export const createScheduleSchema = z.object({
   frequency: z.enum(REPORT_FREQUENCIES),
-  recipients: z.array(z.email()).min(1).max(50),
+  recipients: z.array(z.email()).max(50).default([]),
+  webhookUrl: z.url().max(2048).refine((raw) => {
+    const url = new URL(raw);
+    return url.protocol === "https:" && !url.username && !url.password && !url.hash;
+  }, "Webhook must be HTTPS without credentials or fragment").optional(),
   enabled: z.boolean().default(true),
-});
+}).strict().refine((v) => v.recipients.length > 0 || !!v.webhookUrl, "At least one delivery channel is required");
 
 export const actionItemSchema = z.object({
   title: z.string().min(1).max(300),
