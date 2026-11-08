@@ -106,7 +106,7 @@ function AnswerCard({ record, site }: { record: VisibilityRecord; site: { url: s
   );
 }
 
-function RunPanel({ suggestions, details = [], onDone }: { suggestions: string[]; details?: QuerySuggestion[]; onDone: () => void }) {
+export function RunPanel({ suggestions, details = [], onDone }: { suggestions: string[]; details?: QuerySuggestion[]; onDone: () => void }) {
   const labels = useMemo(() => new Map(details.map((d) => [d.text, d])), [details]);
   const { siteId } = useSite();
   const toast = useToast();
