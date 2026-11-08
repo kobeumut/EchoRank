@@ -167,7 +167,8 @@ describe("AutoGEO ingestion via POST /api/sites/[id]/audit/[auditId]/result", ()
     const site = await prisma.site.create({ data: { url: "https://shop.example.com", title: "Shop" } });
     const { auditId, body } = await ingest(site.id, { ...AUDIT, autogeo: RAW });
     const expected = autogeoToActionItems(REPORT).length;
-    expect(body.autogeo).toEqual({ score: REPORT.score, actionItems: expected });
+    expect(body.autogeo).toMatchObject({ score: REPORT.score, actionItems: expected });
+    expect(body.autogeo.suggestions.created).toBeGreaterThan(0);
     expect(body.actionItems.created).toBe(AUDIT.actionItems.length + expected);
 
     const audit = await prisma.geoAudit.findUniqueOrThrow({ where: { id: auditId } });

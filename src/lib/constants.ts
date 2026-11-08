@@ -72,3 +72,19 @@ export type QueueChannel = (typeof QUEUE_CHANNELS)[number];
 export type QueueStatus = (typeof QUEUE_STATUSES)[number];
 export type ChangeReason = (typeof CHANGE_REASONS)[number];
 export type SubmissionPlatform = (typeof SUBMISSION_PLATFORMS)[number];
+
+// ---- GEO Stage 2 persistence (GENE-109) ----
+export const AUTOGEO_RULE_TYPES = [
+  "stats", "quotes", "citations", "answer_capsule", "tone", "keyword_stuffing", "comparison_table",
+] as const;
+/** superseded = a newer analysis of the same page no longer proposes it. */
+export const SUGGESTION_STATUSES = ["pending", "applied", "dismissed", "superseded"] as const;
+export const QUERY_INTENTS = ["informational", "comparative", "transactional", "reputation"] as const;
+export const QUERY_LANGUAGES = ["tr", "en"] as const;
+export const QUERY_SOURCES = ["template", "manual", "llm"] as const;
+export const QUERY_STATUSES = ["active", "archived"] as const;
+
+export type AutoGeoRuleType = (typeof AUTOGEO_RULE_TYPES)[number];
+export type SuggestionStatus = (typeof SUGGESTION_STATUSES)[number];
+export type QueryIntent = (typeof QUERY_INTENTS)[number];
+export type QueryLanguage = (typeof QUERY_LANGUAGES)[number];
