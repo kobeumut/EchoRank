@@ -125,3 +125,37 @@ export type DistributionOverview = {
   queue: unknown;
   recentSubmissions: Submission[];
 };
+
+export type EntityEnrichment = {
+  id: string;
+  entityId: string | null;
+  entityKey: string;
+  entityName: string;
+  entityType: string;
+  status: string;
+  wikidataId: string | null;
+  wikipediaUrl: string | null;
+  sameAsLinks: unknown;
+  matchConfidence: number;
+  isVerified: boolean;
+  updatedAt?: string;
+};
+export type EnrichmentList = {
+  items: EntityEnrichment[];
+  total: number;
+  byStatus: Record<string, number>;
+  sameAs: { entityKey: string; entityName: string; entityType: string; wikidataId: string | null; sameAsLinks: unknown }[];
+};
+export type WikidataCandidate = { qid: string; label: string; description: string | null; url: string; score: number; signals?: unknown };
+export type ReconciledEntity = {
+  id: string;
+  name: string;
+  type: string;
+  status: string;
+  confidence: number | null;
+  wikidataId: string | null;
+  wikipediaUrl: string | null;
+  candidates: WikidataCandidate[];
+};
+export type ReconcileResult = { action: string; entity?: ReconciledEntity; enrichment?: EntityEnrichment | null };
+export type SiteJsonLd = { jsonld: Record<string, unknown>; valid: boolean; errors: string[]; script: string; nodes: number };

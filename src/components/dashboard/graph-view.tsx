@@ -5,8 +5,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ENTITY_LABELS } from "@/lib/dashboard/format";
 import { graphIssues, ISSUE_LABELS, issueCounts, type IssueKind } from "@/lib/dashboard/graph-insights";
 import { useApi } from "./api";
+import { EnrichmentTable, JsonLdModal, QidBadge, RECONCILABLE, ReconcileModal, WikidataSection, type ReconcileTarget } from "./entity-enrichment";
 import { useSite } from "./site-shell";
-import type { GraphNode, GraphPayload } from "./types";
+import type { EnrichmentList, EntityEnrichment, GraphNode, GraphPayload } from "./types";
 import { Badge, Button, Card, cx, EmptyState, ErrorState, inputBase, Skeleton } from "./ui";
 
 /** Fixed type → categorical slot (color follows the entity type, never its rank). Concept folds to muted gray. */
@@ -51,12 +52,26 @@ function props(n: GraphNode): Record<string, unknown> {
   return n.properties && typeof n.properties === "object" && !Array.isArray(n.properties) ? (n.properties as Record<string, unknown>) : {};
 }
 
-function NodeDetails({ node, payload, issues, onSelect }: { node: GraphNode; payload: GraphPayload; issues: IssueKind[]; onSelect: (id: string) => void }) {
+function NodeDetails({
+  node,
+  payload,
+  issues,
+  onSelect,
+  enrichment,
+  onReconcile,
+}: {
+  node: GraphNode;
+  payload: GraphPayload;
+  issues: IssueKind[];
+  onSelect: (id: string) => void;
+  enrichment: EntityEnrichment | undefined;
+  onReconcile: () => void;
+}) {
   const byId = useMemo(() => new Map(payload.nodes.map((n) => [n.id, n])), [payload.nodes]);
   const out = payload.edges.filter((e) => e.source === node.id);
   const inc = payload.edges.filter((e) => e.target === node.id);
   const p = props(node);
-  const shown = Object.entries(p).filter(([k, v]) => !["source_urls", "url"].includes(k) && (typeof v === "string" || typeof v === "number" || typeof v === "boolean" || (Array.isArray(v) && v.every((x) => typeof x === "string"))));
+  const shown = Object.entries(p).filter(([k, v]) => !["source_urls", "url", "wikidataId", "wikidataUrl", "wikipediaUrl", "sameAs", "confidence"].includes(k) && (typeof v === "string" || typeof v === "number" || typeof v === "boolean" || (Array.isArray(v) && v.every((x) => typeof x === "string"))));
   const rel = (list: typeof out, dir: "out" | "in") =>
     list.slice(0, 30).map((e) => {
       const other = byId.get(dir === "out" ? e.target : e.source);
@@ -77,13 +92,17 @@ function NodeDetails({ node, payload, issues, onSelect }: { node: GraphNode; pay
           <span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: typeColor(node.type) }} />
           <span className="text-xs text-zinc-500">{ENTITY_LABELS[node.type] ?? node.type}</span>
         </div>
-        <div className="mt-1 font-semibold break-words text-zinc-900 dark:text-zinc-100">{node.label}</div>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <span className="font-semibold break-words text-zinc-900 dark:text-zinc-100">{node.label}</span>
+          {enrichment?.isVerified && enrichment.wikidataId && <QidBadge qid={enrichment.wikidataId} />}
+        </div>
         {node.url && (
           <a href={node.url} target="_blank" rel="noopener noreferrer" className="mt-0.5 block truncate font-mono text-xs text-indigo-600 hover:underline dark:text-indigo-400">
             {node.url}
           </a>
         )}
       </div>
+      <WikidataSection enrichment={enrichment} reconcilable={RECONCILABLE.has(node.type)} onReconcile={onReconcile} />
       {issues.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {issues.map((i) => (
@@ -129,6 +148,24 @@ function NodeDetails({ node, payload, issues, onSelect }: { node: GraphNode; pay
 export function GraphExplorer() {
   const { siteId, version } = useSite();
   const graph = useApi<GraphPayload>(`/api/sites/${siteId}/graph?limit=2000`, { version });
+  const enrich = useApi<EnrichmentList>(`/api/sites/${siteId}/entities/reconcile?limit=500`, { version });
+  const [wikiFilter, setWikiFilter] = useState<"" | "verified" | "unverified">("");
+  const [reconcileTarget, setReconcileTarget] = useState<ReconcileTarget | null>(null);
+  const [jsonLdOpen, setJsonLdOpen] = useState(false);
+  const [jsonLdVersion, setJsonLdVersion] = useState(0);
+  const byEntity = useMemo(() => {
+    const m = new Map<string, EntityEnrichment>();
+    for (const e of enrich.data?.items ?? []) if (e.entityId) m.set(e.entityId, e);
+    return m;
+  }, [enrich.data]);
+  const verifiedIds = useMemo(() => new Set([...byEntity.values()].filter((e) => e.isVerified && e.wikidataId).map((e) => e.entityId!)), [byEntity]);
+  const { reload: reloadGraph } = graph;
+  const { reload: reloadEnrich } = enrich;
+  const onEnrichmentChanged = useCallback(() => {
+    void reloadEnrich();
+    void reloadGraph();
+    setJsonLdVersion((v) => v + 1);
+  }, [reloadEnrich, reloadGraph]);
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set());
   const [issueFilter, setIssueFilter] = useState<IssueKind | "any" | null>(null);
   const [search, setSearch] = useState("");
@@ -147,11 +184,13 @@ export function GraphExplorer() {
     if (!data) return [];
     return data.nodes.filter((n) => {
       if (hiddenTypes.has(n.type)) return false;
+      if (wikiFilter === "verified" && !verifiedIds.has(n.id)) return false;
+      if (wikiFilter === "unverified" && (!RECONCILABLE.has(n.type) || verifiedIds.has(n.id))) return false;
       if (issueFilter === "any") return issues.has(n.id);
       if (issueFilter) return issues.get(n.id)?.includes(issueFilter) ?? false;
       return true;
     });
-  }, [data, hiddenTypes, issueFilter, issues]);
+  }, [data, hiddenTypes, issueFilter, issues, wikiFilter, verifiedIds]);
 
   const q = search.trim().toLocaleLowerCase("tr");
   const matches = useMemo(() => (q ? new Set(visibleNodes.filter((n) => n.label.toLocaleLowerCase("tr").includes(q) || n.url?.toLowerCase().includes(q)).map((n) => n.id)) : null), [q, visibleNodes]);
@@ -175,12 +214,13 @@ export function GraphExplorer() {
   const problemNodes = data.nodes.filter((n) => issues.has(n.id));
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label="Varlık" value={data.stats.totalEntities} hint={data.stats.truncated ? `${data.stats.returnedEntities} gösteriliyor` : undefined} />
         <Stat label="İlişki" value={data.stats.edges} />
         <Stat label="Yetim sayfa" value={counts.orphan_page} tone={counts.orphan_page ? "bad" : "ok"} />
         <Stat label="Bağlantısız düğüm" value={counts.isolated} tone={counts.isolated ? "bad" : "ok"} />
         <Stat label="Schema’sız sayfa" value={counts.page_without_schema} tone={counts.page_without_schema ? "bad" : "ok"} />
+        <Stat label="Wikidata doğrulanmış" value={verifiedIds.size} hint={enrich.data ? `${enrich.data.total} uzlaştırılabilir varlıktan` : enrich.loading ? "yükleniyor…" : undefined} />
       </div>
 
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
@@ -227,14 +267,29 @@ export function GraphExplorer() {
             </option>
           ))}
         </select>
+        <select aria-label="Wikidata filtresi" value={wikiFilter} onChange={(e) => setWikiFilter(e.target.value as typeof wikiFilter)} className={`${inputBase} w-auto py-1.5 text-xs`}>
+          <option value="">Wikidata: tümü</option>
+          <option value="verified">Wikidata doğrulanmış ({verifiedIds.size})</option>
+          <option value="unverified">Doğrulanmamış varlıklar</option>
+        </select>
+        <Button size="sm" onClick={() => setJsonLdOpen(true)}>
+          {"{ }"} JSON-LD @graph
+        </Button>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-        <GraphCanvas nodes={visibleNodes} payload={data} issues={issues} selected={selected} matches={matches} onSelect={setSelected} />
+        <GraphCanvas nodes={visibleNodes} payload={data} issues={issues} verified={verifiedIds} selected={selected} matches={matches} onSelect={setSelected} />
         <Card title={selectedNode ? "Düğüm detayı" : "Graf hakkında"}>
           {selectedNode ? (
             <>
-              <NodeDetails node={selectedNode} payload={data} issues={issues.get(selectedNode.id) ?? []} onSelect={setSelected} />
+              <NodeDetails
+                node={selectedNode}
+                payload={data}
+                issues={issues.get(selectedNode.id) ?? []}
+                onSelect={setSelected}
+                enrichment={byEntity.get(selectedNode.id)}
+                onReconcile={() => setReconcileTarget({ id: selectedNode.id, name: selectedNode.label, type: selectedNode.type })}
+              />
               <Button size="sm" variant="ghost" className="mt-3" onClick={() => setSelected(null)}>
                 Seçimi temizle
               </Button>
@@ -246,6 +301,9 @@ export function GraphExplorer() {
                 <li>Sürükleyerek gezinin, tekerlekle yakınlaştırın.</li>
                 <li>Düğüme tıklayın: detay ve komşuları görünür.</li>
                 <li>Düğümleri sürükleyip yeniden konumlandırabilirsiniz.</li>
+                <li>
+                  Yeşil <b>W</b> rozeti, Wikidata QID&apos;si doğrulanmış varlıkları gösterir.
+                </li>
               </ul>
               {data.stats.truncated && (
                 <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
@@ -256,6 +314,29 @@ export function GraphExplorer() {
           )}
         </Card>
       </div>
+
+      <Card
+        title="Wikidata varlık zenginleştirme"
+        subtitle="Kurum, marka, kişi, ürün ve kavramların Wikidata QID ve Wikipedia eşleşmeleri — doğrulananlar JSON-LD sameAs olarak yayınlanır"
+        action={
+          <Button size="sm" variant="ghost" onClick={() => setJsonLdOpen(true)}>
+            JSON-LD önizle
+          </Button>
+        }
+      >
+        <EnrichmentTable
+          data={enrich.data}
+          loading={enrich.loading}
+          error={enrich.error}
+          onRetry={() => void enrich.reload()}
+          onReconcile={(e) => e.entityId && setReconcileTarget({ id: e.entityId, name: e.entityName, type: e.entityType })}
+          canShow={(id) => data.nodes.some((n) => n.id === id)}
+          onShow={(id) => {
+            setSelected(id);
+            if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        />
+      </Card>
 
       <Card title="Kopuk ve eksik düğümler" subtitle="AI motorlarının siteyi bütünlüklü anlaması için bağlanması / zenginleştirilmesi gereken varlıklar">
         {problemNodes.length === 0 ? (
@@ -295,6 +376,15 @@ export function GraphExplorer() {
           </div>
         )}
       </Card>
+
+      <ReconcileModal
+        siteId={siteId}
+        target={reconcileTarget}
+        enrichment={reconcileTarget ? byEntity.get(reconcileTarget.id) : undefined}
+        onClose={() => setReconcileTarget(null)}
+        onChanged={onEnrichmentChanged}
+      />
+      <JsonLdModal siteId={siteId} open={jsonLdOpen} onClose={() => setJsonLdOpen(false)} version={jsonLdVersion} />
     </div>
   );
 }
@@ -319,6 +409,7 @@ function GraphCanvas({
   nodes,
   payload,
   issues,
+  verified,
   selected,
   matches,
   onSelect,
@@ -326,6 +417,7 @@ function GraphCanvas({
   nodes: GraphNode[];
   payload: GraphPayload;
   issues: Map<string, IssueKind[]>;
+  verified: Set<string>;
   selected: string | null;
   matches: Set<string> | null;
   onSelect: (id: string | null) => void;
@@ -342,7 +434,7 @@ function GraphCanvas({
   const hoverRef = useRef<SimNode | null>(null);
   /** Set once the user pans/zooms, so auto-fit never fights them. */
   const userMoved = useRef(false);
-  const stateRef = useRef({ selected, matches });
+  const stateRef = useRef({ selected, matches, verified });
   const [tooltip, setTooltip] = useState<{ x: number; y: number; node: SimNode } | null>(null);
 
   const draw = useCallback(() => {
@@ -357,7 +449,7 @@ function GraphCanvas({
       const dpr = window.devicePixelRatio || 1;
       const { w, h } = size.current;
       const { x, y, k } = view.current;
-      const { selected: sel, matches: m } = stateRef.current;
+      const { selected: sel, matches: m, verified: wd } = stateRef.current;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
       ctx.fillStyle = cssVar("--chart-surface", "#fcfcfb");
@@ -406,6 +498,24 @@ function GraphCanvas({
         ctx.strokeStyle = n.issues.length ? critical : surface;
         if (n.issues.length) ctx.lineWidth = 2.5 / k;
         ctx.stroke();
+        if (wd.has(n.id)) {
+          // Wikidata badge: small green disc with a "W" at the node's upper right.
+          const br = Math.max(4.5 / k, n.r * 0.55);
+          const bx = n.x! + n.r * 0.75;
+          const by = n.y! - n.r * 0.75;
+          ctx.beginPath();
+          ctx.arc(bx, by, br, 0, Math.PI * 2);
+          ctx.fillStyle = "#0ca30c";
+          ctx.fill();
+          ctx.lineWidth = 1.2 / k;
+          ctx.strokeStyle = surface;
+          ctx.stroke();
+          ctx.fillStyle = "#ffffff";
+          ctx.font = `bold ${br * 1.3}px system-ui, sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("W", bx, by + br * 0.05);
+        }
         if (n.id === sel || n === hoverRef.current) {
           ctx.beginPath();
           ctx.arc(n.x!, n.y!, n.r + 4 / k, 0, Math.PI * 2);
@@ -452,9 +562,9 @@ function GraphCanvas({
   }, [draw]);
 
   useEffect(() => {
-    stateRef.current = { selected, matches };
+    stateRef.current = { selected, matches, verified };
     draw();
-  }, [selected, matches, draw]);
+  }, [selected, matches, verified, draw]);
 
   // (Re)build the simulation whenever the visible node set changes; keep known positions.
   useEffect(() => {
@@ -666,7 +776,7 @@ function GraphCanvas({
         </Button>
       </div>
       <div className="absolute bottom-3 left-3 rounded-md bg-white/85 px-2 py-1 text-[11px] text-zinc-500 backdrop-blur dark:bg-zinc-900/85">
-        {nodes.length} düğüm · <span className="text-[#d03b3b]">◯</span> sorunlu
+        {nodes.length} düğüm · <span className="text-[#d03b3b]">◯</span> sorunlu · <span className="font-bold text-[#0ca30c]">W</span> Wikidata doğrulanmış
       </div>
       {tooltip && (
         <div
@@ -677,6 +787,7 @@ function GraphCanvas({
           <div className="text-zinc-500">
             {ENTITY_LABELS[tooltip.node.data.type] ?? tooltip.node.data.type} · {tooltip.node.data.inDegree} gelen / {tooltip.node.data.outDegree} giden
           </div>
+          {verified.has(tooltip.node.id) && <div className="mt-0.5 text-[#006300] dark:text-[#0ca30c]">✓ Wikidata doğrulanmış</div>}
           {tooltip.node.issues.map((i) => (
             <div key={i} className="mt-0.5 text-red-600 dark:text-red-400">
               ✕ {ISSUE_LABELS[i]}
