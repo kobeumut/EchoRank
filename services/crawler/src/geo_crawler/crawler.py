@@ -18,6 +18,10 @@ from .urls import is_crawlable_resource, is_internal, normalize_url
 
 log = logging.getLogger(__name__)
 
+# response headers kept on PageData for the scoring module
+AUDIT_HEADERS = ("x-robots-tag", "strict-transport-security", "last-modified", "content-security-policy",
+                 "cache-control", "server")
+
 DEFAULT_UA = "GeoScoreBot/0.1 (+https://github.com/kobeumut; GEO/SEO audit crawler)"
 
 
@@ -100,6 +104,8 @@ class SiteCrawler:
             if cfg.respect_robots or cfg.use_sitemap:
                 self.robots = await fetch_robots(client, self.root)
                 result.robots_disallowed = self.robots.disallowed
+                result.robots_txt = self.robots.raw
+                result.robots_status = self.robots.status
             rps = cfg.requests_per_second
             if self.robots.crawl_delay and cfg.respect_robots:
                 rps = min(rps, 1.0 / self.robots.crawl_delay) if rps > 0 else 1.0 / self.robots.crawl_delay
@@ -186,6 +192,7 @@ class SiteCrawler:
         body = resp.content[: self.config.max_body_bytes]
         page = parse_html(body, final_url, self.root, resp.status_code, depth)
         page.content_type = ctype or "text/html"
+        page.headers = {k: resp.headers[k] for k in AUDIT_HEADERS if k in resp.headers}
         page.page_type = classify_page(page, self.root)
         return page
 

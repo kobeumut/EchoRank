@@ -33,6 +33,7 @@ export const CITATION_STATUSES = ["cited", "mentioned", "none"] as const;
 
 export const ACTION_CATEGORIES = ["crawler", "schema", "content", "authority", "technical"] as const;
 export const ACTION_IMPACTS = ["high", "medium", "low"] as const;
+export const ACTION_EFFORTS = ["high", "medium", "low"] as const;
 export const ACTION_STATUSES = ["open", "in_progress", "resolved", "dismissed"] as const;
 
 export const REPORT_FREQUENCIES = ["daily", "weekly"] as const;
@@ -46,4 +47,6 @@ export type LlmModel = (typeof LLM_MODELS)[number];
 export type CitationStatus = (typeof CITATION_STATUSES)[number];
 export type ActionCategory = (typeof ACTION_CATEGORIES)[number];
 export type ActionImpact = (typeof ACTION_IMPACTS)[number];
+export type ActionEffort = (typeof ACTION_EFFORTS)[number];
+export type ActionStatus = (typeof ACTION_STATUSES)[number];
 export type ReportFrequency = (typeof REPORT_FREQUENCIES)[number];

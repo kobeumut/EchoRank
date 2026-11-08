@@ -172,7 +172,7 @@ model LlmVisibilityRecord {
 }
 
 /// Recommended improvement. category: crawler | schema | content | authority | technical
-/// impact: high | medium | low ; status: open | in_progress | resolved | dismissed
+/// impact / effort: high | medium | low ; status: open | in_progress | resolved | dismissed
 model ActionItem {
   id          String    @id @default(cuid())
   siteId      String
@@ -181,6 +181,14 @@ model ActionItem {
   description String?
   category    String
   impact      String
+  effort      String?
+  /// Scoring rule that produced the item (e.g. "schema.faq_page"); null for manually created items.
+  /// (ruleId, targetUrl) identifies the same recommendation across audits.
+  ruleId      String?
+  /// Higher = do first (impact x reach / effort, blockers boosted).
+  priority    Float?
+  /// { check_id, evidence[], expected_gain, affected_urls[], affected_count, snippet { language, code, filename, instructions } }
+  details     Json?
   status      String    @default("open")
   /// Optional URL / entity this recommendation targets.
   targetUrl   String?
@@ -192,6 +200,7 @@ model ActionItem {
   audit GeoAudit? @relation(fields: [auditId], references: [id], onDelete: SetNull)
 
   @@index([siteId, status])
+  @@index([siteId, ruleId])
 }
 
 /// Recurring report delivery. frequency: daily | weekly

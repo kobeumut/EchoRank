@@ -3,6 +3,7 @@ import { prisma } from "../db";
 import { HttpError } from "../http";
 import type { StartAuditInput } from "../validation";
 import { getSiteOrThrow } from "./sites";
+import { defaultAuditRunner } from "./audit-runner";
 
 export interface AuditJob {
   site: Site;
@@ -17,7 +18,8 @@ export interface AuditJob {
  */
 export type AuditRunner = (job: AuditJob) => Promise<void>;
 
-let runner: AuditRunner | null = null;
+// Default: the `geo-audit` CLI runner when GEO_AUDIT_BIN is set (see audit-runner.ts), else none.
+let runner: AuditRunner | null = defaultAuditRunner();
 export function registerAuditRunner(fn: AuditRunner | null) {
   runner = fn;
 }

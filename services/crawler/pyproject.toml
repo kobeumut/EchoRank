@@ -21,6 +21,7 @@ dev = ["pytest>=8", "pytest-asyncio>=0.23", "respx>=0.21"]
 
 [project.scripts]
 geo-crawler = "geo_crawler.cli:main"
+geo-audit = "geo_crawler.audit_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
