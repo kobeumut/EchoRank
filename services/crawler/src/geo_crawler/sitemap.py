@@ -20,6 +20,7 @@ class RobotsInfo:
     sitemaps: list[str] = field(default_factory=list)
     disallowed: list[str] = field(default_factory=list)
     crawl_delay: float | None = None
+    status: int | None = None  # HTTP status of /robots.txt (None = network error / not fetched)
     _parser: RobotFileParser | None = None
 
     def can_fetch(self, url: str, user_agent: str = "*") -> bool:
@@ -107,7 +108,10 @@ async def fetch_robots(client: httpx.AsyncClient, root_url: str) -> RobotsInfo:
     try:
         resp = await client.get(url)
         if resp.status_code == 200:
-            return parse_robots(resp.text)
+            info = parse_robots(resp.text)
+            info.status = 200
+            return info
+        return RobotsInfo(status=resp.status_code)
     except httpx.HTTPError as exc:
         log.info("robots.txt fetch failed: %s", exc)
     return RobotsInfo()

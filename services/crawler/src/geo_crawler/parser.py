@@ -241,12 +241,103 @@ def parse_html(html: str | bytes, url: str, root_url: str | None = None, status_
 
     page.faqs = _parse_html_faqs(soup)
 
+    stats = _raw_stats(soup, html)
     for tag in soup.find_all(_NOISE_TAGS):
         tag.decompose()
     # template chrome is excluded from body text (keeps keywords/word counts content-focused)
     for tag in soup.find_all(["nav", "header", "footer", "aside"]):
         tag.decompose()
     body = soup.body or soup
+    stats.update(_content_stats(body))
     page.text = _clean(body.get_text(" "))
     page.word_count = len(page.text.split())
+    stats["text_bytes"] = len(page.text.encode("utf-8"))
+    stats["text_ratio"] = round(stats["text_bytes"] / stats["html_bytes"], 4) if stats["html_bytes"] else 0.0
+    page.content_stats = stats
     return page
+
+
+# ---------- raw-HTML signals used by the scoring module ----------
+
+_SPA_ROOT_IDS = ("root", "app", "__next", "__nuxt", "___gatsby", "svelte", "main-app", "q-app")
+_HYDRATION_MARKERS = (
+    ("__NEXT_DATA__", "nextjs"), ("self.__next_f", "nextjs-app"), ("__NUXT__", "nuxt"),
+    ("ng-version", "angular"), ("data-reactroot", "react"), ("data-server-rendered", "vue-ssr"),
+    ("__remixContext", "remix"), ("data-sveltekit", "sveltekit"), ("astro-island", "astro"),
+)
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+_PHONE_RE = re.compile(r"(?:\+\d{1,3}[\s.-]?)?(?:\(?0?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{2}[\s.-]?\d{2}\b")
+_AUTHOR_CLASS_RE = re.compile(r"(^|[-_ ])(author|byline|yazar|writer)([-_ ]|$)", re.I)
+
+
+def _raw_stats(soup: BeautifulSoup, html: str | bytes) -> dict[str, Any]:
+    raw = html.decode("utf-8", "ignore") if isinstance(html, bytes) else html
+    scripts = soup.find_all("script")
+    inline_bytes = sum(len(s.string or "") for s in scripts if not s.get("src")
+                       and "ld+json" not in str(s.get("type") or ""))
+    spa_root = None
+    for rid in _SPA_ROOT_IDS:
+        el = soup.find(id=rid)
+        if el is not None:
+            text = _clean(el.get_text(" "))
+            spa_root = {"id": rid, "empty": len(text.split()) < 20}
+            break
+    hydration = sorted({name for marker, name in _HYDRATION_MARKERS if marker in raw})
+    noscript = " ".join(_clean(n.get_text(" ")) for n in soup.find_all("noscript"))
+
+    mailto = {str(a["href"])[7:].split("?")[0].lower() for a in soup.find_all("a", href=True)
+              if str(a["href"]).lower().startswith("mailto:")}
+    tel = {re.sub(r"[^\d+]", "", str(a["href"])[4:]) for a in soup.find_all("a", href=True)
+           if str(a["href"]).lower().startswith("tel:")}
+    authors: list[str] = []
+    for el in soup.find_all(attrs={"rel": True}):
+        rel = el.get("rel")
+        if "author" in (rel if isinstance(rel, list) else [rel]) and _clean(el.get_text(" ")):
+            authors.append(_clean(el.get_text(" "))[:100])
+    for el in soup.find_all(class_=_AUTHOR_CLASS_RE):
+        t = _clean(el.get_text(" "))
+        if t and len(t) < 120:
+            authors.append(t)
+    return {
+        "html_bytes": len(raw.encode("utf-8", "ignore")),
+        "script_tags": len(scripts),
+        "external_scripts": sum(1 for s in scripts if s.get("src")),
+        "inline_script_bytes": inline_bytes,
+        "spa_root": spa_root,
+        "hydration": hydration,
+        "noscript_words": len(noscript.split()),
+        "emails": sorted(mailto)[:10],
+        "phones": sorted(t for t in tel if len(t) >= 7)[:10],
+        "address_tags": len(soup.find_all("address")),
+        "addresses": list(dict.fromkeys(_clean(a.get_text(" "))[:200] for a in soup.find_all("address")
+                                        if _clean(a.get_text(" "))))[:3],
+        "author_hints": list(dict.fromkeys(authors))[:5],
+        "time_tags": [str(t.get("datetime")) for t in soup.find_all("time") if t.get("datetime")][:10],
+        "images": len(soup.find_all("img")),
+        "images_without_alt": sum(1 for i in soup.find_all("img") if not (i.get("alt") or "").strip()),
+    }
+
+
+def _content_stats(body: Tag | BeautifulSoup) -> dict[str, Any]:
+    paragraphs = [_clean(p.get_text(" ")) for p in body.find_all("p")]
+    paragraphs = [p for p in paragraphs if p]
+    p_words = [len(p.split()) for p in paragraphs]
+    tables = body.find_all("table")
+    lists = body.find_all(["ul", "ol"])
+    text = _clean(body.get_text(" "))
+    return {
+        "paragraphs": len(paragraphs),
+        "avg_paragraph_words": round(sum(p_words) / len(p_words), 1) if p_words else 0.0,
+        "long_paragraphs": sum(1 for w in p_words if w > 120),
+        "first_paragraph": paragraphs[0][:500] if paragraphs else "",
+        "tables": len(tables),
+        "table_rows": sum(len(t.find_all("tr")) for t in tables),
+        "lists": len(lists),
+        "list_items": sum(len(lst.find_all("li", recursive=False)) for lst in lists),
+        "definition_lists": len(body.find_all("dl")),
+        "blockquotes": len(body.find_all("blockquote")),
+        "cite_tags": len(body.find_all("cite")),
+        "footnotes": len(body.find_all("sup")),
+        "text_emails": sorted(set(e.lower() for e in _EMAIL_RE.findall(text)))[:10],
+        "text_phones": sorted(set(re.sub(r"[^\d+]", "", m) for m in _PHONE_RE.findall(text)))[:10],
+    }
