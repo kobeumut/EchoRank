@@ -126,6 +126,48 @@ export type DistributionOverview = {
   recentSubmissions: Submission[];
 };
 
+export type AutoGeoSummaryPage = {
+  url: string;
+  pageType: string;
+  score: number;
+  grade: string | null;
+  wordCount: number;
+  caps: string[];
+  metrics: Record<string, number>;
+  improvementCount: number;
+  answerCapsule: string | null;
+};
+export type AutoGeoSuggestionRow = {
+  id: string;
+  siteId: string;
+  pageUrl: string;
+  ruleType: string;
+  ruleId: string | null;
+  title: string | null;
+  originalSnippet: string;
+  suggestedSnippet: string;
+  diffMarkdown: string | null;
+  expectedGain: number;
+  status: string;
+  fingerprint: string;
+  actionItemId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+export type AutoGeoOverview = {
+  auditId: string | null;
+  completedAt: string | null;
+  summary: { version: string; score: number; metrics: Record<string, number>; pageCount: number; pages: AutoGeoSummaryPage[] } | null;
+  items: (ActionItem & { details: (ActionDetails & Record<string, unknown>) | null })[];
+  suggestions: { items: AutoGeoSuggestionRow[]; total: number; byStatus: Record<string, number>; pendingByRuleType: Record<string, number> };
+};
+export type CmsApplyResult = {
+  configured: boolean;
+  applied: boolean;
+  suggestion: AutoGeoSuggestionRow;
+  deliveries: { url: string; status: "sent" | "failed"; httpStatus: number | null; message: string }[];
+};
+
 export type EntityEnrichment = {
   id: string;
   entityId: string | null;
@@ -231,4 +273,5 @@ export type CompetitorReport = {
   window: { days: number; since: string; total: number; limit: number; truncated: boolean };
   settingsValid: boolean;
   warnings: string[];
+>>>>>>> origin/main
 };

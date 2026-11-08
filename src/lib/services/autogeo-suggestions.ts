@@ -7,7 +7,11 @@ import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { AUTOGEO_RULE_TYPES, SUGGESTION_STATUSES, type AutoGeoRuleType } from "../constants";
 import { prisma } from "../db";
-import { notFound } from "../http";
+import { HttpError, notFound } from "../http";
+import { markdownToHtml } from "../autogeo/markdown";
+import { getDistributionSettings, getIntegration, INTEGRATION_KEYS } from "../distribution/config";
+import { assertPublicHttpUrl, OUTBOUND_TIMEOUT_MS, readSnippet } from "../distribution/net";
+import { signWebhook } from "../distribution/syndication";
 import { csvEnum } from "../validation";
 import {
   AUTOGEO_RULE_PREFIX, autoGeoReportSchema, getSiteAutoGeo, improvementPatches, type AutoGeoImprovement, type AutoGeoReport,
@@ -249,4 +253,89 @@ export async function updateSuggestionStatus(siteId: string, suggestionId: strin
   const row = await prisma.autoGeoSuggestion.findUnique({ where: { id: suggestionId }, select: { siteId: true } });
   if (!row || row.siteId !== siteId) throw notFound("Suggestion");
   return prisma.autoGeoSuggestion.update({ where: { id: suggestionId }, data: { status } });
+}
+
+// ---------------------------------------------------------------- Apply to CMS
+
+export const CMS_APPLY_EVENT = "autogeo.suggestion.applied";
+
+export type CmsDelivery = { url: string; status: "sent" | "failed"; httpStatus: number | null; message: string };
+
+/**
+ * "Apply to CMS": pushes the suggestion as a signed `autogeo.suggestion.applied` event to the site's configured
+ * syndication webhooks (AI Dağıtım → webhooks; same `x-aiv-signature` HMAC as syndication), logs each delivery as a
+ * PlatformSubmission and marks the suggestion `applied` when at least one CMS hook accepted it. Without configured
+ * webhooks nothing is sent and the status is unchanged (`configured: false`), so the UI can fall back to copy-paste.
+ * When every hook fails the status is unchanged as well.
+ */
+export async function applySuggestionToCms(siteId: string, suggestionId: string) {
+  const site = await getSiteOrThrow(siteId);
+  const row = await prisma.autoGeoSuggestion.findUnique({ where: { id: suggestionId } });
+  if (!row || row.siteId !== siteId) throw notFound("Suggestion");
+  if (row.status === "superseded") throw new HttpError(409, "Suggestion is superseded by a newer analysis");
+
+  const settings = getDistributionSettings(site);
+  const hooks = settings.enabled ? settings.syndication.webhooks : [];
+  if (!hooks.length) return { configured: false, applied: false, suggestion: row, deliveries: [] as CmsDelivery[] };
+
+  const secret = getIntegration(site, INTEGRATION_KEYS.webhookSecret);
+  const inserted = row.suggestedSnippet.startsWith(row.originalSnippet) && row.originalSnippet.trim()
+    ? row.suggestedSnippet.slice(row.originalSnippet.length).trim()
+    : null;
+  const body = JSON.stringify({
+    event: CMS_APPLY_EVENT,
+    site: { id: site.id, url: site.url, title: site.title },
+    suggestion: {
+      id: row.id,
+      pageUrl: row.pageUrl,
+      ruleType: row.ruleType,
+      ruleId: row.ruleId,
+      title: row.title,
+      expectedGain: row.expectedGain,
+      // Contract: replace `original` with `suggested` on the page (insertions keep their anchor block).
+      original: { markdown: row.originalSnippet, html: markdownToHtml(row.originalSnippet) },
+      suggested: { markdown: row.suggestedSnippet, html: markdownToHtml(row.suggestedSnippet) },
+      inserted: inserted ? { markdown: inserted, html: markdownToHtml(inserted) } : null,
+      diffMarkdown: row.diffMarkdown,
+    },
+  });
+  const deliveries: CmsDelivery[] = [];
+  for (const hook of hooks) {
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    let d: CmsDelivery;
+    try {
+      await assertPublicHttpUrl(hook.url);
+      const res = await fetch(hook.url, {
+        method: "POST",
+        redirect: "manual",
+        headers: {
+          "content-type": "application/json",
+          "user-agent": "AIVisibility-AutoGEO/1.0",
+          "x-aiv-event": CMS_APPLY_EVENT,
+          "x-aiv-timestamp": timestamp,
+          ...(secret && { "x-aiv-signature": signWebhook(secret, timestamp, body) }),
+        },
+        body,
+        signal: AbortSignal.timeout(OUTBOUND_TIMEOUT_MS),
+      });
+      d = { url: hook.url, status: res.ok ? "sent" : "failed", httpStatus: res.status, message: res.ok ? "Delivered" : await readSnippet(res, 300) };
+    } catch (err) {
+      d = { url: hook.url, status: "failed", httpStatus: null, message: (err as Error).message };
+    }
+    await prisma.platformSubmission.create({
+      data: {
+        siteId,
+        platform: "webhook",
+        status: d.status,
+        urls: [row.pageUrl],
+        payload: { webhook: hook.url, event: CMS_APPLY_EVENT, suggestionId: row.id } as Prisma.InputJsonValue,
+        response: { httpStatus: d.httpStatus, message: d.message },
+      },
+    });
+    deliveries.push(d);
+  }
+  const applied = deliveries.some((d) => d.status === "sent");
+  if (!applied) throw new HttpError(502, "No CMS webhook accepted the suggestion", { deliveries });
+  const suggestion = await prisma.autoGeoSuggestion.update({ where: { id: row.id }, data: { status: "applied" } });
+  return { configured: true, applied, suggestion, deliveries };
 }

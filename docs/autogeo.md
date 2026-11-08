@@ -57,3 +57,15 @@ The output appears under `autogeo` in `report.to_dict()` and `to_db_records()`. 
 - Reconciliation follows the existing rules. A page that no longer reports a problem auto-resolves its AutoGEO items. A payload without `autogeo` (an older crawler) leaves those items untouched. Built-in and AutoGEO items together are capped at 500 per audit.
 - `GET /api/sites/:id/autogeo` returns the latest summary and the open AutoGEO items.
 - `createUnifiedDiff` / `applyUnifiedDiff` regenerate missing patches and check that the patches apply.
+
+## Content Studio UI (`/sites/:id/studio`)
+
+The "İçerik Stüdyosu" tab is the editor workspace for persisted suggestions (`GET /api/sites/:id/autogeo`).
+
+- **Side-by-side diff**: line-aligned original vs. optimized content with word-level changes (or a unified view). GEO signals are underlined: statistics (blue), expert quotes (violet), source citations (amber) and placeholders to fill (dashed orange). Each card offers Copy Markdown, Copy HTML (`src/lib/autogeo/markdown.ts`), Copy Diff and **Apply to CMS** (`POST /autogeo/:id/apply`). It also has Uygulandı / Yoksay / Geri al buttons (`PATCH`).
+- **Answer capsules**: heading-level 40-60 word capsules and page-level capsules as cards with a word-count meter against the 40-60 band.
+- **Tables**: comparison and key-figure tables with a rendered preview and HTML/Markdown output.
+- **GEO score predictor**: tick pending suggestions to see the projected AutoGEO score (+X points). Each suggestion closes `expectedGain`% (capped at 60%) of the page's remaining gap to 100, with compounding diminishing returns. The site score moves by the mean page delta. Applied suggestions awaiting re-audit are shown separately. This is a heuristic, and only a new audit gives the real score.
+- **Filters**: page URL, rule type (İstatistik, Alıntı, Kaynak, Ton, Yanıt Kapsülü, Anahtar Kelime, Tablo), impact (Yüksek ≥15%, Orta ≥6%, Düşük) and status. The data refetches when an audit completes and polls while one is running.
+
+The pure logic (diff, signal tagging, capsule/table extraction, simulator) lives in `src/lib/dashboard/autogeo-studio.ts` and is covered by `tests/autogeo-studio.test.ts`.

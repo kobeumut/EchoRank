@@ -28,6 +28,13 @@ bearer token or a dashboard session (see `src/proxy.ts`).
 Insertions keep their anchor block in `suggestedSnippet`, so applying a suggestion always means
 "replace `originalSnippet` with `suggestedSnippet`".
 
+- `POST /autogeo/:suggestionId/apply` — "Apply to CMS". Sends a signed `autogeo.suggestion.applied` event
+  (`x-aiv-event`, `x-aiv-timestamp`, `x-aiv-signature` = HMAC-SHA256 like syndication) to every syndication webhook
+  configured under AI Dağıtım. Payload: `site`, `suggestion { id, pageUrl, ruleType, ruleId, title, expectedGain,
+  original {markdown, html}, suggested {markdown, html}, inserted?, diffMarkdown }`. At least one `2xx` → status
+  `applied`. No webhook configured → `{ configured: false }`, nothing sent, status unchanged. Every webhook failed →
+  `502` with `details.deliveries`, status unchanged. Each delivery is logged as a `PlatformSubmission`.
+
 ## Competitors — `GET /competitors?days=30&gapLimit=50&refresh=true&granularity=day&evidenceLimit=30`
 
 Recomputes the Share-of-Model analysis over stored visibility checks and upserts one `CompetitorAnalysis` row per
