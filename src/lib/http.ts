@@ -61,3 +61,11 @@ export function errorResponse(err: unknown): Response {
   console.error(err);
   return json({ error: "Internal server error" }, 500);
 }
+
+/** Plain-text / XML response (llms.txt, sitemaps, feeds). */
+export function text(body: string, contentType: string, status = 200) {
+  return new Response(body, {
+    status,
+    headers: { "content-type": contentType, "cache-control": "public, max-age=300" },
+  });
+}

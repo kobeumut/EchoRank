@@ -19,16 +19,18 @@ A comprehensive Generative Engine Optimization (GEO) & SEO tracking, scoring, an
 
 ## Architecture & Services
 
-The platform is designed as a unified monorepo:
+The platform is structured as a unified monorepo:
 
 ```
 ai-visibility/
 ├── src/                     # Full-stack Next.js 16 core platform & API
 │   ├── app/                 # App Router pages and REST API handlers
-│   │   ├── api/sites/       # Site management, audits, graph & reports
+│   │   ├── api/sites/       # Site management, audits, graph, distribution & reports
+│   │   ├── api/distribution/# Background cron and distribution execution
 │   │   └── api/health/      # System health endpoint
 │   ├── lib/
 │   │   ├── services/        # Domain services (audit, graph, sites, reports)
+│   │   ├── distribution/    # AI distribution engine (IndexNow, Google, llms.txt, feeds)
 │   │   ├── db.ts            # Prisma client singleton
 │   │   └── validation.ts    # Zod request validators
 │   └── proxy.ts             # API token security guard
@@ -76,6 +78,12 @@ npm test
 npm run build
 ```
 
+Use `npm run db:seed` to reseed the demo site and `npm run db:studio` to browse data.
+
+#### PostgreSQL Setup
+
+Set `provider = "postgresql"` in `prisma/schema.prisma`, point `DATABASE_URL` at Postgres, and run `npx prisma migrate dev --name init`. The schema only uses portable types: enum-like fields are `String` columns validated in `src/lib/constants.ts`.
+
 ### 2. Crawler & Knowledge Graph Service
 
 ```bash
@@ -93,9 +101,29 @@ geo-crawler https://example.com -o graph.json --db-records records.json --depth 
 
 ---
 
+## Data Model
+
+| Model | Purpose |
+| --- | --- |
+| `Site` | Tracked site: normalized origin URL (unique), title, `settings`, `targetKeywords`, `integrations` (secrets, masked in API output) |
+| `CrawlSession` | Crawl run: status, trigger, limits, pages crawled/failed, timings |
+| `CrawledPage` | Latest technical snapshot per `(site, url)`: status code, page type, title, meta, canonical, H1, word count, extracted data |
+| `GraphEntity` | Knowledge-graph node (`Page`, `Product`, `Category`, `FAQ`, `Organization`, `Author`, `Brand`, `Article`, `Concept`), unique `(site, key)` for idempotent upserts |
+| `GraphRelation` | Edge (`links_to`, `has_category`, `contains_product`, `written_by`, `mentions_entity`, `answers_question`, `same_as`, `part_of`), unique per `(source, target, type)` |
+| `GeoAudit` | GEO / SEO / E-E-A-T scores (0–100) plus sub-`metrics` |
+| `LlmVisibilityRecord` | One AI engine check: model, query, `cited`/`mentioned`/`none`, position, excerpt |
+| `ActionItem` | Recommendation: category (`crawler`, `schema`, `content`, `authority`, `technical`), impact, status |
+| `ScheduledReport` | `daily`/`weekly` report: recipients, last/next run |
+| `PlatformSubmission` | Log of URL/content pushes (`indexnow`, `google_indexing`, `google_search_console`, `webhook`) with the remote response |
+| `SubmissionQueueItem` | Outbound notification queue: one row per `(site, url, channel)`, change reason, content fingerprint, attempts / backoff |
+
+---
+
 ## API Endpoints
 
 All responses are formatted in JSON with standard HTTP status codes.
+
+### Core Endpoints
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
@@ -111,6 +139,36 @@ All responses are formatted in JSON with standard HTTP status codes.
 | `GET` | `/api/sites/:id/reports` | Get score trends, LLM visibility metrics, and action items |
 | `GET/POST`| `/api/sites/:id/reports/schedules` | Manage daily and weekly automated report schedules |
 
+### AI Distribution Endpoints
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/sites/:id/distribution` | Settings, channel readiness, queue counters, last 20 submissions |
+| `PATCH` | `/api/sites/:id/distribution` | Partial settings update (nested objects are merged) |
+| `GET/POST` | `/api/sites/:id/distribution/indexnow-key` | Show / create the IndexNow key (`{ "rotate": true }` replaces it). `?format=txt` downloads the key file |
+| `POST` | `/api/sites/:id/distribution/indexnow-key/verify` | Fetch the published key file from the site and check it |
+| `GET` | `/api/sites/:id/distribution/queue?status=&channel=&limit=` | Queue rows |
+| `POST` | `/api/sites/:id/distribution/queue` | Announce URLs now `{ urls, reason?: "created"\|"updated"\|"deleted", channels? }` → 202 (CMS hook) |
+| `POST` | `/api/sites/:id/distribution/sync` | Diff the latest crawl against the queue `{ mode?: "notify"\|"baseline" }` |
+| `POST` | `/api/sites/:id/distribution/dispatch` | Send due queue rows now |
+| `GET/POST` | `/api/sites/:id/distribution/syndicate` | Preview / push this period's rotation to webhooks `{ force? }` |
+| `GET` | `/api/sites/:id/ai/llms.txt`, `llms-full.txt` | Generated `llms.txt` files (Markdown) |
+| `GET` | `/api/sites/:id/ai/sitemap-ai.xml` | Prioritized sitemap of indexable URLs |
+| `GET` | `/api/sites/:id/ai/ai-feed.xml`, `ai-feed.atom`, `ai-feed.json` | RSS 2.0 / Atom / JSON Feed 1.1 of the current rotation |
+| `POST` | `/api/distribution/run` | Cron hook: flush due queues for all sites and publish due syndication periods |
+
+---
+
+## AI Distribution Engine
+
+The modern replacement for legacy "URL submitters". AI answer engines ground their answers on live web indexes (ChatGPT search → Bing, Gemini → Google, Perplexity → own crawler + Bing), so the engine ensures those indexes learn about updates rapidly.
+
+- **Change Queue**: After each completed crawl (or `POST …/distribution/sync`) every indexable page gets a fingerprint. New pages are queued as `created`, changed fingerprints as `updated`, and removed pages as `deleted`.
+- **IndexNow Channel**: Notifies Bing, Yandex, Seznam, Naver, and other participating engines in batches of up to 10,000 URLs.
+- **Google Search Console Channel**: Automatically re-submits configured sitemaps via Google Search Console API.
+- **Google Indexing API Channel**: Optional direct notification for immediate URL indexing.
+- **`llms.txt` & Feeds**: Publishes standard `/llms.txt`, `/llms-full.txt`, `/sitemap-ai.xml`, and rotating JSON/Atom feeds for AI crawlers.
+
 ---
 
 ## Configuration
@@ -120,6 +178,7 @@ Refer to `.env.example` for all configurable environment variables:
 - `API_TOKEN`: Optional Bearer token for securing API endpoints.
 - `OPENAI_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `PERPLEXITY_API_KEY`: Multi-model visibility testing keys.
 - `INDEXNOW_KEY`, `INDEXNOW_HOST`: Instant Bing / ChatGPT search indexation configuration.
+- `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY`: Google Search Console & Indexing API credentials.
 - `SMTP_*`: Notification and scheduled report delivery settings.
 
 ---
