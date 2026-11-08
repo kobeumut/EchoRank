@@ -33,7 +33,9 @@ ai-visibility/
 │   │   ├── distribution/    # AI distribution engine (IndexNow, Google, llms.txt, feeds)
 │   │   ├── db.ts            # Prisma client singleton
 │   │   └── validation.ts    # Zod request validators
-│   └── proxy.ts             # API token security guard
+│   ├── components/dashboard/ # Client UI: site shell, overview, actions, graph, visibility, distribution
+│   ├── lib/dashboard/       # Pure UI helpers (score bands, highlight, competitors, graph issues)
+│   └── proxy.ts             # API token / dashboard session guard
 ├── prisma/                  # Database schema & migrations (SQLite/PostgreSQL)
 ├── services/
 │   └── crawler/             # Python 3.10+ async crawler & Knowledge Graph engine
@@ -46,7 +48,7 @@ ai-visibility/
 
 ## Tech Stack
 
-- **Core Web & API**: Next.js 16 (App Router, Turbopack), TypeScript, Tailwind CSS 4.
+- **Core Web & API**: Next.js 16 (App Router, Turbopack), TypeScript, Tailwind CSS 4, `d3-force` (graph layout).
 - **ORM & Database**: Prisma 6 (SQLite for development, PostgreSQL for production).
 - **Validation & Testing**: Zod 4, Vitest.
 - **Crawler & Graph Engine** (`services/crawler`): Python 3.10+, HTTPX (async), BeautifulSoup4, lxml, NetworkX.
@@ -101,6 +103,27 @@ geo-crawler https://example.com -o graph.json --db-records records.json --depth 
 
 ---
 
+## Dashboard (Web UI)
+
+`npm run dev` → http://localhost:3000. The whole UI is Turkish and talks to the REST API below (no hidden server-only data paths), with skeleton loaders, empty states and inline error/retry everywhere. Light/dark theme follows the OS and can be toggled.
+
+| Screen | Route | What it does |
+| --- | --- | --- |
+| Siteler | `/` | Site cards with GEO / SEO / E-E-A-T scores, open action count, add-site form ("Ekle ve Analiz Et" = create + one-click audit), search |
+| Genel Bakış | `/sites/:id` | GEO score (grade, delta), AI bot accessibility checks, E-E-A-T checks, technical SEO, per-model visibility (ChatGPT / Gemini / Claude / Perplexity), score history, 4-pillar breakdown, top actions, audit history |
+| Ne Yapılmalı? | `/sites/:id/actions` | Prioritized action cards (Kritik / Önemli / İyileştirme = impact high / medium / low), category filter, evidence, affected URLs, copy / download ready-made JSON-LD, robots.txt, `llms.txt` snippets; "Çözüldü Olarak İşaretle", "Yeniden Kontrol Et" (new audit verifies the fix — still-failing items reopen), dismiss / reopen |
+| Bilgi Grafı | `/sites/:id/graph` | Interactive force-directed knowledge graph (canvas + `d3-force`): pan / zoom / drag, type filters, search, node details & relations; flags orphan pages, isolated nodes, schema-less pages, thin pages and uncategorized products, with an accessible table of problem nodes |
+| LLM Görünürlük | `/sites/:id/visibility` | Runs bounded paid visibility checks (query × model), shows each model's answer with the site's name / domain / cited URLs highlighted, position, sources; competitor citation table |
+| AI Dağıtım | `/sites/:id/distribution` | IndexNow key create / download / verify, channel toggles, queue counters, "IndexNow bildirimini tetikle" (dispatch), crawl sync, manual URL announce, submission history, live `llms.txt` / `llms-full.txt` preview with copy & download |
+
+While an audit runs the site header polls `GET /api/sites/:id/audit` and refreshes every screen when it finishes.
+
+### Authentication
+
+When `API_TOKEN` is set, `/api/*` accepts either `Authorization: Bearer <API_TOKEN>` (machine clients) or the dashboard session cookie, and dashboard pages redirect to `/login`. `POST /api/auth { "token": "…" }` exchanges the token for an `HttpOnly; SameSite=Strict` cookie that holds a SHA-256 digest of the token (never the token itself); `DELETE /api/auth` logs out; `GET /api/auth` reports `{ required, authenticated }`. Cookie-authenticated unsafe requests must be same-origin (CSRF guard). Without `API_TOKEN` the dashboard is open, but paid visibility checks stay disabled.
+
+---
+
 ## Data Model
 
 | Model | Purpose |
@@ -128,6 +151,7 @@ All responses are formatted in JSON with standard HTTP status codes.
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | `GET` | `/api/health` | System and database health status |
+| `GET/POST/DELETE` | `/api/auth` | Dashboard session: status / exchange `API_TOKEN` for a session cookie / log out |
 | `GET` | `/api/sites` | List tracked sites with latest GEO audit summary |
 | `POST` | `/api/sites` | Register a new site for tracking |
 | `GET` | `/api/sites/:id` | Retrieve site details and configuration |
