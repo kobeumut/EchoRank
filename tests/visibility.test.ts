@@ -87,9 +87,9 @@ describe("visibility API with mocked live transports and real SQLite", () => {
     expect(body.items.find((i: { model: string }) => i.model === "perplexity").record.responseMeta).toMatchObject({ isCited: true, isMentioned: true, competitorDomains: ["rival.test"] });
     const calls = vi.mocked(fetch).mock.calls;
     const requests = calls.map(([, init]) => JSON.parse(init!.body as string));
-    const openAiReq = requests.find((r: any) => r.tools?.[0]?.type === "web_search");
-    const geminiReq = requests.find((r: any) => r.tools?.[0]?.google_search);
-    const claudeReq = requests.find((r: any) => r.tools?.[0]?.name === "web_search");
+    const openAiReq = requests.find((r) => r.tools?.[0]?.type === "web_search");
+    const geminiReq = requests.find((r) => r.tools?.[0]?.google_search);
+    const claudeReq = requests.find((r) => r.tools?.[0]?.name === "web_search");
     expect(openAiReq).toBeDefined();
     expect(openAiReq.tools).toEqual([{ type: "web_search" }]);
     expect(geminiReq).toBeDefined();

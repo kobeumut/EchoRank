@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import * as audit from "@/app/api/sites/[id]/audit/route";
 import * as graph from "@/app/api/sites/[id]/graph/route";
@@ -10,6 +10,7 @@ import { ctx, req, resetDb } from "./helpers";
 
 beforeEach(resetDb);
 afterAll(() => prisma.$disconnect());
+afterEach(() => vi.unstubAllEnvs());
 
 const newSite = (url = "https://a.example.com") =>
   prisma.site.create({ data: { url, title: "A", settings: { maxPages: 42 } } });
@@ -125,20 +126,21 @@ describe("/api/sites/[id]/reports", () => {
   });
 
   it("creates and lists schedules", async () => {
+    vi.stubEnv("API_TOKEN", "reports-test");
     const s = await newSite();
     const created = await schedules.POST(
-      req(`/api/sites/${s.id}/reports/schedules`, { method: "POST", body: { frequency: "weekly", recipients: ["a@b.co"] } }),
+      req(`/api/sites/${s.id}/reports/schedules`, { method: "POST", token: "reports-test", body: { frequency: "weekly", recipients: ["a@b.co"] } }),
       ctx(s.id),
     );
     expect(created.status).toBe(201);
     const body = await created.json();
     expect(new Date(body.nextRunAt).getUTCDay()).toBe(1);
     const bad = await schedules.POST(
-      req(`/api/sites/${s.id}/reports/schedules`, { method: "POST", body: { frequency: "hourly", recipients: ["nope"] } }),
+      req(`/api/sites/${s.id}/reports/schedules`, { method: "POST", token: "reports-test", body: { frequency: "hourly", recipients: ["nope"] } }),
       ctx(s.id),
     );
     expect(bad.status).toBe(400);
-    const list = await (await schedules.GET(req(`/api/sites/${s.id}/reports/schedules`), ctx(s.id))).json();
+    const list = await (await schedules.GET(req(`/api/sites/${s.id}/reports/schedules`, { token: "reports-test" }), ctx(s.id))).json();
     expect(list.items).toHaveLength(1);
   });
 });

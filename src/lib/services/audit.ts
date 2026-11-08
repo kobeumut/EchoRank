@@ -30,7 +30,7 @@ export function getAuditRunner() {
 
 const ACTIVE_CRAWL = ["queued", "running"];
 
-export async function startAudit(siteId: string, input: StartAuditInput): Promise<AuditJob> {
+export async function startAudit(siteId: string, input: StartAuditInput, reportRunId?: string): Promise<AuditJob> {
   const site = await getSiteOrThrow(siteId);
   const settings = (site.settings ?? {}) as { maxPages?: number; maxDepth?: number };
 
@@ -52,6 +52,8 @@ export async function startAudit(siteId: string, input: StartAuditInput): Promis
     const audit = await tx.geoAudit.create({
       data: { siteId, crawlSessionId: crawlSession.id },
     });
+    // Link ownership atomically: a crashed report can recover its crawl without touching manual jobs.
+    if (reportRunId) await tx.reportRun.update({ where: { id: reportRunId }, data: { auditId: audit.id, crawlSessionId: crawlSession.id } });
     return { site, crawlSession, audit };
   });
 }
