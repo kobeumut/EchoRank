@@ -8,12 +8,14 @@ from typing import Any
 
 from bs4 import BeautifulSoup, Tag
 
+from .blocks import blocks_from_soup
 from .models import Link, PageData
 from .urls import is_crawlable_resource, is_internal, normalize_url
 
 log = logging.getLogger(__name__)
 
 _WS = re.compile(r"\s+")
+MAX_CONTENT_BLOCKS = 400
 _NOISE_TAGS = ("script", "style", "noscript", "template", "svg", "iframe")
 
 
@@ -242,6 +244,8 @@ def parse_html(html: str | bytes, url: str, root_url: str | None = None, status_
     page.faqs = _parse_html_faqs(soup)
 
     stats = _raw_stats(soup, html)
+    # before chrome removal: <article><header><h1> titles are content, blocks_from_soup skips site chrome itself
+    page.content_blocks = [b.to_dict() for b in blocks_from_soup(soup, base)][:MAX_CONTENT_BLOCKS]
     for tag in soup.find_all(_NOISE_TAGS):
         tag.decompose()
     # template chrome is excluded from body text (keeps keywords/word counts content-focused)

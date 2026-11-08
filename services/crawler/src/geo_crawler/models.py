@@ -81,6 +81,8 @@ class PageData:
     content_stats: dict[str, Any] = field(default_factory=dict)
     # subset of response headers relevant to auditing (x-robots-tag, hsts, last-modified, ...)
     headers: dict[str, str] = field(default_factory=dict)
+    # document-order content blocks (blocks.ContentBlock dicts) for AutoGEO; not serialized by to_dict()
+    content_blocks: list[dict[str, Any]] = field(default_factory=list)
     error: str | None = None
 
     @property
@@ -89,6 +91,7 @@ class PageData:
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
+        d.pop("content_blocks", None)
         d["page_type"] = self.page_type.value
         d["has_schema"] = self.has_schema
         return d

@@ -1,0 +1,818 @@
+{
+ "version": "1.0",
+ "score": 68,
+ "metrics": {
+  "statistics": 71,
+  "quotations": 60,
+  "citations": 31,
+  "answer_capsules": 57,
+  "authority_fluency": 87,
+  "keyword_stuffing": 69
+ },
+ "page_count": 4,
+ "pages": [
+  {
+   "version": "1.0",
+   "url": "https://shop.example.com/blog/espresso-rehberi",
+   "page_type": "article",
+   "language": "tr",
+   "word_count": 103,
+   "score": 21,
+   "grade": "E",
+   "caps": [
+    "aşırı anahtar kelime tekrarı (üst sınır 60)"
+   ],
+   "metrics": {
+    "statistics": {
+     "key": "statistics",
+     "label": "İstatistik ve sayısal veri",
+     "score": 0,
+     "weight": 0.2,
+     "passed": false,
+     "detail": "0 sayısal veri (0.00/100 kelime, hedef ≥1.5); 4 muğlak nicelik ifadesi; 0 tablo.",
+     "facts": {
+      "numeric_facts": 0,
+      "per_100_words": 0.0,
+      "vague_sentences": [
+       "Günümüzde birçok insan güne espresso ile başlıyor.",
+       "Bu aslında oldukça yoğun bir kahve türüdür ve sanırım çoğu kişi onu sever.",
+       "Espresso makinesi espresso makinesi espresso makinesi kullanıcıları belki de çok daha mutlu olur.",
+       "Araştırmalara göre espresso makinesi kullananlar kahveden önemli ölçüde daha fazla keyif alır."
+      ],
+      "vague_count": 4,
+      "tables": 0
+     },
+     "potential_gain_pct": 37.0
+    },
+    "quotations": {
+     "key": "quotations",
+     "label": "Uzman alıntısı",
+     "score": 40,
+     "weight": 0.2,
+     "passed": false,
+     "detail": "0 kaynaklı uzman alıntısı, 1 kaynaksız alıntı (hedef ≥1.0, ~600 kelimede 1).",
+     "facts": {
+      "attributed": 0,
+      "unattributed": 1,
+      "target": 1.0
+     },
+     "potential_gain_pct": 24.6
+    },
+    "citations": {
+     "key": "citations",
+     "label": "Yetkili kaynak gösterimi",
+     "score": 0,
+     "weight": 0.22,
+     "passed": false,
+     "detail": "1 doğrulanabilir iddianın 0 tanesi kaynaklı; 0 dış kaynak (akademik/resmi 0, sektör 0, diğer 0).",
+     "facts": {
+      "claims": 1,
+      "cited_claims": 0,
+      "external_links": 0,
+      "tier1": 0,
+      "tier2": 0,
+      "tier3": 0,
+      "references_section": false,
+      "uncited": [
+       "Araştırmalara göre espresso makinesi kullananlar kahveden önemli ölçüde daha fazla keyif alır."
+      ]
+     },
+     "potential_gain_pct": 35.0
+    },
+    "answer_capsules": {
+     "key": "answer_capsules",
+     "label": "Yanıt kapsülü (40-60 kelime)",
+     "score": 45,
+     "weight": 0.16,
+     "passed": false,
+     "detail": "3 H2/H3 bölümünün 1 tanesi 40-60 kelimelik doğrudan yanıtla açılıyor.",
+     "facts": {
+      "sections": [
+       {
+        "heading": "Espresso nedir?",
+        "block_index": 2,
+        "quality": 0.06,
+        "reason": "13 kelime (hedef 40-60), bağlama muhtaç açılış, soru başlığının terimini tekrar etmiyor"
+       },
+       {
+        "heading": "Espresso nasıl hazırlanır?",
+        "block_index": 4,
+        "quality": 0.3,
+        "reason": "başlığın hemen altında paragraf yerine liste var"
+       },
+       {
+        "heading": "Espresso makinesi seçimi",
+        "block_index": 6,
+        "quality": 1.0,
+        "reason": "52 kelime"
+       }
+      ],
+      "section_count": 3
+     },
+     "potential_gain_pct": 10.9
+    },
+    "authority_fluency": {
+     "key": "authority_fluency",
+     "label": "Otoriter ton ve akıcılık",
+     "score": 48,
+     "weight": 0.12,
+     "passed": false,
+     "detail": "2 çekingen/kaçamak cümle, 3 dolgu ifadesi, 1 abartı ifadesi, 0 edilgen ve 0 uzun (>35 kelime) cümle.",
+     "facts": {
+      "hedged": 2,
+      "filler": 3,
+      "hype": 1,
+      "passive": 0,
+      "long_sentences": 0,
+      "examples": [
+       "Bu aslında oldukça yoğun bir kahve türüdür ve sanırım çoğu kişi onu sever.",
+       "Espresso makinesi espresso makinesi espresso makinesi kullanıcıları belki de çok daha mutlu olur."
+      ]
+     },
+     "potential_gain_pct": 13.1
+    },
+    "keyword_stuffing": {
+     "key": "keyword_stuffing",
+     "label": "Anahtar kelime doldurma",
+     "score": 0,
+     "weight": 0.1,
+     "passed": false,
+     "detail": "En sık terim 'espresso' metnin %17.5'i (eşik %4); en sık ifade 'espresso makinesi' 12 kez. Görünürlük kaybı riski: -25%.",
+     "facts": {
+      "top_term": "espresso makinesi",
+      "top_word": "espresso",
+      "share": 0.1748,
+      "top_phrase": "espresso makinesi",
+      "phrase_count": 12,
+      "risk": "-25%"
+     },
+     "potential_gain_pct": 25.0
+    }
+   },
+   "improvements": [
+    {
+     "rule_id": "autogeo.answer_capsules",
+     "metric": "answer_capsules",
+     "kind": "rewrite",
+     "title": "'Espresso nedir?' için yanıt kapsülü + muğlak nicelikleri somut veriye çevirin + çekingen ve dolgu ifadeleri kaldırın",
+     "rationale": "13 kelime (hedef 40-60), bağlama muhtaç açılış, soru başlığının terimini tekrar etmiyor. AutoGEO (ICLR 2026): başlığın hemen altında kendi başına anlamlı 40-60 kelimelik doğrudan yanıt, LLM özetleyicilerinin pasajı alıntılama olasılığını artırır. GEO (KDD 2024): Statistics Addition görünürlüğü ~%37 artırır. Köşeli parantezli alanları doğrulanmış rakam ve kaynakla doldurun. GEO (KDD 2024): Authoritative/Fluency optimizasyonu ~%25 kazanım. Net, nesnel ve ölçülebilir anlatım kullanın.",
+     "block_index": 3,
+     "before_markdown": "Bu aslında oldukça yoğun bir kahve türüdür ve sanırım çoğu kişi onu sever.",
+     "after_markdown": "Espresso [ÖLÇÜLEBİLİR DEĞER] yoğun bir kahve türüdür ve %[ORAN] kişi onu sever ([Kaynak, Yıl](https://kaynak-adresi)). [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]",
+     "after_html": "<p>Espresso [ÖLÇÜLEBİLİR DEĞER] yoğun bir kahve türüdür ve %[ORAN] kişi onu sever (<a href=\"https://kaynak-adresi\">Kaynak, Yıl</a>). [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]</p>",
+     "diff_markdown": "--- a/blog/espresso-rehberi.md\n+++ b/blog/espresso-rehberi.md\n@@ -1 +1 @@\n-Bu aslında oldukça yoğun bir kahve türüdür ve sanırım çoğu kişi onu sever.\n+Espresso [ÖLÇÜLEBİLİR DEĞER] yoğun bir kahve türüdür ve %[ORAN] kişi onu sever ([Kaynak, Yıl](https://kaynak-adresi)). [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]",
+     "diff_html": "--- a/blog/espresso-rehberi.html\n+++ b/blog/espresso-rehberi.html\n@@ -1 +1 @@\n-<p>Bu aslında oldukça yoğun bir kahve türüdür ve sanırım çoğu kişi onu sever.</p>\n+<p>Espresso [ÖLÇÜLEBİLİR DEĞER] yoğun bir kahve türüdür ve %[ORAN] kişi onu sever (<a href=\"https://kaynak-adresi\">Kaynak, Yıl</a>). [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]</p>",
+     "expected_gain_pct": 19.2,
+     "metrics": [
+      "answer_capsules",
+      "statistics",
+      "authority_fluency"
+     ]
+    },
+    {
+     "rule_id": "autogeo.answer_capsules",
+     "metric": "answer_capsules",
+     "kind": "insert",
+     "title": "'Espresso nasıl hazırlanır?' için yanıt kapsülü",
+     "rationale": "başlığın hemen altında paragraf yerine liste var. AutoGEO (ICLR 2026): başlığın hemen altında kendi başına anlamlı 40-60 kelimelik doğrudan yanıt, LLM özetleyicilerinin pasajı alıntılama olasılığını artırır.",
+     "block_index": 4,
+     "before_markdown": "## Espresso nasıl hazırlanır?",
+     "after_markdown": "Espresso nasıl hazırlanır: Kahveyi öğütün; Portafiltreye doldurun; Demleyin. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]",
+     "after_html": "<p>Espresso nasıl hazırlanır: Kahveyi öğütün; Portafiltreye doldurun; Demleyin. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]</p>",
+     "diff_markdown": "--- a/blog/espresso-rehberi.md\n+++ b/blog/espresso-rehberi.md\n@@ -1 +1,3 @@\n ## Espresso nasıl hazırlanır?\n+\n+Espresso nasıl hazırlanır: Kahveyi öğütün; Portafiltreye doldurun; Demleyin. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]",
+     "diff_html": "--- a/blog/espresso-rehberi.html\n+++ b/blog/espresso-rehberi.html\n@@ -1 +1,2 @@\n <h2>Espresso nasıl hazırlanır?</h2>\n+<p>Espresso nasıl hazırlanır: Kahveyi öğütün; Portafiltreye doldurun; Demleyin. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]</p>",
+     "expected_gain_pct": 5.5,
+     "metrics": [
+      "answer_capsules"
+     ]
+    },
+    {
+     "rule_id": "autogeo.statistics",
+     "metric": "statistics",
+     "kind": "rewrite",
+     "title": "Muğlak nicelikleri somut veriye çevirin + çekingen ve dolgu ifadeleri kaldırın",
+     "rationale": "GEO (KDD 2024): Statistics Addition görünürlüğü ~%37 artırır. Köşeli parantezli alanları doğrulanmış rakam ve kaynakla doldurun. GEO (KDD 2024): Authoritative/Fluency optimizasyonu ~%25 kazanım. Net, nesnel ve ölçülebilir anlatım kullanın.",
+     "block_index": 1,
+     "before_markdown": "Günümüzde birçok insan güne espresso ile başlıyor. Bu yazımızda espresso hakkında merak edilenleri anlatacağız.",
+     "after_markdown": "[SAYI] insan güne espresso ile başlıyor ([Kaynak, Yıl](https://kaynak-adresi)). Espresso hakkında merak edilenleri anlatacağız.",
+     "after_html": "<p>[SAYI] insan güne espresso ile başlıyor (<a href=\"https://kaynak-adresi\">Kaynak, Yıl</a>). Espresso hakkında merak edilenleri anlatacağız.</p>",
+     "diff_markdown": "--- a/blog/espresso-rehberi.md\n+++ b/blog/espresso-rehberi.md\n@@ -1 +1 @@\n-Günümüzde birçok insan güne espresso ile başlıyor. Bu yazımızda espresso hakkında merak edilenleri anlatacağız.\n+[SAYI] insan güne espresso ile başlıyor ([Kaynak, Yıl](https://kaynak-adresi)). Espresso hakkında merak edilenleri anlatacağız.",
+     "diff_html": "--- a/blog/espresso-rehberi.html\n+++ b/blog/espresso-rehberi.html\n@@ -1 +1 @@\n-<p>Günümüzde birçok insan güne espresso ile başlıyor. Bu yazımızda espresso hakkında merak edilenleri anlatacağız.</p>\n+<p>[SAYI] insan güne espresso ile başlıyor (<a href=\"https://kaynak-adresi\">Kaynak, Yıl</a>). Espresso hakkında merak edilenleri anlatacağız.</p>",
+     "expected_gain_pct": 13.6,
+     "metrics": [
+      "statistics",
+      "authority_fluency"
+     ]
+    },
+    {
+     "rule_id": "autogeo.statistics",
+     "metric": "statistics",
+     "kind": "rewrite",
+     "title": "Muğlak nicelikleri somut veriye çevirin + çekingen ve dolgu ifadeleri kaldırın + 'espresso makinesi' tekrarını azaltın",
+     "rationale": "GEO (KDD 2024): Statistics Addition görünürlüğü ~%37 artırır. Köşeli parantezli alanları doğrulanmış rakam ve kaynakla doldurun. GEO (KDD 2024): Authoritative/Fluency optimizasyonu ~%25 kazanım. Net, nesnel ve ölçülebilir anlatım kullanın. 'espresso makinesi' bu paragrafta 11 kez geçiyor. LLM semantik filtreleri aşırı tekrarı spam olarak değerlendirir (GEO: Keyword Stuffing -%10..-%25 risk). İlk kullanımı koruyun, diğerlerini eş anlamlı ya da zamirle değiştirin.",
+     "block_index": 7,
+     "before_markdown": "Espresso makinesi seçerken espresso makinesi fiyatları, espresso makinesi markaları ve espresso makinesi özellikleri önemlidir. Espresso makinesi alırken espresso makinesi yorumlarını okuyun çünkü espresso makinesi en iyi yatırımdır. Espresso makinesi espresso makinesi espresso makinesi kullanıcıları belki de çok daha mutlu olur. Araştırmalara göre espresso makinesi kullananlar kahveden önemli ölçüde daha fazla keyif alır.",
+     "after_markdown": "Espresso makinesi seçerken [eş anlamlı/zamir] fiyatları, [eş anlamlı/zamir] markaları ve [eş anlamlı/zamir] özellikleri önemlidir. [eş anlamlı/zamir] alırken [eş anlamlı/zamir] yorumlarını okuyun çünkü [eş anlamlı/zamir] [ölçülebilir üstünlük: ör. %XX daha hızlı] yatırımdır. [eş anlamlı/zamir] kullanıcıları [X kat] daha mutlu olur ([Kaynak, Yıl](https://kaynak-adresi)). Araştırmalara göre [eş anlamlı/zamir] kullananlar kahveden %[ORAN] oranında daha fazla keyif alır ([Kaynak, Yıl](https://kaynak-adresi)).",
+     "after_html": "<p>Espresso makinesi seçerken [eş anlamlı/zamir] fiyatları, [eş anlamlı/zamir] markaları ve [eş anlamlı/zamir] özellikleri önemlidir. [eş anlamlı/zamir] alırken [eş anlamlı/zamir] yorumlarını okuyun çünkü [eş anlamlı/zamir] [ölçülebilir üstünlük: ör. %XX daha hızlı] yatırımdır. [eş anlamlı/zamir] kullanıcıları [X kat] daha mutlu olur (<a href=\"https://kaynak-adresi\">Kaynak, Yıl</a>). Araştırmalara göre [eş anlamlı/zamir] kullananlar kahveden %[ORAN] oranında daha fazla keyif alır (<a href=\"https://kaynak-adresi\">Kaynak, Yıl</a>).</p>",
+     "diff_markdown": "--- a/blog/espresso-rehberi.md\n+++ b/blog/espresso-rehberi.md\n@@ -1 +1 @@\n-Espresso makinesi seçerken espresso makinesi fiyatları, espresso makinesi markaları ve espresso makinesi özellikleri önemlidir. Espresso makinesi alırken espresso makinesi yorumlarını okuyun çünkü espresso makinesi en iyi yatırımdır. Espresso makinesi espresso makinesi espresso makinesi kullanıcıları belki de çok daha mutlu olur. Araştırmalara göre espresso makinesi kullananlar kahveden önemli ölçüde daha fazla keyif alır.\n+Espresso makinesi seçerken [eş anlamlı/zamir] fiyatları, [eş anlamlı/zamir] markaları ve [eş anlamlı/zamir] özellikleri önemlidir. [eş anlamlı/zamir] alırken [eş anlamlı/zamir] yorumlarını okuyun çünkü [eş anlamlı/zamir] [ölçülebilir üstünlük: ör. %XX daha hızlı] yatırımdır. [eş anlamlı/zamir] kullanıcıları [X kat] daha mutlu olur ([Kaynak, Yıl](https://kaynak-adresi)). Araştırmalara göre [eş anlamlı/zamir] kullananlar kahveden %[ORAN] oranında daha fazla keyif alır ([Kaynak, Yıl](https://kaynak-adresi)).",
+     "diff_html": "--- a/blog/espresso-rehberi.html\n+++ b/blog/espresso-rehberi.html\n@@ -1 +1 @@\n-<p>Espresso makinesi seçerken espresso makinesi fiyatları, espresso makinesi markaları ve espresso makinesi özellikleri önemlidir. Espresso makinesi alırken espresso makinesi yorumlarını okuyun çünkü espresso makinesi en iyi yatırımdır. Espresso makinesi espresso makinesi espresso makinesi kullanıcıları belki de çok daha mutlu olur. Araştırmalara göre espresso makinesi kullananlar kahveden önemli ölçüde daha fazla keyif alır.</p>\n+<p>Espresso makinesi seçerken [eş anlamlı/zamir] fiyatları, [eş anlamlı/zamir] markaları ve [eş anlamlı/zamir] özellikleri önemlidir. [eş anlamlı/zamir] alırken [eş anlamlı/zamir] yorumlarını okuyun çünkü [eş anlamlı/zamir] [ölçülebilir üstünlük: ör. %XX daha hızlı] yatırımdır. [eş anlamlı/zamir] kullanıcıları [X kat] daha mutlu olur (<a href=\"https://kaynak-adresi\">Kaynak, Yıl</a>). Araştırmalara göre [eş anlamlı/zamir] kullananlar kahveden %[ORAN] oranında daha fazla keyif alır (<a href=\"https://kaynak-adresi\">Kaynak, Yıl</a>).</p>",
+     "expected_gain_pct": 21.9,
+     "metrics": [
+      "statistics",
+      "authority_fluency",
+      "keyword_stuffing"
+     ]
+    },
+    {
+     "rule_id": "autogeo.statistics",
+     "metric": "statistics",
+     "kind": "insert",
+     "title": "Sayfaya 'Temel rakamlar' tablosu ekleyin",
+     "rationale": "Sayfada 100 kelimede 1'den az somut veri var; LLM'ler sayısal, doğrulanabilir pasajları daha sık alıntılar.",
+     "block_index": 1,
+     "before_markdown": "Günümüzde birçok insan güne espresso ile başlıyor. Bu yazımızda espresso hakkında merak edilenleri anlatacağız.",
+     "after_markdown": "| Metrik | Değer | Kaynak |\n| --- | --- | --- |\n| Espresso Rehberi — temel ölçüt | [SAYI / %ORAN] | [Kaynak, Yıl] |\n| Karşılaştırma / sektör ortalaması | [SAYI / %ORAN] | [Kaynak, Yıl] |\n| Zaman içindeki değişim | [YIL]-[YIL]: %[ORAN] | [Kaynak, Yıl] |",
+     "after_html": "<table>\n  <thead><tr><th>Metrik</th><th>Değer</th><th>Kaynak</th></tr></thead>\n  <tbody>\n    <tr><td>Espresso Rehberi — temel ölçüt</td><td>[SAYI / %ORAN]</td><td>[Kaynak, Yıl]</td></tr>\n    <tr><td>Karşılaştırma / sektör ortalaması</td><td>[SAYI / %ORAN]</td><td>[Kaynak, Yıl]</td></tr>\n    <tr><td>Zaman içindeki değişim</td><td>[YIL]-[YIL]: %[ORAN]</td><td>[Kaynak, Yıl]</td></tr>\n  </tbody>\n</table>",
+     "diff_markdown": "--- a/blog/espresso-rehberi.md\n+++ b/blog/espresso-rehberi.md\n@@ -1 +1,7 @@\n Günümüzde birçok insan güne espresso ile başlıyor. Bu yazımızda espresso hakkında merak edilenleri anlatacağız.\n+\n+| Metrik | Değer | Kaynak |\n+| --- | --- | --- |\n+| Espresso Rehberi — temel ölçüt | [SAYI / %ORAN] | [Kaynak, Yıl] |\n+| Karşılaştırma / sektör ortalaması | [SAYI / %ORAN] | [Kaynak, Yıl] |\n+| Zaman içindeki değişim | [YIL]-[YIL]: %[ORAN] | [Kaynak, Yıl] |",
+     "diff_html": "--- a/blog/espresso-rehberi.html\n+++ b/blog/espresso-rehberi.html\n@@ -1 +1,9 @@\n <p>Günümüzde birçok insan güne espresso ile başlıyor. Bu yazımızda espresso hakkında merak edilenleri anlatacağız.</p>\n+<table>\n+  <thead><tr><th>Metrik</th><th>Değer</th><th>Kaynak</th></tr></thead>\n+  <tbody>\n+    <tr><td>Espresso Rehberi — temel ölçüt</td><td>[SAYI / %ORAN]</td><td>[Kaynak, Yıl]</td></tr>\n+    <tr><td>Karşılaştırma / sektör ortalaması</td><td>[SAYI / %ORAN]</td><td>[Kaynak, Yıl]</td></tr>\n+    <tr><td>Zaman içindeki değişim</td><td>[YIL]-[YIL]: %[ORAN]</td><td>[Kaynak, Yıl]</td></tr>\n+  </tbody>\n+</table>",
+     "expected_gain_pct": 22.2,
+     "metrics": [
+      "statistics"
+     ]
+    },
+    {
+     "rule_id": "autogeo.quotations",
+     "metric": "quotations",
+     "kind": "rewrite",
+     "title": "Alıntıya konuşmacı ve unvan ekleyin",
+     "rationale": "Kaynaksız alıntı LLM'ler için doğrulanamaz; ad, unvan ve kurum alıntıyı otorite sinyaline çevirir.",
+     "block_index": 8,
+     "before_markdown": "> Kahve bir yaşam biçimidir ve iyi espresso sabır ister.",
+     "after_markdown": "> Kahve bir yaşam biçimidir ve iyi espresso sabır ister.\n> — [Ad Soyad], [Unvan], [Kurum]",
+     "after_html": "<blockquote>\n  <p>Kahve bir yaşam biçimidir ve iyi espresso sabır ister.</p>\n  <footer>— <cite>[Ad Soyad], [Unvan], [Kurum]</cite></footer>\n</blockquote>",
+     "diff_markdown": "--- a/blog/espresso-rehberi.md\n+++ b/blog/espresso-rehberi.md\n@@ -1 +1,2 @@\n > Kahve bir yaşam biçimidir ve iyi espresso sabır ister.\n+> — [Ad Soyad], [Unvan], [Kurum]",
+     "diff_html": "--- a/blog/espresso-rehberi.html\n+++ b/blog/espresso-rehberi.html\n@@ -1,3 +1,4 @@\n <blockquote>\n   <p>Kahve bir yaşam biçimidir ve iyi espresso sabır ister.</p>\n+  <footer>— <cite>[Ad Soyad], [Unvan], [Kurum]</cite></footer>\n </blockquote>",
+     "expected_gain_pct": 12.3,
+     "metrics": [
+      "quotations"
+     ]
+    },
+    {
+     "rule_id": "autogeo.comparison_table",
+     "metric": "statistics",
+     "kind": "insert",
+     "title": "Karşılaştırma tablosu ekleyin",
+     "rationale": "Tablolar LLM'lerin en kolay ayrıştırıp alıntıladığı yapılardır; somut değerlerle doldurun.",
+     "block_index": 2,
+     "before_markdown": "## Espresso nedir?",
+     "after_markdown": "| Kriter | Seçenek A | Seçenek B | Kaynak |\n| --- | --- | --- | --- |\n| Espresso nedir? | [DEĞER] | [DEĞER] | [Kaynak, Yıl] |\n| Espresso nasıl hazırlanır? | [DEĞER] | [DEĞER] | [Kaynak, Yıl] |\n| Espresso makinesi seçimi | [DEĞER] | [DEĞER] | [Kaynak, Yıl] |",
+     "after_html": "<table>\n  <thead><tr><th>Kriter</th><th>Seçenek A</th><th>Seçenek B</th><th>Kaynak</th></tr></thead>\n  <tbody>\n    <tr><td>Espresso nedir?</td><td>[DEĞER]</td><td>[DEĞER]</td><td>[Kaynak, Yıl]</td></tr>\n    <tr><td>Espresso nasıl hazırlanır?</td><td>[DEĞER]</td><td>[DEĞER]</td><td>[Kaynak, Yıl]</td></tr>\n    <tr><td>Espresso makinesi seçimi</td><td>[DEĞER]</td><td>[DEĞER]</td><td>[Kaynak, Yıl]</td></tr>\n  </tbody>\n</table>",
+     "diff_markdown": "--- a/blog/espresso-rehberi.md\n+++ b/blog/espresso-rehberi.md\n@@ -1 +1,7 @@\n ## Espresso nedir?\n+\n+| Kriter | Seçenek A | Seçenek B | Kaynak |\n+| --- | --- | --- | --- |\n+| Espresso nedir? | [DEĞER] | [DEĞER] | [Kaynak, Yıl] |\n+| Espresso nasıl hazırlanır? | [DEĞER] | [DEĞER] | [Kaynak, Yıl] |\n+| Espresso makinesi seçimi | [DEĞER] | [DEĞER] | [Kaynak, Yıl] |",
+     "diff_html": "--- a/blog/espresso-rehberi.html\n+++ b/blog/espresso-rehberi.html\n@@ -1 +1,9 @@\n <h2>Espresso nedir?</h2>\n+<table>\n+  <thead><tr><th>Kriter</th><th>Seçenek A</th><th>Seçenek B</th><th>Kaynak</th></tr></thead>\n+  <tbody>\n+    <tr><td>Espresso nedir?</td><td>[DEĞER]</td><td>[DEĞER]</td><td>[Kaynak, Yıl]</td></tr>\n+    <tr><td>Espresso nasıl hazırlanır?</td><td>[DEĞER]</td><td>[DEĞER]</td><td>[Kaynak, Yıl]</td></tr>\n+    <tr><td>Espresso makinesi seçimi</td><td>[DEĞER]</td><td>[DEĞER]</td><td>[Kaynak, Yıl]</td></tr>\n+  </tbody>\n+</table>",
+     "expected_gain_pct": 14.8,
+     "metrics": [
+      "statistics"
+     ]
+    }
+   ],
+   "answer_capsule": {
+    "text": "Günümüzde birçok insan güne espresso ile başlıyor. Bu yazımızda espresso hakkında merak edilenleri anlatacağız. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]",
+    "word_count": 25,
+    "markdown": "Günümüzde birçok insan güne espresso ile başlıyor. Bu yazımızda espresso hakkında merak edilenleri anlatacağız. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]",
+    "html": "<p>Günümüzde birçok insan güne espresso ile başlıyor. Bu yazımızda espresso hakkında merak edilenleri anlatacağız. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]</p>"
+   },
+   "comparison_table": {
+    "markdown": "| Kriter | Seçenek A | Seçenek B | Kaynak |\n| --- | --- | --- | --- |\n| Espresso nedir? | [DEĞER] | [DEĞER] | [Kaynak, Yıl] |\n| Espresso nasıl hazırlanır? | [DEĞER] | [DEĞER] | [Kaynak, Yıl] |\n| Espresso makinesi seçimi | [DEĞER] | [DEĞER] | [Kaynak, Yıl] |",
+    "html": "<table>\n  <thead><tr><th>Kriter</th><th>Seçenek A</th><th>Seçenek B</th><th>Kaynak</th></tr></thead>\n  <tbody>\n    <tr><td>Espresso nedir?</td><td>[DEĞER]</td><td>[DEĞER]</td><td>[Kaynak, Yıl]</td></tr>\n    <tr><td>Espresso nasıl hazırlanır?</td><td>[DEĞER]</td><td>[DEĞER]</td><td>[Kaynak, Yıl]</td></tr>\n    <tr><td>Espresso makinesi seçimi</td><td>[DEĞER]</td><td>[DEĞER]</td><td>[Kaynak, Yıl]</td></tr>\n  </tbody>\n</table>",
+    "rows": [
+     [
+      "Kriter",
+      "Seçenek A",
+      "Seçenek B",
+      "Kaynak"
+     ],
+     [
+      "Espresso nedir?",
+      "[DEĞER]",
+      "[DEĞER]",
+      "[Kaynak, Yıl]"
+     ],
+     [
+      "Espresso nasıl hazırlanır?",
+      "[DEĞER]",
+      "[DEĞER]",
+      "[Kaynak, Yıl]"
+     ],
+     [
+      "Espresso makinesi seçimi",
+      "[DEĞER]",
+      "[DEĞER]",
+      "[Kaynak, Yıl]"
+     ]
+    ]
+   }
+  },
+  {
+   "version": "1.0",
+   "url": "https://shop.example.com/urun/barista-pro-x",
+   "page_type": "product",
+   "language": "tr",
+   "word_count": 57,
+   "score": 60,
+   "grade": "C",
+   "caps": [],
+   "metrics": {
+    "statistics": {
+     "key": "statistics",
+     "label": "İstatistik ve sayısal veri",
+     "score": 86,
+     "weight": 0.26,
+     "passed": true,
+     "detail": "10 sayısal veri (17.54/100 kelime, hedef ≥1.5); 1 muğlak nicelik ifadesi; 0 tablo.",
+     "facts": {
+      "numeric_facts": 10,
+      "per_100_words": 17.54,
+      "vague_sentences": [
+       "Bu makine birçok kahve meraklısı için idealdir."
+      ],
+      "vague_count": 1,
+      "tables": 0
+     },
+     "potential_gain_pct": 5.3
+    },
+    "quotations": {
+     "key": "quotations",
+     "label": "Uzman alıntısı",
+     "score": 0,
+     "weight": 0.07,
+     "passed": false,
+     "detail": "0 kaynaklı uzman alıntısı, 0 kaynaksız alıntı (hedef ≥1.0, ~600 kelimede 1).",
+     "facts": {
+      "attributed": 0,
+      "unattributed": 0,
+      "target": 1.0
+     },
+     "potential_gain_pct": 41.0
+    },
+    "citations": {
+     "key": "citations",
+     "label": "Yetkili kaynak gösterimi",
+     "score": 0,
+     "weight": 0.13,
+     "passed": false,
+     "detail": "2 doğrulanabilir iddianın 0 tanesi kaynaklı; 0 dış kaynak (akademik/resmi 0, sektör 0, diğer 0).",
+     "facts": {
+      "claims": 2,
+      "cited_claims": 0,
+      "external_links": 0,
+      "tier1": 0,
+      "tier2": 0,
+      "tier3": 0,
+      "references_section": false,
+      "uncited": [
+       "Barista Pro X, 15 bar pompa basıncı, 1.450 W ısıtıcı ve 2 litrelik su haznesiyle ev kullanımı için tasarlanmış yarı otomatik bir espresso makinesidir.",
+       "58 mm portafiltre ve PID sıcaklık kontrolü ile 92 °C'de ±1 °C sapma sağlar."
+      ]
+     },
+     "potential_gain_pct": 35.0
+    },
+    "answer_capsules": {
+     "key": "answer_capsules",
+     "label": "Yanıt kapsülü (40-60 kelime)",
+     "score": 18,
+     "weight": 0.2,
+     "passed": false,
+     "detail": "2 H2/H3 bölümünün 0 tanesi 40-60 kelimelik doğrudan yanıtla açılıyor.",
+     "facts": {
+      "sections": [
+       {
+        "heading": "Teknik özellikler",
+        "block_index": 2,
+        "quality": 0.3,
+        "reason": "başlığın hemen altında paragraf yerine liste var"
+       },
+       {
+        "heading": "Kimler için uygun?",
+        "block_index": 4,
+        "quality": 0.06,
+        "reason": "7 kelime (hedef 40-60), bağlama muhtaç açılış, soru başlığının terimini tekrar etmiyor"
+       }
+      ],
+      "section_count": 2
+     },
+     "potential_gain_pct": 16.4
+    },
+    "authority_fluency": {
+     "key": "authority_fluency",
+     "label": "Otoriter ton ve akıcılık",
+     "score": 100,
+     "weight": 0.16,
+     "passed": true,
+     "detail": "0 çekingen/kaçamak cümle, 0 dolgu ifadesi, 0 abartı ifadesi, 0 edilgen ve 0 uzun (>35 kelime) cümle.",
+     "facts": {
+      "hedged": 0,
+      "filler": 0,
+      "hype": 0,
+      "passive": 0,
+      "long_sentences": 0,
+      "examples": []
+     },
+     "potential_gain_pct": 0.0
+    },
+    "keyword_stuffing": {
+     "key": "keyword_stuffing",
+     "label": "Anahtar kelime doldurma",
+     "score": 100,
+     "weight": 0.18,
+     "passed": true,
+     "detail": "Ölçüm için yeterli metin yok (≥60 kelime).",
+     "facts": {
+      "top_term": null,
+      "share": 0.0,
+      "risk": "none"
+     },
+     "potential_gain_pct": 0.0
+    }
+   },
+   "improvements": [
+    {
+     "rule_id": "autogeo.answer_capsules",
+     "metric": "answer_capsules",
+     "kind": "insert",
+     "title": "'Teknik özellikler' için yanıt kapsülü",
+     "rationale": "başlığın hemen altında paragraf yerine liste var. AutoGEO (ICLR 2026): başlığın hemen altında kendi başına anlamlı 40-60 kelimelik doğrudan yanıt, LLM özetleyicilerinin pasajı alıntılama olasılığını artırır.",
+     "block_index": 2,
+     "before_markdown": "## Teknik özellikler",
+     "after_markdown": "Teknik özellikler: Basınç: 15 bar; Güç: 1.450 W; Hazne: 2 L; Ağırlık: 7,8 kg. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]",
+     "after_html": "<p>Teknik özellikler: Basınç: 15 bar; Güç: 1.450 W; Hazne: 2 L; Ağırlık: 7,8 kg. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]</p>",
+     "diff_markdown": "--- a/urun/barista-pro-x.md\n+++ b/urun/barista-pro-x.md\n@@ -1 +1,3 @@\n ## Teknik özellikler\n+\n+Teknik özellikler: Basınç: 15 bar; Güç: 1.450 W; Hazne: 2 L; Ağırlık: 7,8 kg. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]",
+     "diff_html": "--- a/urun/barista-pro-x.html\n+++ b/urun/barista-pro-x.html\n@@ -1 +1,2 @@\n <h2>Teknik özellikler</h2>\n+<p>Teknik özellikler: Basınç: 15 bar; Güç: 1.450 W; Hazne: 2 L; Ağırlık: 7,8 kg. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]</p>",
+     "expected_gain_pct": 8.2,
+     "metrics": [
+      "answer_capsules"
+     ]
+    },
+    {
+     "rule_id": "autogeo.answer_capsules",
+     "metric": "answer_capsules",
+     "kind": "rewrite",
+     "title": "'Kimler için uygun?' için yanıt kapsülü",
+     "rationale": "7 kelime (hedef 40-60), bağlama muhtaç açılış, soru başlığının terimini tekrar etmiyor. AutoGEO (ICLR 2026): başlığın hemen altında kendi başına anlamlı 40-60 kelimelik doğrudan yanıt, LLM özetleyicilerinin pasajı alıntılama olasılığını artırır.",
+     "block_index": 5,
+     "before_markdown": "Bu makine birçok kahve meraklısı için idealdir.",
+     "after_markdown": "Kimler için uygun makine birçok kahve meraklısı için idealdir. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]",
+     "after_html": "<p>Kimler için uygun makine birçok kahve meraklısı için idealdir. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]</p>",
+     "diff_markdown": "--- a/urun/barista-pro-x.md\n+++ b/urun/barista-pro-x.md\n@@ -1 +1 @@\n-Bu makine birçok kahve meraklısı için idealdir.\n+Kimler için uygun makine birçok kahve meraklısı için idealdir. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]",
+     "diff_html": "--- a/urun/barista-pro-x.html\n+++ b/urun/barista-pro-x.html\n@@ -1 +1 @@\n-<p>Bu makine birçok kahve meraklısı için idealdir.</p>\n+<p>Kimler için uygun makine birçok kahve meraklısı için idealdir. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]</p>",
+     "expected_gain_pct": 8.2,
+     "metrics": [
+      "answer_capsules"
+     ]
+    },
+    {
+     "rule_id": "autogeo.citations",
+     "metric": "citations",
+     "kind": "rewrite",
+     "title": "İddialara yetkili kaynak bağlantısı ekleyin",
+     "rationale": "GEO (KDD 2024): Cite Sources ~%30-40 kazanım; SERP'te 5. sıra ve altındaki sayfalarda +%115.1. Tercihen .gov/.edu, DOI veya sektör raporu bağlayın.",
+     "block_index": 1,
+     "before_markdown": "Barista Pro X, 15 bar pompa basıncı, 1.450 W ısıtıcı ve 2 litrelik su haznesiyle ev kullanımı için tasarlanmış yarı otomatik bir espresso makinesidir. 58 mm portafiltre ve PID sıcaklık kontrolü ile 92 °C'de ±1 °C sapma sağlar.",
+     "after_markdown": "Barista Pro X, 15 bar pompa basıncı, 1.450 W ısıtıcı ve 2 litrelik su haznesiyle ev kullanımı için tasarlanmış yarı otomatik bir espresso makinesidir ([Kaynak, Yıl](https://kaynak-adresi)). 58 mm portafiltre ve PID sıcaklık kontrolü ile 92 °C'de ±1 °C sapma sağlar ([Kaynak, Yıl](https://kaynak-adresi)).",
+     "after_html": "<p>Barista Pro X, 15 bar pompa basıncı, 1.450 W ısıtıcı ve 2 litrelik su haznesiyle ev kullanımı için tasarlanmış yarı otomatik bir espresso makinesidir (<a href=\"https://kaynak-adresi\">Kaynak, Yıl</a>). 58 mm portafiltre ve PID sıcaklık kontrolü ile 92 °C'de ±1 °C sapma sağlar (<a href=\"https://kaynak-adresi\">Kaynak, Yıl</a>).</p>",
+     "diff_markdown": "--- a/urun/barista-pro-x.md\n+++ b/urun/barista-pro-x.md\n@@ -1 +1 @@\n-Barista Pro X, 15 bar pompa basıncı, 1.450 W ısıtıcı ve 2 litrelik su haznesiyle ev kullanımı için tasarlanmış yarı otomatik bir espresso makinesidir. 58 mm portafiltre ve PID sıcaklık kontrolü ile 92 °C'de ±1 °C sapma sağlar.\n+Barista Pro X, 15 bar pompa basıncı, 1.450 W ısıtıcı ve 2 litrelik su haznesiyle ev kullanımı için tasarlanmış yarı otomatik bir espresso makinesidir ([Kaynak, Yıl](https://kaynak-adresi)). 58 mm portafiltre ve PID sıcaklık kontrolü ile 92 °C'de ±1 °C sapma sağlar ([Kaynak, Yıl](https://kaynak-adresi)).",
+     "diff_html": "--- a/urun/barista-pro-x.html\n+++ b/urun/barista-pro-x.html\n@@ -1 +1 @@\n-<p>Barista Pro X, 15 bar pompa basıncı, 1.450 W ısıtıcı ve 2 litrelik su haznesiyle ev kullanımı için tasarlanmış yarı otomatik bir espresso makinesidir. 58 mm portafiltre ve PID sıcaklık kontrolü ile 92 °C'de ±1 °C sapma sağlar.</p>\n+<p>Barista Pro X, 15 bar pompa basıncı, 1.450 W ısıtıcı ve 2 litrelik su haznesiyle ev kullanımı için tasarlanmış yarı otomatik bir espresso makinesidir (<a href=\"https://kaynak-adresi\">Kaynak, Yıl</a>). 58 mm portafiltre ve PID sıcaklık kontrolü ile 92 °C'de ±1 °C sapma sağlar (<a href=\"https://kaynak-adresi\">Kaynak, Yıl</a>).</p>",
+     "expected_gain_pct": 35.0,
+     "metrics": [
+      "citations"
+     ]
+    },
+    {
+     "rule_id": "autogeo.quotations",
+     "metric": "quotations",
+     "kind": "insert",
+     "title": "Unvanlı bir uzmandan doğrudan alıntı ekleyin",
+     "rationale": "GEO (KDD 2024): Quotation Addition en yüksek kazanımı (~%41) sağlayan stratejidir. Gerçek bir kişiden, izinli ve doğrulanabilir alıntı kullanın.",
+     "block_index": 1,
+     "before_markdown": "Barista Pro X, 15 bar pompa basıncı, 1.450 W ısıtıcı ve 2 litrelik su haznesiyle ev kullanımı için tasarlanmış yarı otomatik bir espresso makinesidir. 58 mm portafiltre ve PID sıcaklık kontrolü ile 92 °C'de ±1 °C sapma sağlar.",
+     "after_markdown": "> [Uzmanın doğrudan alıntısı] — Barista Pro X Espresso Makinesi konusunda somut bir deneyim, veri ya da öneri.\n> — [Ad Soyad], [Unvan], [Kurum]",
+     "after_html": "<blockquote>\n  <p>[Uzmanın doğrudan alıntısı] — Barista Pro X Espresso Makinesi konusunda somut bir deneyim, veri ya da öneri.</p>\n  <footer>— <cite>[Ad Soyad], [Unvan], [Kurum]</cite></footer>\n</blockquote>",
+     "diff_markdown": "--- a/urun/barista-pro-x.md\n+++ b/urun/barista-pro-x.md\n@@ -1 +1,4 @@\n Barista Pro X, 15 bar pompa basıncı, 1.450 W ısıtıcı ve 2 litrelik su haznesiyle ev kullanımı için tasarlanmış yarı otomatik bir espresso makinesidir. 58 mm portafiltre ve PID sıcaklık kontrolü ile 92 °C'de ±1 °C sapma sağlar.\n+\n+> [Uzmanın doğrudan alıntısı] — Barista Pro X Espresso Makinesi konusunda somut bir deneyim, veri ya da öneri.\n+> — [Ad Soyad], [Unvan], [Kurum]",
+     "diff_html": "--- a/urun/barista-pro-x.html\n+++ b/urun/barista-pro-x.html\n@@ -1 +1,5 @@\n <p>Barista Pro X, 15 bar pompa basıncı, 1.450 W ısıtıcı ve 2 litrelik su haznesiyle ev kullanımı için tasarlanmış yarı otomatik bir espresso makinesidir. 58 mm portafiltre ve PID sıcaklık kontrolü ile 92 °C'de ±1 °C sapma sağlar.</p>\n+<blockquote>\n+  <p>[Uzmanın doğrudan alıntısı] — Barista Pro X Espresso Makinesi konusunda somut bir deneyim, veri ya da öneri.</p>\n+  <footer>— <cite>[Ad Soyad], [Unvan], [Kurum]</cite></footer>\n+</blockquote>",
+     "expected_gain_pct": 41.0,
+     "metrics": [
+      "quotations"
+     ]
+    }
+   ],
+   "answer_capsule": {
+    "text": "Barista Pro X, 15 bar pompa basıncı, 1.450 W ısıtıcı ve 2 litrelik su haznesiyle ev kullanımı için tasarlanmış yarı otomatik bir espresso makinesidir. 58 mm portafiltre ve PID sıcaklık kontrolü ile 92 °C'de ±1 °C sapma sağlar. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]",
+    "word_count": 49,
+    "markdown": "Barista Pro X, 15 bar pompa basıncı, 1.450 W ısıtıcı ve 2 litrelik su haznesiyle ev kullanımı için tasarlanmış yarı otomatik bir espresso makinesidir. 58 mm portafiltre ve PID sıcaklık kontrolü ile 92 °C'de ±1 °C sapma sağlar. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]",
+    "html": "<p>Barista Pro X, 15 bar pompa basıncı, 1.450 W ısıtıcı ve 2 litrelik su haznesiyle ev kullanımı için tasarlanmış yarı otomatik bir espresso makinesidir. 58 mm portafiltre ve PID sıcaklık kontrolü ile 92 °C'de ±1 °C sapma sağlar. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]</p>"
+   },
+   "comparison_table": null
+  },
+  {
+   "version": "1.0",
+   "url": "https://shop.example.com/hizmetler/seo",
+   "page_type": "service",
+   "language": "tr",
+   "word_count": 103,
+   "score": 82,
+   "grade": "B",
+   "caps": [],
+   "metrics": {
+    "statistics": {
+     "key": "statistics",
+     "label": "İstatistik ve sayısal veri",
+     "score": 100,
+     "weight": 0.22,
+     "passed": true,
+     "detail": "10 sayısal veri (9.71/100 kelime, hedef ≥1.5); 0 muğlak nicelik ifadesi; 1 tablo.",
+     "facts": {
+      "numeric_facts": 10,
+      "per_100_words": 9.71,
+      "vague_sentences": [],
+      "vague_count": 0,
+      "tables": 1
+     },
+     "potential_gain_pct": 0.0
+    },
+    "quotations": {
+     "key": "quotations",
+     "label": "Uzman alıntısı",
+     "score": 100,
+     "weight": 0.14,
+     "passed": true,
+     "detail": "1 kaynaklı uzman alıntısı, 0 kaynaksız alıntı (hedef ≥1.0, ~600 kelimede 1).",
+     "facts": {
+      "attributed": 1,
+      "unattributed": 0,
+      "target": 1.0
+     },
+     "potential_gain_pct": 0.0
+    },
+    "citations": {
+     "key": "citations",
+     "label": "Yetkili kaynak gösterimi",
+     "score": 41,
+     "weight": 0.18,
+     "passed": false,
+     "detail": "4 doğrulanabilir iddianın 2 tanesi kaynaklı; 1 dış kaynak (akademik/resmi 0, sektör 1, diğer 0).",
+     "facts": {
+      "claims": 4,
+      "cited_claims": 2,
+      "external_links": 1,
+      "tier1": 0,
+      "tier2": 1,
+      "tier3": 0,
+      "references_section": false,
+      "uncited": [
+       "Hizmet; teknik SEO denetimi, anahtar kelime araştırması, içerik takvimi ve aylık raporlamadan oluşur.",
+       "Her ay 40 saatlik uzman çalışması ayrılır, 2 haftada bir toplantı yapılır ve tüm bulgular önceliklendirilmiş bir aksiyon listesiyle teslim edilir."
+      ]
+     },
+     "potential_gain_pct": 20.6
+    },
+    "answer_capsules": {
+     "key": "answer_capsules",
+     "label": "Yanıt kapsülü (40-60 kelime)",
+     "score": 65,
+     "weight": 0.2,
+     "passed": false,
+     "detail": "2 H2/H3 bölümünün 1 tanesi 40-60 kelimelik doğrudan yanıtla açılıyor.",
+     "facts": {
+      "sections": [
+       {
+        "heading": "Hizmet kapsamı nedir?",
+        "block_index": 2,
+        "quality": 1.0,
+        "reason": "42 kelime"
+       },
+       {
+        "heading": "Süreç",
+        "block_index": 5,
+        "quality": 0.3,
+        "reason": "başlığın hemen altında paragraf yerine liste var"
+       }
+      ],
+      "section_count": 2
+     },
+     "potential_gain_pct": 7.0
+    },
+    "authority_fluency": {
+     "key": "authority_fluency",
+     "label": "Otoriter ton ve akıcılık",
+     "score": 100,
+     "weight": 0.13,
+     "passed": true,
+     "detail": "0 çekingen/kaçamak cümle, 0 dolgu ifadesi, 0 abartı ifadesi, 0 edilgen ve 0 uzun (>35 kelime) cümle.",
+     "facts": {
+      "hedged": 0,
+      "filler": 0,
+      "hype": 0,
+      "passive": 0,
+      "long_sentences": 0,
+      "examples": []
+     },
+     "potential_gain_pct": 0.0
+    },
+    "keyword_stuffing": {
+     "key": "keyword_stuffing",
+     "label": "Anahtar kelime doldurma",
+     "score": 100,
+     "weight": 0.13,
+     "passed": true,
+     "detail": "En sık terim 'seo' metnin %3.9'i (eşik %4); en sık ifade 'kurumsal seo' 2 kez. Görünürlük kaybı riski: none.",
+     "facts": {
+      "top_term": "kurumsal seo",
+      "top_word": "seo",
+      "share": 0.0388,
+      "top_phrase": "kurumsal seo",
+      "phrase_count": 2,
+      "risk": "none"
+     },
+     "potential_gain_pct": 0.0
+    }
+   },
+   "improvements": [
+    {
+     "rule_id": "autogeo.answer_capsules",
+     "metric": "answer_capsules",
+     "kind": "insert",
+     "title": "'Süreç' için yanıt kapsülü",
+     "rationale": "başlığın hemen altında paragraf yerine liste var. AutoGEO (ICLR 2026): başlığın hemen altında kendi başına anlamlı 40-60 kelimelik doğrudan yanıt, LLM özetleyicilerinin pasajı alıntılama olasılığını artırır.",
+     "block_index": 5,
+     "before_markdown": "## Süreç",
+     "after_markdown": "Süreç: Keşif görüşmesi; Teknik denetim; Strateji ve uygulama. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]",
+     "after_html": "<p>Süreç: Keşif görüşmesi; Teknik denetim; Strateji ve uygulama. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]</p>",
+     "diff_markdown": "--- a/hizmetler/seo.md\n+++ b/hizmetler/seo.md\n@@ -1 +1,3 @@\n ## Süreç\n+\n+Süreç: Keşif görüşmesi; Teknik denetim; Strateji ve uygulama. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]",
+     "diff_html": "--- a/hizmetler/seo.html\n+++ b/hizmetler/seo.html\n@@ -1 +1,2 @@\n <h2>Süreç</h2>\n+<p>Süreç: Keşif görüşmesi; Teknik denetim; Strateji ve uygulama. [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]</p>",
+     "expected_gain_pct": 7.0,
+     "metrics": [
+      "answer_capsules"
+     ]
+    },
+    {
+     "rule_id": "autogeo.citations",
+     "metric": "citations",
+     "kind": "rewrite",
+     "title": "İddialara yetkili kaynak bağlantısı ekleyin",
+     "rationale": "GEO (KDD 2024): Cite Sources ~%30-40 kazanım; SERP'te 5. sıra ve altındaki sayfalarda +%115.1. Tercihen .gov/.edu, DOI veya sektör raporu bağlayın.",
+     "block_index": 3,
+     "before_markdown": "Hizmet; teknik SEO denetimi, anahtar kelime araştırması, içerik takvimi ve aylık raporlamadan oluşur. Her ay 40 saatlik uzman çalışması ayrılır, 2 haftada bir toplantı yapılır ve tüm bulgular önceliklendirilmiş bir aksiyon listesiyle teslim edilir. Ölçümler Google Search Console ve GA4 verileriyle yapılır.",
+     "after_markdown": "Hizmet; teknik SEO denetimi, anahtar kelime araştırması, içerik takvimi ve aylık raporlamadan oluşur ([Kaynak, Yıl](https://kaynak-adresi)). Her ay 40 saatlik uzman çalışması ayrılır, 2 haftada bir toplantı yapılır ve tüm bulgular önceliklendirilmiş bir aksiyon listesiyle teslim edilir ([Kaynak, Yıl](https://kaynak-adresi)). Ölçümler Google Search Console ve GA4 verileriyle yapılır.",
+     "after_html": "<p>Hizmet; teknik SEO denetimi, anahtar kelime araştırması, içerik takvimi ve aylık raporlamadan oluşur (<a href=\"https://kaynak-adresi\">Kaynak, Yıl</a>). Her ay 40 saatlik uzman çalışması ayrılır, 2 haftada bir toplantı yapılır ve tüm bulgular önceliklendirilmiş bir aksiyon listesiyle teslim edilir (<a href=\"https://kaynak-adresi\">Kaynak, Yıl</a>). Ölçümler Google Search Console ve GA4 verileriyle yapılır.</p>",
+     "diff_markdown": "--- a/hizmetler/seo.md\n+++ b/hizmetler/seo.md\n@@ -1 +1 @@\n-Hizmet; teknik SEO denetimi, anahtar kelime araştırması, içerik takvimi ve aylık raporlamadan oluşur. Her ay 40 saatlik uzman çalışması ayrılır, 2 haftada bir toplantı yapılır ve tüm bulgular önceliklendirilmiş bir aksiyon listesiyle teslim edilir. Ölçümler Google Search Console ve GA4 verileriyle yapılır.\n+Hizmet; teknik SEO denetimi, anahtar kelime araştırması, içerik takvimi ve aylık raporlamadan oluşur ([Kaynak, Yıl](https://kaynak-adresi)). Her ay 40 saatlik uzman çalışması ayrılır, 2 haftada bir toplantı yapılır ve tüm bulgular önceliklendirilmiş bir aksiyon listesiyle teslim edilir ([Kaynak, Yıl](https://kaynak-adresi)). Ölçümler Google Search Console ve GA4 verileriyle yapılır.",
+     "diff_html": "--- a/hizmetler/seo.html\n+++ b/hizmetler/seo.html\n@@ -1 +1 @@\n-<p>Hizmet; teknik SEO denetimi, anahtar kelime araştırması, içerik takvimi ve aylık raporlamadan oluşur. Her ay 40 saatlik uzman çalışması ayrılır, 2 haftada bir toplantı yapılır ve tüm bulgular önceliklendirilmiş bir aksiyon listesiyle teslim edilir. Ölçümler Google Search Console ve GA4 verileriyle yapılır.</p>\n+<p>Hizmet; teknik SEO denetimi, anahtar kelime araştırması, içerik takvimi ve aylık raporlamadan oluşur (<a href=\"https://kaynak-adresi\">Kaynak, Yıl</a>). Her ay 40 saatlik uzman çalışması ayrılır, 2 haftada bir toplantı yapılır ve tüm bulgular önceliklendirilmiş bir aksiyon listesiyle teslim edilir (<a href=\"https://kaynak-adresi\">Kaynak, Yıl</a>). Ölçümler Google Search Console ve GA4 verileriyle yapılır.</p>",
+     "expected_gain_pct": 20.6,
+     "metrics": [
+      "citations"
+     ]
+    }
+   ],
+   "answer_capsule": {
+    "text": "Kurumsal SEO danışmanlığı, 500+ sayfalık siteler için teknik denetim, içerik stratejisi ve bağlantı profili yönetimini kapsayan 6 aylık bir hizmettir. Müşterilerimizin organik trafiği ilk 6 ayda ortalama %42 artmıştır (Google Search Central yönergeleriyle uyumlu). [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]",
+    "word_count": 45,
+    "markdown": "Kurumsal SEO danışmanlığı, 500+ sayfalık siteler için teknik denetim, içerik stratejisi ve bağlantı profili yönetimini kapsayan 6 aylık bir hizmettir. Müşterilerimizin organik trafiği ilk 6 ayda ortalama %42 artmıştır (Google Search Central yönergeleriyle uyumlu). [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]",
+    "html": "<p>Kurumsal SEO danışmanlığı, 500+ sayfalık siteler için teknik denetim, içerik stratejisi ve bağlantı profili yönetimini kapsayan 6 aylık bir hizmettir. Müşterilerimizin organik trafiği ilk 6 ayda ortalama %42 artmıştır (Google Search Central yönergeleriyle uyumlu). [Ölçülebilir bir veri ya da koşul ekleyin: %XX, süre, fiyat aralığı]</p>"
+   },
+   "comparison_table": null
+  },
+  {
+   "version": "1.0",
+   "url": "https://shop.example.com/blog/espresso-nedir",
+   "page_type": "article",
+   "language": "tr",
+   "word_count": 163,
+   "score": 94,
+   "grade": "A",
+   "caps": [],
+   "metrics": {
+    "statistics": {
+     "key": "statistics",
+     "label": "İstatistik ve sayısal veri",
+     "score": 100,
+     "weight": 0.2,
+     "passed": true,
+     "detail": "30 sayısal veri (18.40/100 kelime, hedef ≥1.5); 0 muğlak nicelik ifadesi; 1 tablo.",
+     "facts": {
+      "numeric_facts": 30,
+      "per_100_words": 18.4,
+      "vague_sentences": [],
+      "vague_count": 0,
+      "tables": 1
+     },
+     "potential_gain_pct": 0.0
+    },
+    "quotations": {
+     "key": "quotations",
+     "label": "Uzman alıntısı",
+     "score": 100,
+     "weight": 0.2,
+     "passed": true,
+     "detail": "1 kaynaklı uzman alıntısı, 0 kaynaksız alıntı (hedef ≥1.0, ~600 kelimede 1).",
+     "facts": {
+      "attributed": 1,
+      "unattributed": 0,
+      "target": 1.0
+     },
+     "potential_gain_pct": 0.0
+    },
+    "citations": {
+     "key": "citations",
+     "label": "Yetkili kaynak gösterimi",
+     "score": 83,
+     "weight": 0.22,
+     "passed": true,
+     "detail": "8 doğrulanabilir iddianın 3 tanesi kaynaklı; 3 dış kaynak (akademik/resmi 2, sektör 0, diğer 1).",
+     "facts": {
+      "claims": 8,
+      "cited_claims": 3,
+      "external_links": 3,
+      "tier1": 2,
+      "tier2": 0,
+      "tier3": 1,
+      "references_section": true,
+      "uncited": [
+       "Espresso, 9 bar basınç altında 25-30 saniyede 18 gram ince öğütülmüş kahveden geçirilen 30-40 ml yoğun bir kahve özütüdür.",
+       "Espresso, sıcak suyun 9 bar basınçla ince öğütülmüş kahveden 25-30 saniyede geçirilmesiyle elde edilen 30 ml'lik yoğun bir içecektir.",
+       "İyi bir espressoyu belirleyen üç değişken öğütme, doz ve demleme süresidir; bunlardan biri 2 saniye saparsa tat profili belirgin biçimde değişir.",
+       "Espresso hazırlamak için 18 gram kahve 200-300 mikron inceliğinde öğütülür, portafiltreye 15 kg kuvvetle sıkıştırılır ve 92 °C suyla 25-30 saniye demlenir.",
+       "Sonuçta 36 gram (1:2 oran) espresso elde edilir; bu oran Specialty Coffee Association tarafından önerilen başlangıç reçetesidir ve ev makinelerinde de tekrarlanabilir."
+      ]
+     },
+     "potential_gain_pct": 6.0
+    },
+    "answer_capsules": {
+     "key": "answer_capsules",
+     "label": "Yanıt kapsülü (40-60 kelime)",
+     "score": 100,
+     "weight": 0.16,
+     "passed": true,
+     "detail": "2 H2/H3 bölümünün 2 tanesi 40-60 kelimelik doğrudan yanıtla açılıyor.",
+     "facts": {
+      "sections": [
+       {
+        "heading": "Espresso nedir?",
+        "block_index": 2,
+        "quality": 1.0,
+        "reason": "42 kelime"
+       },
+       {
+        "heading": "Espresso nasıl hazırlanır?",
+        "block_index": 5,
+        "quality": 1.0,
+        "reason": "44 kelime"
+       }
+      ],
+      "section_count": 2
+     },
+     "potential_gain_pct": 0.0
+    },
+    "authority_fluency": {
+     "key": "authority_fluency",
+     "label": "Otoriter ton ve akıcılık",
+     "score": 100,
+     "weight": 0.12,
+     "passed": true,
+     "detail": "0 çekingen/kaçamak cümle, 0 dolgu ifadesi, 0 abartı ifadesi, 1 edilgen ve 0 uzun (>35 kelime) cümle.",
+     "facts": {
+      "hedged": 0,
+      "filler": 0,
+      "hype": 0,
+      "passive": 1,
+      "long_sentences": 0,
+      "examples": []
+     },
+     "potential_gain_pct": 0.0
+    },
+    "keyword_stuffing": {
+     "key": "keyword_stuffing",
+     "label": "Anahtar kelime doldurma",
+     "score": 75,
+     "weight": 0.1,
+     "passed": true,
+     "detail": "En sık terim 'espresso' metnin %5.5'i (eşik %4); en sık ifade 'ince öğütülmüş' 2 kez. Görünürlük kaybı riski: none.",
+     "facts": {
+      "top_term": "espresso",
+      "top_word": "espresso",
+      "share": 0.0552,
+      "top_phrase": "ince öğütülmüş",
+      "phrase_count": 2,
+      "risk": "none"
+     },
+     "potential_gain_pct": 6.3
+    }
+   },
+   "improvements": [],
+   "answer_capsule": {
+    "text": "Espresso, 9 bar basınç altında 25-30 saniyede 18 gram ince öğütülmüş kahveden geçirilen 30-40 ml yoğun bir kahve özütüdür. İtalyan Ulusal Espresso Enstitüsü'ne göre ideal su sıcaklığı 88-92 °C aralığındadır ve bir shot yaklaşık 63 mg kafein içerir; bu değer filtre kahvenin 240 ml'lik fincanının üçte biri kadardır.",
+    "word_count": 48,
+    "markdown": "Espresso, 9 bar basınç altında 25-30 saniyede 18 gram ince öğütülmüş kahveden geçirilen 30-40 ml yoğun bir kahve özütüdür. İtalyan Ulusal Espresso Enstitüsü'ne göre ideal su sıcaklığı 88-92 °C aralığındadır ve bir shot yaklaşık 63 mg kafein içerir; bu değer filtre kahvenin 240 ml'lik fincanının üçte biri kadardır.",
+    "html": "<p>Espresso, 9 bar basınç altında 25-30 saniyede 18 gram ince öğütülmüş kahveden geçirilen 30-40 ml yoğun bir kahve özütüdür. İtalyan Ulusal Espresso Enstitüsü'ne göre ideal su sıcaklığı 88-92 °C aralığındadır ve bir shot yaklaşık 63 mg kafein içerir; bu değer filtre kahvenin 240 ml'lik fincanının üçte biri kadardır.</p>"
+   },
+   "comparison_table": null
+  }
+ ]
+}

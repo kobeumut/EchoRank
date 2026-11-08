@@ -9,6 +9,7 @@ from ..crawler import CrawlConfig
 from ..pipeline import IndexResult, index_site
 from .access import analyze_access
 from .actions import ActionCard, generate_actions
+from .autogeo import AutoGeoSiteReport, analyze_pages
 from .base import AuditContext, Pillar
 from .eeat import analyze_eeat
 from .readability import analyze_readability
@@ -32,6 +33,7 @@ class AuditReport:
     actions: list[ActionCard]
     caps: list[str] = field(default_factory=list)
     signals: SiteSignals | None = None
+    autogeo: AutoGeoSiteReport | None = None  # content-level citation readiness (does not change geo_score)
     generated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     @property
@@ -47,6 +49,9 @@ class AuditReport:
                 if c.applicable:
                     flat[_camel(c.id)] = round(c.score)
         flat["caps"] = self.caps
+        if self.autogeo is not None:
+            flat["autogeo"] = {"score": self.autogeo.score, "metrics": self.autogeo.metric_means(),
+                               "pageCount": len(self.autogeo.pages)}
         flat["pillars"] = {k: p.to_dict() for k, p in self.pillars.items()}
         return flat
 
@@ -73,6 +78,7 @@ class AuditReport:
             "actions": [a.to_dict() for a in self.actions],
             "facts": {k: p.facts for k, p in self.pillars.items()},
             "signals": self.signals.to_dict() if self.signals else None,
+            "autogeo": self.autogeo.to_dict() if self.autogeo else None,
         }
 
     def to_db_records(self) -> dict[str, Any]:
@@ -81,6 +87,8 @@ class AuditReport:
             "audit": {"status": "completed", "geoScore": self.geo_score, "seoScore": self.seo_score,
                       "eeatScore": self.eeat_score, "metrics": self.metrics, "summary": self.summary},
             "actionItems": [a.to_action_item() for a in self.actions],
+            # page-level AutoGEO reports; the web app turns them into ActionItems (src/lib/services/autogeo.ts)
+            **({"autogeo": self.autogeo.to_dict()} if self.autogeo else {}),
         }
 
 
@@ -115,8 +123,10 @@ def score_index(index: IndexResult, signals: SiteSignals | None = None) -> Audit
         caps.append("hiç sayfa alınamadı")
 
     actions = generate_actions(ctx, pillars)
+    autogeo = analyze_pages(ctx.pages) if ctx.pages else None
     return AuditReport(site=index.crawl.start_url, geo_score=geo, seo_score=pillars["technical_seo"].score,
-                       eeat_score=pillars["eeat"].score, pillars=pillars, actions=actions, caps=caps, signals=signals)
+                       eeat_score=pillars["eeat"].score, pillars=pillars, actions=actions, caps=caps, signals=signals,
+                       autogeo=autogeo)
 
 
 async def audit_site(url: str, config: CrawlConfig | None = None, probe_user_agents: bool = True,
