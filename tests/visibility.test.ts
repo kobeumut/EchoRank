@@ -163,11 +163,15 @@ describe("visibility API with mocked live transports and real SQLite", () => {
     await prisma.graphEntity.create({ data: { siteId: other.id, key: "x", name: "Private competitor product", entityType: "Product" } });
     mockProviders();
     const body = await (await post(site.id, { models: ["gemini"] })).json();
-    expect(body.attempted).toBe(4);
+    expect(body.attempted).toBe(10);
     const listing = await (await route.GET(req(`/?limit=1&offset=1`), ctx(site.id))).json();
     expect(listing.items).toHaveLength(1);
-    expect(listing.total).toBe(4);
-    expect(listing.queries).toEqual(["manual query", "Olive oil nereden satın alınır?", "En iyi Natural oils markaları hangileri?", "What is cold pressed?"]);
+    expect(listing.total).toBe(10);
+    expect(listing.queries).toHaveLength(10);
+    expect(listing.queries[0]).toBe("manual query");
+    expect(listing.queries).toEqual(expect.arrayContaining(["Olive oil nereden satın alınır?", "Which brands make the best natural oils?", "What is cold pressed?", "Acme güvenilir mi?"]));
+    expect(listing.queries.join(" ")).not.toContain("Private competitor product");
+    expect(listing.querySuggestions[1]).toMatchObject({ intent: "informational", language: "tr", difficulty: { level: expect.any(String) } });
     expect((await (await route.GET(req("/"), ctx(other.id))).json()).total).toBe(0);
     expect((await route.GET(req("/?limit=101"), ctx(site.id))).status).toBe(400);
   });

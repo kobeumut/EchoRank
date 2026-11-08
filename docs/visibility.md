@@ -1,6 +1,6 @@
 # Multi-model visibility checks
 
-`GET /api/sites/:id/visibility?limit=50&offset=0` returns stored records, total count, and up to ten suggested queries. Suggestions combine `Site.targetKeywords` (first) with Product, Category, Brand, Concept and FAQ graph entities. Templates currently use Turkish. An explicit POST `queries` list replaces suggestions; a site with neither queries nor relevant graph data gets HTTP 400 rather than a biased brand-only fallback.
+`GET /api/sites/:id/visibility?limit=50&offset=0` returns stored records, total count, up to ten suggested `queries` and `querySuggestions` (up to 40, with intent / language / difficulty / volume labels). Suggestions come from the [synthetic query generator](query-generator.md): `Site.targetKeywords` first, then a round-robin over the four intents (informational, comparative, transactional, reputation) and the site's languages. An explicit POST `queries` list replaces suggestions; a site with neither keywords nor relevant graph data gets HTTP 400 rather than a biased brand-only fallback.
 
 ## Run a batch
 
@@ -12,7 +12,7 @@ curl -X POST "http://localhost:3000/api/sites/$SITE_ID/visibility" \
   -d '{"queries":["En iyi doğal zeytinyağı markaları"],"models":["chatgpt","gemini","claude","perplexity"]}'
 ```
 
-- Empty body / `{}`: generated queries and all four providers. `queries`: 1–10 strings, each 1–500 characters. `models`: subset of the four names. Duplicate queries/models collapse. `refresh: true` bypasses cache.
+- Empty body / `{}`: generated queries and all four providers. With generated queries, `intents` (subset of the four) and `languages` (`tr`, `en`) narrow the selection; each record's `responseMeta` then carries `queryIntent`, `queryLanguage`, `queryBranded` and `querySource` (explicit queries get a heuristic `queryIntent` only). `queries`: 1–10 strings, each 1–500 characters. `models`: subset of the four names. Duplicate queries/models collapse. `refresh: true` bypasses cache.
 - Paid POST requires `API_TOKEN` even when the existing optional proxy guard is disabled (503 if unconfigured, 401 for invalid credentials). This is a shared-token, single-tenant API, not per-user authorization.
 - A response contains `items`, `attempted`, `successful`, `failed`, overall `citationRate`, and `perModel`. Each item has either `{ record, cached }` or a sanitized `error`: `not_configured`, `rate_limited`, `timeout`, `provider_error`, `invalid_response`.
 - Partial or total upstream failure returns HTTP 200 with explicit counts/errors. Validation/not-found/conflict errors use 400/404/409. Database failures remain HTTP 500, not successful provider outcomes.

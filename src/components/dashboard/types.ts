@@ -93,7 +93,16 @@ export type VisibilityRecord = {
   responseMeta: unknown;
   checkedAt: string;
 };
-export type VisibilityList = { items: VisibilityRecord[]; total: number; queries: string[] };
+export type QuerySuggestion = {
+  text: string;
+  intent: "informational" | "comparative" | "transactional" | "reputation";
+  language: "tr" | "en";
+  branded: boolean;
+  source: string;
+  difficulty: { score: number; level: "low" | "medium" | "high" };
+  volume: { score: number; level: "low" | "medium" | "high" };
+};
+export type VisibilityList = { items: VisibilityRecord[]; total: number; queries: string[]; querySuggestions?: QuerySuggestion[] };
 export type VisibilityRunResult = {
   items: { query: string; model: string; cached?: boolean; error?: string; record?: VisibilityRecord }[];
   attempted: number;
