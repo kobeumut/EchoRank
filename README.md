@@ -108,6 +108,7 @@ All responses are formatted in JSON with standard HTTP status codes.
 | `POST` | `/api/sites/:id/audit` | Trigger an asynchronous GEO audit and crawl run |
 | `GET` | `/api/sites/:id/audit` | Get recent audits and active crawl session progress |
 | `GET` | `/api/sites/:id/graph` | Fetch knowledge graph nodes, edges, and semantic gaps |
+| `GET/POST` | `/api/sites/:id/visibility` | Query suggestions/history and bounded multi-model visibility checks ([usage](docs/visibility.md)) |
 | `GET` | `/api/sites/:id/reports` | Get score trends, LLM visibility metrics, and action items |
 | `GET/POST`| `/api/sites/:id/reports/schedules` | Manage daily and weekly automated report schedules |
 
@@ -117,7 +118,7 @@ All responses are formatted in JSON with standard HTTP status codes.
 
 Refer to `.env.example` for all configurable environment variables:
 - `DATABASE_URL`: SQLite or PostgreSQL connection string.
-- `API_TOKEN`: Optional Bearer token for securing API endpoints.
+- `API_TOKEN`: Bearer token for securing API endpoints; mandatory for paid visibility POST requests, optional elsewhere.
 - `OPENAI_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `PERPLEXITY_API_KEY`: Multi-model visibility testing keys.
 - `INDEXNOW_KEY`, `INDEXNOW_HOST`: Instant Bing / ChatGPT search indexation configuration.
 - `SMTP_*`: Notification and scheduled report delivery settings.
