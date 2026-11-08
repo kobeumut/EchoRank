@@ -32,6 +32,7 @@ export function useSite() {
 const TABS = [
   { href: "", label: "Genel Bakış" },
   { href: "/actions", label: "Ne Yapılmalı?" },
+  { href: "/studio", label: "İçerik Stüdyosu" },
   { href: "/graph", label: "Bilgi Grafı" },
   { href: "/visibility", label: "LLM Görünürlük" },
   { href: "/distribution", label: "AI Dağıtım" },
