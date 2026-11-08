@@ -17,6 +17,7 @@ This page covers how its output reaches the database and the API.
 | --- | --- | --- |
 | `POST` | `/api/sites/:id/audit/:auditId/result` | Ingest scoring output: `{ audit: {geoScore, seoScore, eeatScore, metrics, summary}, actionItems: [...], crawl?: {crawlSession, crawledPages, graphEntities, graphRelations} }` |
 | `GET` | `/api/sites/:id/autogeo` | AutoGEO content report: per-page metric summary + open `autogeo.*` action items with diffs ([details](autogeo.md)) |
+| `GET/POST` | `/api/sites/:id/bot-simulator` | Latest audit's live AI-crawler simulation summary / run one now ([details](bot-simulator.md)) |
 | `GET` | `/api/sites/:id/actions` | Action cards by priority. `?status=open,in_progress` (default) `&category=schema&impact=high&limit=100` |
 | `PATCH` | `/api/sites/:id/actions/:actionId` | `{ "status": "open" \| "in_progress" \| "resolved" \| "dismissed" }` |
 

@@ -5,11 +5,14 @@
     report = score_index(index, signals)                # 0-100 scores + action cards
     report.to_db_records()                              # GeoAudit + ActionItem rows (+ "autogeo" page reports)
     analyze_html(html, url, page_type="article")        # AutoGEO: 6 content metrics + rewrite diffs for one page
+    await simulate_bots([url])                           # live AI crawler fetches: WAF / render / token diagnosis
 """
 from .actions import ActionCard, Snippet, generate_actions
 from .autogeo import (AUTOGEO_VERSION, AutoGeoMetric, AutoGeoReport, AutoGeoSiteReport, Improvement, analyze_blocks,
                       analyze_html, analyze_markdown, analyze_page, analyze_pages)
 from .base import AuditContext, Check, Pillar
+from .bot_simulator import (BOT_PROFILES, DEFAULT_BOTS, SIMULATOR_VERSION, BotSimulationReport, build_fixes,
+                            detect_protection, estimate_tokens, simulate_bots)
 from .engine import SCORING_VERSION, AuditReport, audit_site, grade, score_index
 from .robots import AI_BOTS, parse_robots_rules
 from .signals import SiteSignals, collect_site_signals, validate_llms_txt
@@ -19,5 +22,6 @@ __all__ = [
     "AuditReport", "audit_site", "grade", "score_index", "AI_BOTS", "parse_robots_rules", "SiteSignals",
     "collect_site_signals", "validate_llms_txt", "AUTOGEO_VERSION", "AutoGeoMetric", "AutoGeoReport",
     "AutoGeoSiteReport", "Improvement", "analyze_blocks", "analyze_html", "analyze_markdown", "analyze_page",
-    "analyze_pages",
+    "analyze_pages", "BOT_PROFILES", "DEFAULT_BOTS", "SIMULATOR_VERSION", "BotSimulationReport", "build_fixes",
+    "detect_protection", "estimate_tokens", "simulate_bots",
 ]

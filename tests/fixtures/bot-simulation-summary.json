@@ -1,0 +1,99 @@
+{
+  "version": "1.0",
+  "score": 34,
+  "grade": "E",
+  "accessScore": 40,
+  "renderScore": 67,
+  "tokenScore": 56,
+  "bots": [
+    "GPTBot",
+    "ClaudeBot",
+    "PerplexityBot",
+    "Google-Extended",
+    "Applebot-Extended"
+  ],
+  "blockedBots": [
+    "GPTBot",
+    "ClaudeBot",
+    "PerplexityBot"
+  ],
+  "vendors": [
+    "cloudflare"
+  ],
+  "pages": [
+    {
+      "url": "https://botsim.example.com/",
+      "accessScore": 40,
+      "render": "static",
+      "htmlTokens": 1781,
+      "textTokens": 1626,
+      "bots": {
+        "GPTBot": "challenge",
+        "ClaudeBot": "challenge",
+        "PerplexityBot": "blocked",
+        "Google-Extended": "ok",
+        "Applebot-Extended": "ok"
+      }
+    },
+    {
+      "url": "https://botsim.example.com/uygulama",
+      "accessScore": 40,
+      "render": "csr_shell",
+      "htmlTokens": 114,
+      "textTokens": 0,
+      "bots": {
+        "GPTBot": "challenge",
+        "ClaudeBot": "challenge",
+        "PerplexityBot": "blocked",
+        "Google-Extended": "ok",
+        "Applebot-Extended": "ok"
+      }
+    },
+    {
+      "url": "https://botsim.example.com/urun/barista-pro-x",
+      "accessScore": 40,
+      "render": "ssr_hydrated",
+      "htmlTokens": 68991,
+      "textTokens": 3457,
+      "bots": {
+        "GPTBot": "challenge",
+        "ClaudeBot": "challenge",
+        "PerplexityBot": "blocked",
+        "Google-Extended": "ok",
+        "Applebot-Extended": "ok"
+      }
+    }
+  ],
+  "findings": [
+    {
+      "code": "waf_challenge",
+      "severity": "critical",
+      "title": "2 AI botu challenge/CAPTCHA sayfasına takılıyor"
+    },
+    {
+      "code": "waf_block",
+      "severity": "critical",
+      "title": "1 AI botu sunucu/WAF tarafından reddediliyor"
+    },
+    {
+      "code": "csr_shell",
+      "severity": "critical",
+      "title": "1 sayfa AI botlarına boş JS kabuğu döndürüyor"
+    },
+    {
+      "code": "robots_disallow",
+      "severity": "warning",
+      "title": "1 AI botu robots.txt ile engelli"
+    },
+    {
+      "code": "token_bloat",
+      "severity": "warning",
+      "title": "1 sayfada şişkin DOM / gömülü veri"
+    },
+    {
+      "code": "no_compression",
+      "severity": "info",
+      "title": "HTML yanıtı sıkıştırılmadan gönderiliyor"
+    }
+  ]
+}

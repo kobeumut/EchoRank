@@ -164,7 +164,8 @@ All responses are formatted in JSON with standard HTTP status codes.
 | `PATCH` | `/api/sites/:id/autogeo/:suggestionId` | Mark a suggestion `applied` / `dismissed` / `pending` |
 | `GET` | `/api/sites/:id/competitors` | Share of Model vs configured competitors, citation gaps ([API](docs/geo-api.md)) |
 | `GET/POST` | `/api/sites/:id/entities/reconcile` | Wikidata enrichments + verified `sameAs`; sync / verify / reject / requery |
-| `GET/POST` | `/api/sites/:id/simulation/bots` | Live AI crawler simulation (WAF block, CSR shell, token weight) |
+| `GET/POST` | `/api/sites/:id/simulation/bots` | Persisted per-run bot probe records (WAF block, CSR shell, token estimate); see [geo-api](docs/geo-api.md) |
+| `GET/POST` | `/api/sites/:id/bot-simulator` | Full AI crawler diagnosis: bot-vs-browser parity, WAF vendor, CSR shell, token weight + ready-made Cloudflare/nginx/Apache/AWS allow rules ([usage](docs/bot-simulator.md)) |
 | `GET/POST` | `/api/sites/:id/queries/synthetic` | GEO-bench style multi-intent TR/EN test prompts |
 | `GET/POST` | `/api/sites/:id/visibility` | Query suggestions/history and bounded multi-model visibility checks ([usage](docs/visibility.md)) |
 | `GET` | `/api/sites/:id/queries` | Multi-intent synthetic test prompts (TR/EN) with intent, difficulty and volume labels ([details](docs/query-generator.md)) |

@@ -1,0 +1,822 @@
+{
+  "version": "1.0",
+  "generated_at": "2026-11-08T12:00:00+00:00",
+  "origin": "https://botsim.example.com",
+  "bots": [
+    "GPTBot",
+    "ClaudeBot",
+    "PerplexityBot",
+    "Google-Extended",
+    "Applebot-Extended"
+  ],
+  "robots_status": 200,
+  "score": 34,
+  "grade": "E",
+  "scores": {
+    "access": 40,
+    "render": 67,
+    "tokens": 56
+  },
+  "blocked_bots": [
+    "GPTBot",
+    "ClaudeBot",
+    "PerplexityBot"
+  ],
+  "vendors": [
+    "cloudflare"
+  ],
+  "pages": [
+    {
+      "url": "https://botsim.example.com/",
+      "access_score": 40,
+      "baseline": {
+        "status": 200,
+        "outcome": "ok",
+        "final_url": "https://botsim.example.com/",
+        "words": 544,
+        "protection": null,
+        "cdn": "cloudflare",
+        "ttfb_ms": 12,
+        "total_ms": 12,
+        "html_bytes": 4442,
+        "error": null
+      },
+      "results": [
+        {
+          "token": "GPTBot",
+          "vendor": "OpenAI",
+          "purpose": "training",
+          "crawler": "GPTBot",
+          "user_agent": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.3; +https://openai.com/gptbot)",
+          "url": "https://botsim.example.com/",
+          "outcome": "challenge",
+          "status": 403,
+          "final_url": "https://botsim.example.com/",
+          "protection": {
+            "vendor": "cloudflare",
+            "kind": "challenge",
+            "name": "Cloudflare Managed Challenge",
+            "evidence": [
+              "cf-mitigated: challenge"
+            ]
+          },
+          "robots_allowed": true,
+          "silent_block": true,
+          "general": false,
+          "words": 9,
+          "parity": null,
+          "ttfb_ms": 15,
+          "total_ms": 15,
+          "html_bytes": 589,
+          "wire_bytes": 589,
+          "content_encoding": "",
+          "error": null,
+          "note": "",
+          "accessible": false,
+          "reason": "Cloudflare Managed Challenge (HTTP 403)",
+          "label": "challenge/CAPTCHA"
+        },
+        {
+          "token": "ClaudeBot",
+          "vendor": "Anthropic",
+          "purpose": "training",
+          "crawler": "ClaudeBot",
+          "user_agent": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)",
+          "url": "https://botsim.example.com/",
+          "outcome": "challenge",
+          "status": 403,
+          "final_url": "https://botsim.example.com/",
+          "protection": {
+            "vendor": "cloudflare",
+            "kind": "challenge",
+            "name": "Cloudflare Managed Challenge",
+            "evidence": [
+              "cf-mitigated: challenge"
+            ]
+          },
+          "robots_allowed": true,
+          "silent_block": true,
+          "general": false,
+          "words": 9,
+          "parity": null,
+          "ttfb_ms": 15,
+          "total_ms": 15,
+          "html_bytes": 589,
+          "wire_bytes": 589,
+          "content_encoding": "",
+          "error": null,
+          "note": "",
+          "accessible": false,
+          "reason": "Cloudflare Managed Challenge (HTTP 403)",
+          "label": "challenge/CAPTCHA"
+        },
+        {
+          "token": "PerplexityBot",
+          "vendor": "Perplexity",
+          "purpose": "search",
+          "crawler": "PerplexityBot",
+          "user_agent": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)",
+          "url": "https://botsim.example.com/",
+          "outcome": "blocked",
+          "status": 403,
+          "final_url": "https://botsim.example.com/",
+          "protection": {
+            "vendor": "cloudflare",
+            "kind": "block",
+            "name": "Cloudflare WAF engeli",
+            "evidence": [
+              "gövde: 'attention required! | cloudflare'"
+            ]
+          },
+          "robots_allowed": true,
+          "silent_block": true,
+          "general": false,
+          "words": 19,
+          "parity": null,
+          "ttfb_ms": 15,
+          "total_ms": 15,
+          "html_bytes": 428,
+          "wire_bytes": 428,
+          "content_encoding": "",
+          "error": null,
+          "note": "",
+          "accessible": false,
+          "reason": "Cloudflare WAF engeli (HTTP 403)",
+          "label": "engellendi"
+        },
+        {
+          "token": "Google-Extended",
+          "vendor": "Google",
+          "purpose": "training",
+          "crawler": "Googlebot",
+          "user_agent": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/131.0.6778.204 Safari/537.36",
+          "url": "https://botsim.example.com/",
+          "outcome": "ok",
+          "status": 200,
+          "final_url": "https://botsim.example.com/",
+          "protection": null,
+          "robots_allowed": true,
+          "silent_block": false,
+          "general": false,
+          "words": 544,
+          "parity": 1.0,
+          "ttfb_ms": 15,
+          "total_ms": 15,
+          "html_bytes": 4442,
+          "wire_bytes": 4442,
+          "content_encoding": "",
+          "error": null,
+          "note": "Google-Extended yalnızca robots.txt jetonudur; Google içeriği Googlebot ile alır.",
+          "accessible": true,
+          "reason": "HTTP 200, 544 kelime",
+          "label": "erişilebilir"
+        },
+        {
+          "token": "Applebot-Extended",
+          "vendor": "Apple",
+          "purpose": "training",
+          "crawler": "Applebot",
+          "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15 (Applebot/0.1; +http://www.apple.com/go/applebot)",
+          "url": "https://botsim.example.com/",
+          "outcome": "ok",
+          "status": 200,
+          "final_url": "https://botsim.example.com/",
+          "protection": null,
+          "robots_allowed": false,
+          "silent_block": false,
+          "general": false,
+          "words": 544,
+          "parity": 1.0,
+          "ttfb_ms": 15,
+          "total_ms": 15,
+          "html_bytes": 4442,
+          "wire_bytes": 4442,
+          "content_encoding": "",
+          "error": null,
+          "note": "Applebot-Extended yalnızca robots.txt jetonudur; Apple içeriği Applebot ile alır.",
+          "accessible": true,
+          "reason": "HTTP 200, 544 kelime",
+          "label": "erişilebilir"
+        }
+      ],
+      "ai_view": {
+        "source": "Google-Extended",
+        "render": {
+          "mode": "static",
+          "score": 100,
+          "reason": "içerik ilk HTML yanıtında mevcut",
+          "word_count": 533,
+          "title": "Barista Pro X Espresso Makinesi",
+          "h1": "Barista Pro X Espresso Makinesi",
+          "frameworks": [],
+          "spa_root": null,
+          "script_tags": 1,
+          "external_scripts": 0,
+          "noscript_requires_js": false,
+          "text_ratio": 0.8987
+        },
+        "tokens": {
+          "method": "estimate:cl100k_base",
+          "html_tokens": 1781,
+          "text_tokens": 1626,
+          "signal_ratio": 0.913,
+          "html_kb": 4.3,
+          "transfer_kb": 4.3,
+          "content_encoding": null,
+          "compressed": false,
+          "compression_ratio": null,
+          "truncated": false,
+          "score": 100
+        },
+        "bloat": {
+          "dom_nodes": 24,
+          "dom_depth": 5,
+          "json_state_bytes": 0,
+          "json_state": [],
+          "ld_json_bytes": 74,
+          "inline_script_bytes": 0,
+          "inline_css_bytes": 0,
+          "inline_svg_bytes": 0,
+          "data_uri_bytes": 0,
+          "issues": []
+        }
+      }
+    },
+    {
+      "url": "https://botsim.example.com/uygulama",
+      "access_score": 40,
+      "baseline": {
+        "status": 200,
+        "outcome": "ok",
+        "final_url": "https://botsim.example.com/uygulama",
+        "words": 8,
+        "protection": null,
+        "cdn": "cloudflare",
+        "ttfb_ms": 12,
+        "total_ms": 12,
+        "html_bytes": 344,
+        "error": null
+      },
+      "results": [
+        {
+          "token": "GPTBot",
+          "vendor": "OpenAI",
+          "purpose": "training",
+          "crawler": "GPTBot",
+          "user_agent": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.3; +https://openai.com/gptbot)",
+          "url": "https://botsim.example.com/uygulama",
+          "outcome": "challenge",
+          "status": 403,
+          "final_url": "https://botsim.example.com/uygulama",
+          "protection": {
+            "vendor": "cloudflare",
+            "kind": "challenge",
+            "name": "Cloudflare Managed Challenge",
+            "evidence": [
+              "cf-mitigated: challenge"
+            ]
+          },
+          "robots_allowed": true,
+          "silent_block": true,
+          "general": false,
+          "words": 9,
+          "parity": null,
+          "ttfb_ms": 15,
+          "total_ms": 15,
+          "html_bytes": 589,
+          "wire_bytes": 589,
+          "content_encoding": "",
+          "error": null,
+          "note": "",
+          "accessible": false,
+          "reason": "Cloudflare Managed Challenge (HTTP 403)",
+          "label": "challenge/CAPTCHA"
+        },
+        {
+          "token": "ClaudeBot",
+          "vendor": "Anthropic",
+          "purpose": "training",
+          "crawler": "ClaudeBot",
+          "user_agent": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)",
+          "url": "https://botsim.example.com/uygulama",
+          "outcome": "challenge",
+          "status": 403,
+          "final_url": "https://botsim.example.com/uygulama",
+          "protection": {
+            "vendor": "cloudflare",
+            "kind": "challenge",
+            "name": "Cloudflare Managed Challenge",
+            "evidence": [
+              "cf-mitigated: challenge"
+            ]
+          },
+          "robots_allowed": true,
+          "silent_block": true,
+          "general": false,
+          "words": 9,
+          "parity": null,
+          "ttfb_ms": 15,
+          "total_ms": 15,
+          "html_bytes": 589,
+          "wire_bytes": 589,
+          "content_encoding": "",
+          "error": null,
+          "note": "",
+          "accessible": false,
+          "reason": "Cloudflare Managed Challenge (HTTP 403)",
+          "label": "challenge/CAPTCHA"
+        },
+        {
+          "token": "PerplexityBot",
+          "vendor": "Perplexity",
+          "purpose": "search",
+          "crawler": "PerplexityBot",
+          "user_agent": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)",
+          "url": "https://botsim.example.com/uygulama",
+          "outcome": "blocked",
+          "status": 403,
+          "final_url": "https://botsim.example.com/uygulama",
+          "protection": {
+            "vendor": "cloudflare",
+            "kind": "block",
+            "name": "Cloudflare WAF engeli",
+            "evidence": [
+              "gövde: 'attention required! | cloudflare'"
+            ]
+          },
+          "robots_allowed": true,
+          "silent_block": true,
+          "general": false,
+          "words": 19,
+          "parity": null,
+          "ttfb_ms": 15,
+          "total_ms": 15,
+          "html_bytes": 428,
+          "wire_bytes": 428,
+          "content_encoding": "",
+          "error": null,
+          "note": "",
+          "accessible": false,
+          "reason": "Cloudflare WAF engeli (HTTP 403)",
+          "label": "engellendi"
+        },
+        {
+          "token": "Google-Extended",
+          "vendor": "Google",
+          "purpose": "training",
+          "crawler": "Googlebot",
+          "user_agent": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/131.0.6778.204 Safari/537.36",
+          "url": "https://botsim.example.com/uygulama",
+          "outcome": "ok",
+          "status": 200,
+          "final_url": "https://botsim.example.com/uygulama",
+          "protection": null,
+          "robots_allowed": true,
+          "silent_block": false,
+          "general": false,
+          "words": 8,
+          "parity": 1.0,
+          "ttfb_ms": 15,
+          "total_ms": 15,
+          "html_bytes": 344,
+          "wire_bytes": 344,
+          "content_encoding": "",
+          "error": null,
+          "note": "Google-Extended yalnızca robots.txt jetonudur; Google içeriği Googlebot ile alır.",
+          "accessible": true,
+          "reason": "HTTP 200, 8 kelime",
+          "label": "erişilebilir"
+        },
+        {
+          "token": "Applebot-Extended",
+          "vendor": "Apple",
+          "purpose": "training",
+          "crawler": "Applebot",
+          "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15 (Applebot/0.1; +http://www.apple.com/go/applebot)",
+          "url": "https://botsim.example.com/uygulama",
+          "outcome": "ok",
+          "status": 200,
+          "final_url": "https://botsim.example.com/uygulama",
+          "protection": null,
+          "robots_allowed": false,
+          "silent_block": false,
+          "general": false,
+          "words": 8,
+          "parity": 1.0,
+          "ttfb_ms": 15,
+          "total_ms": 15,
+          "html_bytes": 344,
+          "wire_bytes": 344,
+          "content_encoding": "",
+          "error": null,
+          "note": "Applebot-Extended yalnızca robots.txt jetonudur; Apple içeriği Applebot ile alır.",
+          "accessible": true,
+          "reason": "HTTP 200, 8 kelime",
+          "label": "erişilebilir"
+        }
+      ],
+      "ai_view": {
+        "source": "Google-Extended",
+        "render": {
+          "mode": "csr_shell",
+          "score": 0,
+          "reason": "#root kökü boş, sunucu HTML'inde yalnızca 0 kelime var; içerik JavaScript ile yükleniyor",
+          "word_count": 0,
+          "title": "Kahve Dükkanı",
+          "h1": "",
+          "frameworks": [],
+          "spa_root": {
+            "id": "root",
+            "empty": true
+          },
+          "script_tags": 3,
+          "external_scripts": 3,
+          "noscript_requires_js": true,
+          "text_ratio": 0.0
+        },
+        "tokens": {
+          "method": "estimate:cl100k_base",
+          "html_tokens": 114,
+          "text_tokens": 0,
+          "signal_ratio": 0.0,
+          "html_kb": 0.3,
+          "transfer_kb": 0.3,
+          "content_encoding": null,
+          "compressed": false,
+          "compression_ratio": null,
+          "truncated": false,
+          "score": 0
+        },
+        "bloat": {
+          "dom_nodes": 9,
+          "dom_depth": 3,
+          "json_state_bytes": 0,
+          "json_state": [],
+          "ld_json_bytes": 0,
+          "inline_script_bytes": 0,
+          "inline_css_bytes": 0,
+          "inline_svg_bytes": 0,
+          "data_uri_bytes": 0,
+          "issues": []
+        }
+      }
+    },
+    {
+      "url": "https://botsim.example.com/urun/barista-pro-x",
+      "access_score": 40,
+      "baseline": {
+        "status": 200,
+        "outcome": "ok",
+        "final_url": "https://botsim.example.com/urun/barista-pro-x",
+        "words": 1444,
+        "protection": null,
+        "cdn": "cloudflare",
+        "ttfb_ms": 12,
+        "total_ms": 12,
+        "html_bytes": 216987,
+        "error": null
+      },
+      "results": [
+        {
+          "token": "GPTBot",
+          "vendor": "OpenAI",
+          "purpose": "training",
+          "crawler": "GPTBot",
+          "user_agent": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.3; +https://openai.com/gptbot)",
+          "url": "https://botsim.example.com/urun/barista-pro-x",
+          "outcome": "challenge",
+          "status": 403,
+          "final_url": "https://botsim.example.com/urun/barista-pro-x",
+          "protection": {
+            "vendor": "cloudflare",
+            "kind": "challenge",
+            "name": "Cloudflare Managed Challenge",
+            "evidence": [
+              "cf-mitigated: challenge"
+            ]
+          },
+          "robots_allowed": true,
+          "silent_block": true,
+          "general": false,
+          "words": 9,
+          "parity": null,
+          "ttfb_ms": 15,
+          "total_ms": 15,
+          "html_bytes": 589,
+          "wire_bytes": 589,
+          "content_encoding": "",
+          "error": null,
+          "note": "",
+          "accessible": false,
+          "reason": "Cloudflare Managed Challenge (HTTP 403)",
+          "label": "challenge/CAPTCHA"
+        },
+        {
+          "token": "ClaudeBot",
+          "vendor": "Anthropic",
+          "purpose": "training",
+          "crawler": "ClaudeBot",
+          "user_agent": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)",
+          "url": "https://botsim.example.com/urun/barista-pro-x",
+          "outcome": "challenge",
+          "status": 403,
+          "final_url": "https://botsim.example.com/urun/barista-pro-x",
+          "protection": {
+            "vendor": "cloudflare",
+            "kind": "challenge",
+            "name": "Cloudflare Managed Challenge",
+            "evidence": [
+              "cf-mitigated: challenge"
+            ]
+          },
+          "robots_allowed": true,
+          "silent_block": true,
+          "general": false,
+          "words": 9,
+          "parity": null,
+          "ttfb_ms": 15,
+          "total_ms": 15,
+          "html_bytes": 589,
+          "wire_bytes": 589,
+          "content_encoding": "",
+          "error": null,
+          "note": "",
+          "accessible": false,
+          "reason": "Cloudflare Managed Challenge (HTTP 403)",
+          "label": "challenge/CAPTCHA"
+        },
+        {
+          "token": "PerplexityBot",
+          "vendor": "Perplexity",
+          "purpose": "search",
+          "crawler": "PerplexityBot",
+          "user_agent": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)",
+          "url": "https://botsim.example.com/urun/barista-pro-x",
+          "outcome": "blocked",
+          "status": 403,
+          "final_url": "https://botsim.example.com/urun/barista-pro-x",
+          "protection": {
+            "vendor": "cloudflare",
+            "kind": "block",
+            "name": "Cloudflare WAF engeli",
+            "evidence": [
+              "gövde: 'attention required! | cloudflare'"
+            ]
+          },
+          "robots_allowed": true,
+          "silent_block": true,
+          "general": false,
+          "words": 19,
+          "parity": null,
+          "ttfb_ms": 15,
+          "total_ms": 15,
+          "html_bytes": 428,
+          "wire_bytes": 428,
+          "content_encoding": "",
+          "error": null,
+          "note": "",
+          "accessible": false,
+          "reason": "Cloudflare WAF engeli (HTTP 403)",
+          "label": "engellendi"
+        },
+        {
+          "token": "Google-Extended",
+          "vendor": "Google",
+          "purpose": "training",
+          "crawler": "Googlebot",
+          "user_agent": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/131.0.6778.204 Safari/537.36",
+          "url": "https://botsim.example.com/urun/barista-pro-x",
+          "outcome": "ok",
+          "status": 200,
+          "final_url": "https://botsim.example.com/urun/barista-pro-x",
+          "protection": null,
+          "robots_allowed": true,
+          "silent_block": false,
+          "general": false,
+          "words": 1444,
+          "parity": 1.0,
+          "ttfb_ms": 15,
+          "total_ms": 15,
+          "html_bytes": 216987,
+          "wire_bytes": 216987,
+          "content_encoding": "",
+          "error": null,
+          "note": "Google-Extended yalnızca robots.txt jetonudur; Google içeriği Googlebot ile alır.",
+          "accessible": true,
+          "reason": "HTTP 200, 1444 kelime",
+          "label": "erişilebilir"
+        },
+        {
+          "token": "Applebot-Extended",
+          "vendor": "Apple",
+          "purpose": "training",
+          "crawler": "Applebot",
+          "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15 (Applebot/0.1; +http://www.apple.com/go/applebot)",
+          "url": "https://botsim.example.com/urun/barista-pro-x",
+          "outcome": "ok",
+          "status": 200,
+          "final_url": "https://botsim.example.com/urun/barista-pro-x",
+          "protection": null,
+          "robots_allowed": false,
+          "silent_block": false,
+          "general": false,
+          "words": 1444,
+          "parity": 1.0,
+          "ttfb_ms": 15,
+          "total_ms": 15,
+          "html_bytes": 216987,
+          "wire_bytes": 216987,
+          "content_encoding": "",
+          "error": null,
+          "note": "Applebot-Extended yalnızca robots.txt jetonudur; Apple içeriği Applebot ile alır.",
+          "accessible": true,
+          "reason": "HTTP 200, 1444 kelime",
+          "label": "erişilebilir"
+        }
+      ],
+      "ai_view": {
+        "source": "Google-Extended",
+        "render": {
+          "mode": "ssr_hydrated",
+          "score": 100,
+          "reason": "SSR/SSG (nextjs) — içerik ilk HTML'de mevcut",
+          "word_count": 1433,
+          "title": "Barista Pro X Espresso Makinesi",
+          "h1": "Barista Pro X Espresso Makinesi",
+          "frameworks": [
+            "nextjs"
+          ],
+          "spa_root": null,
+          "script_tags": 2,
+          "external_scripts": 0,
+          "noscript_requires_js": false,
+          "text_ratio": 0.0345
+        },
+        "tokens": {
+          "method": "estimate:cl100k_base",
+          "html_tokens": 68991,
+          "text_tokens": 3457,
+          "signal_ratio": 0.0501,
+          "html_kb": 211.9,
+          "transfer_kb": 211.9,
+          "content_encoding": null,
+          "compressed": false,
+          "compression_ratio": null,
+          "truncated": false,
+          "score": 67
+        },
+        "bloat": {
+          "dom_nodes": 1825,
+          "dom_depth": 5,
+          "json_state_bytes": 179295,
+          "json_state": [
+            {
+              "kind": "__NEXT_DATA__",
+              "bytes": 179295
+            }
+          ],
+          "ld_json_bytes": 74,
+          "inline_script_bytes": 0,
+          "inline_css_bytes": 0,
+          "inline_svg_bytes": 0,
+          "data_uri_bytes": 0,
+          "issues": [
+            "DOM 1825 düğüm (>1500)",
+            "gömülü JSON durum verisi 175 KB (%82, en büyüğü __NEXT_DATA__)"
+          ]
+        }
+      }
+    }
+  ],
+  "findings": [
+    {
+      "code": "waf_challenge",
+      "severity": "critical",
+      "title": "2 AI botu challenge/CAPTCHA sayfasına takılıyor",
+      "detail": "Cloudflare Managed Challenge: AI tarayıcıları JavaScript çalıştıramaz ve CAPTCHA çözemez; içerik yerine doğrulama sayfası alıyorlar.",
+      "bots": [
+        "GPTBot",
+        "ClaudeBot"
+      ],
+      "urls": [
+        "https://botsim.example.com/",
+        "https://botsim.example.com/uygulama",
+        "https://botsim.example.com/urun/barista-pro-x"
+      ]
+    },
+    {
+      "code": "waf_block",
+      "severity": "critical",
+      "title": "1 AI botu sunucu/WAF tarafından reddediliyor",
+      "detail": "Cloudflare WAF engeli (HTTP 403). robots.txt PerplexityBot için izin verdiği hâlde (sessiz engel).",
+      "bots": [
+        "PerplexityBot"
+      ],
+      "urls": [
+        "https://botsim.example.com/",
+        "https://botsim.example.com/uygulama",
+        "https://botsim.example.com/urun/barista-pro-x"
+      ]
+    },
+    {
+      "code": "csr_shell",
+      "severity": "critical",
+      "title": "1 sayfa AI botlarına boş JS kabuğu döndürüyor",
+      "detail": "#root kökü boş, sunucu HTML'inde yalnızca 0 kelime var; içerik JavaScript ile yükleniyor. AI tarayıcıları JavaScript çalıştırmaz; SSR/SSG veya prerender gerekli.",
+      "bots": [],
+      "urls": [
+        "https://botsim.example.com/uygulama"
+      ]
+    },
+    {
+      "code": "robots_disallow",
+      "severity": "warning",
+      "title": "1 AI botu robots.txt ile engelli",
+      "detail": "Bu botlar robots.txt'ye uyar ve canlı erişim açık olsa bile sayfayı almaz.",
+      "bots": [
+        "Applebot-Extended"
+      ],
+      "urls": [
+        "https://botsim.example.com/",
+        "https://botsim.example.com/uygulama",
+        "https://botsim.example.com/urun/barista-pro-x"
+      ]
+    },
+    {
+      "code": "token_bloat",
+      "severity": "warning",
+      "title": "1 sayfada şişkin DOM / gömülü veri",
+      "detail": "DOM 1825 düğüm (>1500); gömülü JSON durum verisi 175 KB (%82, en büyüğü __NEXT_DATA__)",
+      "bots": [],
+      "urls": [
+        "https://botsim.example.com/urun/barista-pro-x"
+      ]
+    },
+    {
+      "code": "no_compression",
+      "severity": "info",
+      "title": "HTML yanıtı sıkıştırılmadan gönderiliyor",
+      "detail": "gzip/brotli açın; büyük sayfalar AI getiricilerinde zaman aşımına uğrayabilir.",
+      "bots": [],
+      "urls": [
+        "https://botsim.example.com/urun/barista-pro-x"
+      ]
+    }
+  ],
+  "fixes": [
+    {
+      "id": "cloudflare_waf_skip",
+      "platform": "cloudflare",
+      "title": "Cloudflare WAF: AI botları için Skip kuralı",
+      "language": "text",
+      "code": "# Cloudflare → Security → WAF → Custom rules → Create rule (listenin EN ÜSTÜNE taşıyın)\n# Rule name: Allow AI crawlers (GEO)\n# Expression (Edit expression):\n(http.user_agent contains \"GPTBot\") or (http.user_agent contains \"ClaudeBot\") or (http.user_agent contains \"PerplexityBot\") or (cf.verified_bot_category in {\"AI Crawler\" \"AI Search\" \"AI Assistant\"})\n# Action: Skip → All remaining custom rules, Rate limiting rules, Managed rules, Super Bot Fight Mode rules\n#         + \"Log matching requests\" açık\n\n# Yalnızca doğrulanmış botlar (UA taklidine kapalı, önerilen sıkı sürüm):\n(cf.verified_bot_category in {\"AI Crawler\" \"AI Search\" \"AI Assistant\"}) or (cf.client.bot)\n\n# Ayrıca: Security → Bots → \"Block AI bots\" = Off, \"AI Labyrinth\" = Off;\n# AI Crawl Control → ilgili crawler'lar = Allow. (Ücretsiz plandaki Bot Fight Mode Skip ile atlanamaz → kapatın.)\n\n# Rulesets API (PUT /zones/{zone_id}/rulesets/phases/http_request_firewall_custom/entrypoint → rules[0]):\n{\n  \"description\": \"Allow AI crawlers (GEO)\",\n  \"expression\": \"(http.user_agent contains \\\"GPTBot\\\") or (http.user_agent contains \\\"ClaudeBot\\\") or (http.user_agent contains \\\"PerplexityBot\\\") or (cf.verified_bot_category in {\\\"AI Crawler\\\" \\\"AI Search\\\" \\\"AI Assistant\\\"})\",\n  \"action\": \"skip\",\n  \"action_parameters\": {\n    \"ruleset\": \"current\",\n    \"phases\": [\n      \"http_ratelimit\",\n      \"http_request_firewall_managed\",\n      \"http_request_sbfm\"\n    ],\n    \"products\": [\n      \"bic\",\n      \"hot\",\n      \"rateLimit\",\n      \"securityLevel\",\n      \"uaBlock\",\n      \"waf\",\n      \"zoneLockdown\"\n    ]\n  },\n  \"logging\": {\n    \"enabled\": true\n  }\n}",
+      "instructions": "Kuralı mevcut engelleme kurallarının üstüne yerleştirin; Security Events'te 'Skip' olarak görünmelidir.",
+      "recommended": true,
+      "preventive": false
+    },
+    {
+      "id": "nginx_allow",
+      "platform": "nginx",
+      "title": "nginx: AI botlarını UA engeli ve rate limit'ten muaf tutun",
+      "language": "nginx",
+      "code": "# http { } bloğu (örn. /etc/nginx/conf.d/ai-bots.conf)\nmap $http_user_agent $is_ai_bot {\n    default 0;\n    \"~*(GPTBot|ClaudeBot|PerplexityBot)\" 1;   # \"GPTBot\" \"ClaudeBot\" \"PerplexityBot\"\n}\n# rate limit anahtarı: AI botları için boş anahtar = limit uygulanmaz\nmap $is_ai_bot $ai_limit_key {\n    0 $binary_remote_addr;\n    1 \"\";\n}\nlimit_req_zone $ai_limit_key zone=perip:10m rate=10r/s;\n\n# server { } bloğu — mevcut UA engelinizi AI botları dışında bırakın:\nset $block_ua 0;\nif ($http_user_agent ~* \"(bot|crawl|spider|scrape)\") { set $block_ua 1; }   # ← mevcut kuralınız\nif ($is_ai_bot = 1) { set $block_ua 0; }\nif ($block_ua = 1) { return 403; }",
+      "instructions": "Mevcut 'deny'/'return 403' ve limit_req kurallarınızı bu değişkenlerle koşullandırıp `nginx -t && nginx -s reload` çalıştırın.",
+      "recommended": false,
+      "preventive": false
+    },
+    {
+      "id": "apache_allow",
+      "platform": "apache",
+      "title": "Apache / LiteSpeed (.htaccess) ve ModSecurity istisnası",
+      "language": "apache",
+      "code": "# .htaccess veya <VirtualHost> — AI botlarını işaretle\nSetEnvIfNoCase User-Agent \"(GPTBot|ClaudeBot|PerplexityBot)\" ai_bot\n\n# 1) AI botlarını engelleyen RewriteRule'ları kaldırın veya istisna ekleyin:\nRewriteEngine On\nRewriteCond %{ENV:ai_bot} !^1$\nRewriteCond %{HTTP_USER_AGENT} (bot|crawl|spider|scrape) [NC]\nRewriteRule .* - [F,L]\n\n# 2) Apache 2.4 erişim kuralı (Require not env bad_bot vb. kullanıyorsanız):\n<RequireAny>\n    Require env ai_bot\n    Require all granted\n</RequireAny>\n\n# 3) ModSecurity / OWASP CRS tarayıcı tespitinden muaf tutun:\n<IfModule mod_security2.c>\n    SecRule REQUEST_HEADERS:User-Agent \"@rx (?i)(GPTBot|ClaudeBot|PerplexityBot)\" \\\n        \"id:1009001,phase:1,pass,nolog,ctl:ruleRemoveByTag=attack-reputation-scanner\"\n</IfModule>",
+      "instructions": "Değişiklikten sonra `apachectl configtest && apachectl graceful` çalıştırın.",
+      "recommended": false,
+      "preventive": false
+    },
+    {
+      "id": "ssr_render",
+      "platform": "nextjs",
+      "title": "İçeriği sunucu tarafında render edin (SSR/SSG/prerender)",
+      "language": "tsx",
+      "code": "// AI botları JavaScript çalıştırmaz; https://botsim.example.com/uygulama ilk HTML'de içerik döndürmeli.\n// Next.js (App Router) — sayfayı Server Component olarak render edin:\n// app/urun/[slug]/page.tsx\nexport const revalidate = 3600; // ISR: saatte bir statik yeniden üretim\n\nexport default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {\n  const { slug } = await params;\n  const product = await getProduct(slug); // sunucuda veri çek (useEffect + fetch DEĞİL)\n  return (\n    <article>\n      <h1>{product.name}</h1>\n      <p>{product.summary}</p>\n      <ProductSpecsTable specs={product.specs} />\n    </article>\n  );\n}\n\n// React SPA (Vite/CRA) için geçiş mümkün değilse: prerender (ör. prerender.io / rendertron)\n// nginx: bot UA'larını prerender servisine yönlendirin\n// if ($http_user_agent ~* \"GPTBot|ClaudeBot|PerplexityBot|OAI-SearchBot|ChatGPT-User|bingbot\") {\n//     rewrite .* /render?url=$scheme://$host$request_uri break;\n//     proxy_pass http://prerender:3000;\n// }",
+      "instructions": "Next.js/Nuxt/SvelteKit'te SSR veya statik üretim; saf React SPA için prerender (örn. Rendertron, prerender.io) ya da framework'e geçiş.",
+      "recommended": false,
+      "preventive": false
+    },
+    {
+      "id": "token_diet",
+      "platform": "web",
+      "title": "AI token yükünü azaltın (DOM ve gömülü JSON)",
+      "language": "text",
+      "code": "# Gömülü durum verisi (__NEXT_DATA__ / RSC / __NUXT__):\n#  - getServerSideProps / loader / Server Component'ten yalnızca sayfanın kullandığı alanları döndürün\n#  - Büyük listeleri sayfalayın; ürün açıklamalarını hem HTML'de hem JSON'da iki kez göndermeyin\n# DOM:\n#  - Gizli mega menü / mobil menü kopyalarını ilk HTML'den çıkarıp etkileşimde yükleyin\n#  - Satır içi SVG ikonlarını <use href=\"/sprite.svg#icon\"> ile tekrar kullanın; base64 görselleri dosyaya taşıyın\n# Aktarım:\n#  - gzip/brotli açık olmalı (nginx: gzip on; gzip_types text/html application/json;)",
+      "instructions": "Hedef: metin token'ı / HTML token'ı oranı ≥ %10, HTML < 500 KB.",
+      "recommended": false,
+      "preventive": false
+    }
+  ],
+  "caveats": [
+    "Simülasyon AI sağlayıcılarının IP aralıklarından değil, bu sunucudan yapıldı. WAF botları IP ile doğruluyorsa (örn. Cloudflare verified bots) gerçek botların sonucu farklı olabilir; WAF olay kayıtlarında (Security Events) doğrulayın.",
+    "Google-Extended ve Applebot-Extended yalnızca robots.txt jetonudur; canlı istek Googlebot/Applebot kimliğiyle yapıldı."
+  ]
+}
