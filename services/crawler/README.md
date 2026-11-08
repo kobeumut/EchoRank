@@ -110,6 +110,22 @@ diffs. Details: [`docs/autogeo.md`](../../docs/autogeo.md).
 The parser keeps document-order content blocks (`PageData.content_blocks`, from `blocks.py`), so `geo-audit`
 runs AutoGEO on the crawled pages and ships the result under `autogeo` in `--db-records`.
 
+## Live AI crawler simulator (`geo_crawler.scoring.bot_simulator`)
+
+Fetches live URLs as GPTBot, ClaudeBot, PerplexityBot, Google-Extended (Googlebot) and Applebot-Extended (Applebot)
+next to a browser baseline and reports what each bot actually receives: WAF / challenge (Cloudflare Managed
+Challenge / Turnstile, Imperva, Akamai, AWS WAF, DataDome, Vercel), silent blocks (robots.txt allows, edge
+refuses), empty CSR shells, token weight (`pip install -e '.[tokens]'` for exact tiktoken counts) and DOM / JSON
+bloat, plus Cloudflare / nginx / Apache / AWS WAF allow rules. Details: [`docs/bot-simulator.md`](../../docs/bot-simulator.md).
+
+```bash
+.venv/bin/geo-botsim https://example.com/ https://example.com/urun/x --code   # --json, --bots GPTBot,ChatGPT-User
+```
+
+`geo-audit` simulates the homepage + 2 key pages (unless `--no-ua-probe`), ships the full report under
+`bot_simulation` in the audit JSON and a summary in `metrics.botSimulation`; the `crawler.waf_ua_block` action
+then carries the recipe for the detected CDN/WAF.
+
 ## Notes
 
 - Content links are crawled before template (nav/header/footer/aside) links, so page caps reach products/articles instead of only menu pages.

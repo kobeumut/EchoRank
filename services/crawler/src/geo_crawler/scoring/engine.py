@@ -1,6 +1,7 @@
 """Audit orchestration: pillars -> overall GEO score (0-100) -> grade, summary, action cards, DB rows."""
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -10,17 +11,17 @@ from ..pipeline import IndexResult, index_site
 from .access import analyze_access
 from .actions import ActionCard, generate_actions
 from .autogeo import AutoGeoSiteReport, analyze_pages
-from .base import AuditContext, Pillar
+from .base import AuditContext, Pillar, grade
+from .bot_simulator import BotSimulationReport, simulate_bots
 from .eeat import analyze_eeat
 from .readability import analyze_readability
 from .seo import analyze_seo
 from .signals import SiteSignals, collect_site_signals
 
+log = logging.getLogger(__name__)
+
 SCORING_VERSION = "1.0"
-
-
-def grade(score: int) -> str:
-    return "A" if score >= 85 else "B" if score >= 70 else "C" if score >= 55 else "D" if score >= 40 else "E"
+BOTSIM_MAX_PAGES = 3  # homepage + the most citable key pages
 
 
 @dataclass
@@ -34,6 +35,7 @@ class AuditReport:
     caps: list[str] = field(default_factory=list)
     signals: SiteSignals | None = None
     autogeo: AutoGeoSiteReport | None = None  # content-level citation readiness (does not change geo_score)
+    bot_simulation: BotSimulationReport | None = None  # live AI crawler simulation (WAF / render / tokens)
     generated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     @property
@@ -49,6 +51,8 @@ class AuditReport:
                 if c.applicable:
                     flat[_camel(c.id)] = round(c.score)
         flat["caps"] = self.caps
+        if self.bot_simulation is not None:
+            flat["botSimulation"] = self.bot_simulation.summary()
         if self.autogeo is not None:
             flat["autogeo"] = {"score": self.autogeo.score, "metrics": self.autogeo.metric_means(),
                                "pageCount": len(self.autogeo.pages)}
@@ -79,6 +83,7 @@ class AuditReport:
             "facts": {k: p.facts for k, p in self.pillars.items()},
             "signals": self.signals.to_dict() if self.signals else None,
             "autogeo": self.autogeo.to_dict() if self.autogeo else None,
+            "bot_simulation": self.bot_simulation.to_dict() if self.bot_simulation else None,
         }
 
     def to_db_records(self) -> dict[str, Any]:
@@ -97,8 +102,10 @@ def _camel(s: str) -> str:
     return head + "".join(w.title() for w in rest)
 
 
-def score_index(index: IndexResult, signals: SiteSignals | None = None) -> AuditReport:
-    ctx = AuditContext(crawl=index.crawl, graph=index.graph, gaps=index.gaps, signals=signals)
+def score_index(index: IndexResult, signals: SiteSignals | None = None,
+                bot_simulation: BotSimulationReport | None = None) -> AuditReport:
+    ctx = AuditContext(crawl=index.crawl, graph=index.graph, gaps=index.gaps, signals=signals,
+                       bot_simulation=bot_simulation)
     pillars = {p.key: p for p in (analyze_access(ctx), analyze_readability(ctx), analyze_eeat(ctx), analyze_seo(ctx))}
     raw = sum(p.score * p.weight for p in pillars.values()) / sum(p.weight for p in pillars.values())
     geo = round(raw)
@@ -126,13 +133,29 @@ def score_index(index: IndexResult, signals: SiteSignals | None = None) -> Audit
     autogeo = analyze_pages(ctx.pages) if ctx.pages else None
     return AuditReport(site=index.crawl.start_url, geo_score=geo, seo_score=pillars["technical_seo"].score,
                        eeat_score=pillars["eeat"].score, pillars=pillars, actions=actions, caps=caps, signals=signals,
-                       autogeo=autogeo)
+                       autogeo=autogeo, bot_simulation=bot_simulation)
 
 
 async def audit_site(url: str, config: CrawlConfig | None = None, probe_user_agents: bool = True,
                      client=None, **crawler_kwargs) -> tuple[IndexResult, AuditReport]:
     """Crawl + graph + site signals + scoring in one call."""
+    cfg = config or CrawlConfig()
     index = await index_site(url, config, client=client, **crawler_kwargs)
     signals = await collect_site_signals(index.crawl.start_url, client=client, probe_user_agents=probe_user_agents,
-                                         timeout=(config or CrawlConfig()).timeout)
-    return index, score_index(index, signals)
+                                         timeout=cfg.timeout)
+    sim = await run_bot_simulation(index, cfg, client) if probe_user_agents and index.crawl.ok_pages else None
+    return index, score_index(index, signals, sim)
+
+
+async def run_bot_simulation(index: IndexResult, cfg: CrawlConfig, client=None) -> BotSimulationReport | None:
+    """Live AI-bot fetches of the homepage + key pages; never fails the audit."""
+    ctx = AuditContext(crawl=index.crawl, graph=index.graph, gaps=index.gaps)
+    urls = [index.crawl.start_url] + [p.url for p in sorted(ctx.key_pages, key=lambda p: (p.depth, p.url))]
+    rps = cfg.requests_per_second
+    try:
+        return await simulate_bots(list(dict.fromkeys(urls))[:BOTSIM_MAX_PAGES], client=client,
+                                   robots_txt=index.crawl.robots_txt, robots_status=index.crawl.robots_status,
+                                   timeout=cfg.timeout, delay=1 / rps if rps > 0 else 0)
+    except Exception as exc:  # noqa: BLE001 — diagnostics must not break scoring
+        log.warning("bot simulation failed: %s", exc)
+        return None

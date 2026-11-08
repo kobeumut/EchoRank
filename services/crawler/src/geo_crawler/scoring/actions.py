@@ -154,18 +154,76 @@ def ai_bots_blocked(r: Rules) -> None:
                               "Mevcut robots.txt dosyanızın en üstüne ekleyin; engelleyen 'Disallow: /' satırlarını kaldırın."))
 
 
+_SIM_ACCESS_FIXES = ("cloudflare_waf_skip", "nginx_allow", "apache_allow", "aws_waf_allow")
+
+
+def _sim_blocks(r: Rules) -> list[Any]:
+    """Live-simulation results where an AI bot was refused / challenged (empty without a simulation)."""
+    sim = r.ctx.bot_simulation
+    if sim is None:
+        return []
+    return [res for p in sim.pages for res in p.results
+            if res.outcome in ("blocked", "challenge", "rate_limited", "error")]
+
+
 @rule
 def waf_blocks_ai(r: Rules) -> None:
     f = r.p["ai_access"].facts
-    if not f["waf_blocked"]:
+    sim_blocked = _sim_blocks(r)
+    if not f["waf_blocked"] and not sim_blocked:
         return
+    snippet = Snippet("text", sn.waf_fix(), None, "Cloudflare/nginx yapılandırmanıza uygulayın.")
+    evidence: list[str] = []
+    if sim_blocked:
+        sim = r.ctx.bot_simulation
+        evidence = list(dict.fromkeys(f"{res.token} → {res.url}: {res.reason}" for res in sim_blocked))[:8]
+        fixes = sorted((x for x in sim.fixes if x["id"] in _SIM_ACCESS_FIXES or x["id"].endswith("_console")),
+                       key=lambda x: not x["recommended"])
+        if fixes:
+            snippet = Snippet("text", "\n\n".join(f"### {x['title']}\n{x['code']}" for x in fixes), None,
+                              "Önerilen (tespit edilen CDN/WAF) reçeteyi uygulayın, ardından simülasyonu tekrarlayın. "
+                              + " ".join(sim.caveats[:1]))
+    blocked = set(f["waf_blocked"]) | {res.token for res in sim_blocked}
     r.emit("ai_access", "waf_ua_block", base_impact="high", effort="medium", category="crawler",
-           blocker=len(f["waf_blocked"]) >= 3,
+           blocker=len(blocked) >= 3,
            rule_id="crawler.waf_ua_block", title="CDN/WAF'ın AI botlarını engellemesini kaldırın",
-           description=("robots.txt izin verse de sunucu/CDN AI user-agent'larına 403/429 döndürüyor. Cloudflare'in "
-                        "'Block AI bots' özelliği veya bot koruması genellikle sebeptir."),
-           target_url=r.ctx.origin + "/",
-           snippet=Snippet("text", sn.waf_fix(), None, "Cloudflare/nginx yapılandırmanıza uygulayın."))
+           description=("robots.txt izin verse de sunucu/CDN AI user-agent'larına 403/429 veya challenge sayfası "
+                        "döndürüyor. Cloudflare'in 'Block AI bots' özelliği veya bot koruması genellikle sebeptir."),
+           target_url=r.ctx.origin + "/", evidence=evidence,
+           affected_urls=sorted({res.url for res in sim_blocked}), snippet=snippet)
+
+
+@rule
+def bot_content_parity(r: Rules) -> None:
+    sim = r.ctx.bot_simulation
+    finding = next((x for x in sim.findings if x.code == "content_parity"), None) if sim else None
+    if not finding:
+        return
+    r.emit("ai_access", "bot_simulation", base_impact="medium", effort="medium", category="crawler",
+           rule_id="crawler.bot_content_parity", title="AI botlarına tarayıcıyla aynı içeriği sunun",
+           description=("Canlı simülasyonda AI botları tarayıcının aldığı içeriğin yarısından azını aldı (UA'ya göre "
+                        "farklı şablon, kısaltılmış sayfa veya engel sayfası). Botlara tam HTML'i sunun."),
+           affected_urls=finding.urls, evidence=[finding.detail])
+
+
+@rule
+def ai_token_bloat(r: Rules) -> None:
+    sim = r.ctx.bot_simulation
+    found = [x for x in sim.findings if x.code in ("token_bloat", "large_html")] if sim else []
+    if not found:
+        return
+    fix = next((x for x in sim.fixes if x["id"] == "token_diet"), None)
+    urls = sorted({u for x in found for u in x.urls})
+    view = next((p.ai_view for p in sim.pages if p.url in urls and p.ai_view), None)
+    tokens = view["tokens"] if view else {}
+    r.emit("ai_access", "bot_simulation", base_impact="low", effort="medium", category="technical",
+           rule_id="technical.ai_token_bloat", title=f"{len(urls)} sayfada AI token yükünü azaltın",
+           description=("Şişkin DOM ve gömülü JSON durum verisi, AI tarayıcılarının indirip işlediği token miktarını "
+                        "artırır; büyük yanıtlar kesilebilir." + (
+                            f" Örnek: {tokens.get('html_tokens')} HTML token'ının {tokens.get('text_tokens')}'i "
+                            f"okunabilir metin." if tokens else "")),
+           affected_urls=urls, evidence=[x.detail for x in found],
+           snippet=Snippet("text", fix["code"], None, fix["instructions"]) if fix else None)
 
 
 @rule

@@ -18,12 +18,14 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-asyncio>=0.23", "respx>=0.21"]
+tokens = ["tiktoken>=0.7"]  # exact cl100k_base token counts in the bot simulator (estimated otherwise)
 
 [project.scripts]
 geo-crawler = "geo_crawler.cli:main"
 geo-audit = "geo_crawler.audit_cli:main"
 geo-reconcile = "geo_crawler.reconcile_cli:main"
 geo-autogeo = "geo_crawler.scoring.autogeo:main"
+geo-botsim = "geo_crawler.scoring.bot_simulator:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -13,6 +13,10 @@ def clamp(v: float, lo: float = 0.0, hi: float = 100.0) -> float:
     return max(lo, min(hi, v))
 
 
+def grade(score: float) -> str:
+    return "A" if score >= 85 else "B" if score >= 70 else "C" if score >= 55 else "D" if score >= 40 else "E"
+
+
 def ratio_score(part: float, whole: float, empty: float = 100.0) -> float:
     """part/whole as 0-100; ``empty`` when there is nothing to measure."""
     return empty if whole <= 0 else clamp(100.0 * part / whole)
@@ -72,6 +76,7 @@ class AuditContext:
     graph: KnowledgeGraph
     gaps: dict[str, Any]
     signals: SiteSignals | None = None
+    bot_simulation: Any = None  # BotSimulationReport (live AI crawler simulation), when it ran
 
     @property
     def pages(self) -> list[PageData]:

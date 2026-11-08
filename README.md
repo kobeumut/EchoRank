@@ -161,6 +161,7 @@ All responses are formatted in JSON with standard HTTP status codes.
 | `GET` | `/api/sites/:id/audit` | Get recent audits and active crawl session progress |
 | `GET` | `/api/sites/:id/graph` | Fetch knowledge graph nodes, edges, and semantic gaps |
 | `GET` | `/api/sites/:id/autogeo` | AutoGEO content metrics + copy-paste rewrite diffs ([usage](docs/autogeo.md)) |
+| `GET/POST` | `/api/sites/:id/bot-simulator` | Live AI crawler simulation: WAF/challenge, CSR shell, token weight + Cloudflare/nginx/Apache allow rules ([usage](docs/bot-simulator.md)) |
 | `GET/POST` | `/api/sites/:id/visibility` | Query suggestions/history and bounded multi-model visibility checks ([usage](docs/visibility.md)) |
 | `GET` | `/api/sites/:id/reports` | Get score trends, LLM visibility metrics, and action items |
 | `GET/POST`| `/api/sites/:id/reports/schedules` | Manage daily and weekly automated report schedules |
