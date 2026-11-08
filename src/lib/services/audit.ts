@@ -2,6 +2,7 @@ import type { CrawlSession, GeoAudit, Site } from "@prisma/client";
 import { prisma } from "../db";
 import { HttpError } from "../http";
 import type { StartAuditInput } from "../validation";
+import { onCrawlCompleted } from "../distribution";
 import { getSiteOrThrow } from "./sites";
 import { defaultAuditRunner } from "./audit-runner";
 
@@ -55,22 +56,32 @@ export async function startAudit(siteId: string, input: StartAuditInput): Promis
   });
 }
 
-/** Runs the registered runner, marking the job failed on error. */
+/** Runs the registered runner, marking the job failed on error; on success hands off to distribution. */
 export async function executeAudit(job: AuditJob) {
   const fn = runner;
   if (!fn) return;
   try {
     await fn(job);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await prisma.$transaction([
-      prisma.crawlSession.update({
-        where: { id: job.crawlSession.id },
-        data: { status: "failed", error: message, finishedAt: new Date() },
-      }),
-      prisma.geoAudit.update({ where: { id: job.audit.id }, data: { status: "failed", error: message } }),
-    ]);
+    await markFailed(job, err);
+    return;
   }
+  // Successful crawl: announce changed URLs (IndexNow / Google). Never fails the audit itself.
+  const session = await prisma.crawlSession.findUnique({ where: { id: job.crawlSession.id }, select: { status: true } });
+  if (session?.status === "completed") {
+    await onCrawlCompleted(job.site.id).catch((err) => console.error("distribution sync failed", err));
+  }
+}
+
+async function markFailed(job: AuditJob, err: unknown) {
+  const message = err instanceof Error ? err.message : String(err);
+  await prisma.$transaction([
+    prisma.crawlSession.update({
+      where: { id: job.crawlSession.id },
+      data: { status: "failed", error: message, finishedAt: new Date() },
+    }),
+    prisma.geoAudit.update({ where: { id: job.audit.id }, data: { status: "failed", error: message } }),
+  ]);
 }
 
 export async function listAudits(siteId: string, limit = 20) {
