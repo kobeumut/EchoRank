@@ -119,8 +119,29 @@ export function analyzeSom(
     overall: distribution(observations),
     perModel: Object.fromEntries(VISIBILITY_MODELS.map((model) => [model, distribution(observations.filter((o) => o.record.model === model))])),
     citationGaps,
-    brandSafety: observations.map((o) => ({ recordId: o.record.id, query: o.record.query, model: o.record.model, textCoverage: o.textCoverage, sentiment: o.sentiment, hallucinations: o.hallucinations })),
+    brandSafety: observations.map((o) => ({ recordId: o.record.id, query: o.record.query, model: o.record.model, checkedAt: o.record.checkedAt, textCoverage: o.textCoverage, sentiment: o.sentiment, hallucinations: o.hallucinations })),
   };
+}
+
+export type TrendGranularity = "day" | "week";
+/** UTC bucket start: the calendar day, or the Monday of the ISO week. */
+export function trendBucket(at: Date, granularity: TrendGranularity) {
+  const day = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()));
+  if (granularity === "week") day.setUTCDate(day.getUTCDate() - ((day.getUTCDay() + 6) % 7));
+  return day.toISOString().slice(0, 10);
+}
+
+/** Citation share per day/week bucket, oldest first; each bucket is an independent analyzeSom distribution. */
+export function somTrend(site: Brand, records: Observation[], config: VisibilityAnalysisSettings, granularity: TrendGranularity) {
+  const buckets = new Map<string, Observation[]>();
+  for (const r of records) {
+    const key = trendBucket(r.checkedAt, granularity);
+    buckets.set(key, [...(buckets.get(key) ?? []), r]);
+  }
+  return [...buckets].sort(([a], [b]) => a.localeCompare(b)).map(([start, rows]) => {
+    const { overall } = analyzeSom(site, rows, config);
+    return { start, samples: overall.samples, shares: overall.brands.map((b) => ({ domain: b.domain, citationShare: b.citationShare })) };
+  }).filter((p) => p.samples > 0);
 }
 
 function schemaTypes(value: unknown): string[] {
