@@ -11,6 +11,7 @@ import {
   REPORT_FREQUENCIES,
 } from "./constants";
 import { normalizeSiteUrl } from "./url";
+import { visibilityAnalysisSettings } from "./visibility-analysis";
 
 const siteUrl = z.string().transform((value, ctx) => {
   try {
@@ -31,6 +32,7 @@ const settings = z
     maxDepth: z.number().int().min(0).max(20).optional(),
     locale: z.string().max(20).optional(),
     respectRobotsTxt: z.boolean().optional(),
+    visibilityAnalysis: visibilityAnalysisSettings.optional(),
   })
   .catchall(z.unknown());
 

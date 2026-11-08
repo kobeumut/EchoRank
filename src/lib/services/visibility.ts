@@ -2,9 +2,10 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "../db";
 import { HttpError } from "../http";
-import { analyzeAnswer, VISIBILITY_MODELS, type VisibilityModel } from "../visibility-analysis";
+import { analyzeAnswer, analyzeBrandSentiment, auditBrandClaims, visibilityAnalysisSettings, VISIBILITY_MODELS, type VisibilityModel } from "../visibility-analysis";
 import { askSearchProvider, providerConfig, ProviderError } from "../visibility-providers";
 import { getSiteOrThrow } from "./sites";
+import { getSomAnalysis } from "./som-analysis";
 
 export const visibilityInput = z.object({
   queries: z.array(z.string().trim().min(1).max(500)).min(1).max(10).optional(),
@@ -14,6 +15,7 @@ export const visibilityInput = z.object({
 export const visibilityQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
   offset: z.coerce.number().int().min(0).max(100_000).default(0),
+  days: z.coerce.number().int().min(1).max(365).default(30),
 });
 
 export async function suggestQueries(siteId: string) {
@@ -35,12 +37,13 @@ export async function suggestQueries(siteId: string) {
 
 export async function listVisibility(siteId: string, options: z.infer<typeof visibilityQuery>) {
   await getSiteOrThrow(siteId);
-  const [items, total, queries] = await Promise.all([
+  const [items, total, queries, analysis] = await Promise.all([
     prisma.llmVisibilityRecord.findMany({ where: { siteId }, orderBy: [{ checkedAt: "desc" }, { id: "desc" }], take: options.limit, skip: options.offset }),
     prisma.llmVisibilityRecord.count({ where: { siteId } }),
     suggestQueries(siteId),
+    getSomAnalysis(siteId, options.days),
   ]);
-  return { items, total, queries };
+  return { items, total, queries, analysis };
 }
 
 // ponytail: one batch per Node process, two requests at a time. Use a shared queue before multi-replica deployment.
@@ -60,7 +63,7 @@ export async function runVisibility(siteId: string, input: z.infer<typeof visibi
       let configured: ReturnType<typeof providerConfig>;
       try { configured = providerConfig(model); }
       catch { return { query, model, error: "not_configured" as const }; }
-      const cacheKey = createHash("sha256").update(JSON.stringify(["visibility-v1", site.url, site.title, query, model, configured.model])).digest("hex");
+      const cacheKey = createHash("sha256").update(JSON.stringify(["visibility-v2", site.settings, site.url, site.title, query, model, configured.model])).digest("hex");
       if (!input.refresh) {
         const cached = await prisma.llmVisibilityRecord.findFirst({
           where: { siteId, query, model, checkedAt: { gte: new Date(Date.now() - CACHE_MS) } },
@@ -77,11 +80,17 @@ export async function runVisibility(siteId: string, input: z.infer<typeof visibi
         return { query, model, error: error instanceof ProviderError ? error.code : "provider_error" };
       }
       const analysis = analyzeAnswer(answer, site);
+      const settings = site.settings && typeof site.settings === "object" && !Array.isArray(site.settings) ? site.settings.visibilityAnalysis : undefined;
+      const parsed = visibilityAnalysisSettings.safeParse(settings ?? {});
+      const config = parsed.success ? parsed.data : visibilityAnalysisSettings.parse({});
       const record = await prisma.llmVisibilityRecord.create({ data: {
         siteId, model, query, citationStatus: analysis.citationStatus,
         position: analysis.position, excerpt: analysis.excerpt,
         responseMeta: {
-          version: 1, cacheKey, modelId: configured.model,
+          version: 2, cacheKey, modelId: configured.model,
+          answerText: answer.text.slice(0, 16_000), answerTruncated: answer.text.length > 16_000,
+          sentiment: analyzeBrandSentiment(answer.text, site, config.competitors.map((c) => c.title)),
+          hallucinations: auditBrandClaims(answer.text, config.facts, new Date(), config.competitors.map((c) => c.title)),
           isCited: analysis.isCited, isMentioned: analysis.isMentioned,
           citedUrls: analysis.citedUrls, citations: analysis.citations,
           competitorDomains: analysis.competitorDomains,
