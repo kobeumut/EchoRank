@@ -9,6 +9,7 @@ import sys
 
 from .crawler import CrawlConfig
 from .pipeline import index_site
+from .reconcile_cli import add_arguments, reconcile, write_jsonld
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -26,6 +27,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--ignore-robots", action="store_true")
     ap.add_argument("--no-sitemap", action="store_true")
     ap.add_argument("--keywords", type=int, default=6, help="concept keywords per page")
+    ap.add_argument("--reconcile", action="store_true", help="match entities to Wikidata QIDs (network calls)")
+    ap.add_argument("--jsonld", help="optional Schema.org @graph JSON-LD output path")
+    add_arguments(ap)
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
 
@@ -39,6 +43,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[{done}/{total}] {page.status_code} {page.page_type.value:<8} {page.url}", file=sys.stderr)
 
     result = asyncio.run(index_site(args.url, cfg, args.keywords, on_page=progress))
+    reconciliation = asyncio.run(reconcile(result.graph, lang=args.lang, max_concepts=args.max_concepts)) if args.reconcile else None
     data = result.export_graph_json(None if args.output == "-" else args.output)
     if args.output == "-":
         print(data)
@@ -51,6 +56,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.graphml:
         result.graph.to_graphml(args.graphml)
     summary = {"crawl": result.crawl_summary(), "graph": result.graph.stats(), "gaps": result.gaps["summary"]}
+    if reconciliation:
+        summary["reconciliation"] = reconciliation["by_status"]
+    if args.jsonld:
+        summary["jsonld_errors"] = write_jsonld(result.graph, args.jsonld)
     print(json.dumps(summary, ensure_ascii=False, indent=2), file=sys.stderr)
     return 0 if result.crawl.ok_pages else 1
 

@@ -89,7 +89,8 @@ model CrawledPage {
   @@unique([siteId, url])
 }
 
-/// Knowledge-graph node. entityType: Page | Product | Category | FAQ | Organization | Author | Brand | Concept | Article
+/// Knowledge-graph node. entityType: Page | Product | Category | FAQ | Organization | Author | Person | Brand | Concept | Article | WikidataEntity
+/// Reconciled entities carry properties.wikidataId / wikipediaUrl / sameAs[] / confidence / reconciliation (see services/wikidata.ts).
 model GraphEntity {
   id             String   @id @default(cuid())
   siteId         String

@@ -12,6 +12,7 @@ import logging
 import sys
 
 from .crawler import CrawlConfig
+from .reconcile_cli import add_arguments, reconcile, write_jsonld
 from .scoring import audit_site
 from .scoring.engine import AuditReport, grade
 
@@ -52,6 +53,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--rps", type=float, default=5.0)
     ap.add_argument("--timeout", type=float, default=15.0)
     ap.add_argument("--no-ua-probe", action="store_true", help="skip AI user-agent WAF probes")
+    ap.add_argument("--reconcile", action="store_true",
+                    help="match graph entities to Wikidata before writing --crawl-records (network calls)")
+    ap.add_argument("--jsonld", help="write the site's Schema.org @graph JSON-LD to this path")
+    add_arguments(ap)
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
 
@@ -59,6 +64,11 @@ def main(argv: list[str] | None = None) -> int:
     cfg = CrawlConfig(max_depth=args.depth, max_pages=args.max_pages, concurrency=args.concurrency,
                       requests_per_second=args.rps, timeout=args.timeout)
     index, report = asyncio.run(audit_site(args.url, cfg, probe_user_agents=not args.no_ua_probe))
+    if args.reconcile:  # after scoring, so the audit stays a pure function of the crawl
+        asyncio.run(reconcile(index.graph, lang=args.lang, max_concepts=args.max_concepts))
+    if args.jsonld:
+        for err in write_jsonld(index.graph, args.jsonld):
+            print(f"JSON-LD: {err}", file=sys.stderr)
 
     data = json.dumps(report.to_dict(), ensure_ascii=False, indent=2, default=str)
     if args.output == "-":
