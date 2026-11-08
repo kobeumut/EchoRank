@@ -34,7 +34,7 @@ ai-visibility/
 │   │   ├── db.ts            # Prisma client singleton
 │   │   └── validation.ts    # Zod request validators
 │   ├── components/dashboard/ # Client UI: site shell, overview, actions, graph, visibility, distribution
-│   ├── lib/dashboard/       # Pure UI helpers (score bands, highlight, competitors, graph issues)
+│   ├── lib/dashboard/       # Pure UI helpers (score bands, highlight, competitors, competitor intel, graph issues)
 │   └── proxy.ts             # API token / dashboard session guard
 ├── prisma/                  # Database schema & migrations (SQLite/PostgreSQL)
 ├── services/

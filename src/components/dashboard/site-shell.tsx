@@ -35,6 +35,7 @@ const TABS = [
   { href: "/graph", label: "Bilgi Grafı" },
   { href: "/bots", label: "AI Bot Teşhis" },
   { href: "/visibility", label: "LLM Görünürlük" },
+  { href: "/competitors", label: "Model Payı & Rakipler" },
   { href: "/distribution", label: "AI Dağıtım" },
 ];
 

@@ -2,17 +2,24 @@
 // persists one CompetitorAnalysis row per configured competitor (settings.visibilityAnalysis.competitors).
 // Shares are among the site + configured competitors only, never the whole AI answer market.
 import { z } from "zod";
+import { QUERY_INTENTS, type QueryIntent } from "../constants";
 import { prisma } from "../db";
 import { analyzeAnswer, analyzeBrandSentiment, host, visibilityAnalysisSettings, VISIBILITY_MODELS, type VisibilityModel } from "../visibility-analysis";
 import { queryBool } from "../validation";
+import { classifyIntent } from "./query-generator";
 import { getSiteOrThrow } from "./sites";
-import { getSomAnalysis } from "./som-analysis";
+import { analyzeSom, getSomAnalysis, somTrend } from "./som-analysis";
+import { fingerprintQuery } from "./synthetic-queries";
 
 export const competitorQuerySchema = z.object({
   days: z.coerce.number().int().min(1).max(365).default(30),
   /** false -> return the stored snapshot without recomputing. */
   refresh: queryBool.default(true),
   gapLimit: z.coerce.number().int().min(0).max(200).default(50),
+  /** SoM trend bucket size. */
+  granularity: z.enum(["day", "week"]).default("day"),
+  /** Max sentiment evidence rows and hallucination findings returned. */
+  evidenceLimit: z.coerce.number().int().min(0).max(200).default(30),
 });
 
 type Brand = { title: string; url: string; domain: string };
@@ -49,6 +56,66 @@ export function brandEvidence(brands: Brand[], records: Record_[], topUrls = 10)
   }));
 }
 
+type BrandSafetyRow = ReturnType<typeof analyzeSom>["brandSafety"][number];
+const SENTIMENT_LABELS = ["positive", "neutral", "negative", "unknown"] as const;
+type SentimentLabel = (typeof SENTIMENT_LABELS)[number];
+const sentimentCounts = () => Object.fromEntries(SENTIMENT_LABELS.map((l) => [l, 0])) as Record<SentimentLabel, number>;
+const asLabel = (l: string): SentimentLabel => (SENTIMENT_LABELS as readonly string[]).includes(l) ? l as SentimentLabel : "unknown";
+
+/**
+ * Site tone and fact-conflict alerts across answers: label counts (overall / per model), the strongest evidence
+ * (negative first) and potential hallucinations with the quoted clause and the verified fact it contradicts.
+ */
+export function summarizeBrandSafety(rows: BrandSafetyRow[], limit = 30) {
+  const overall = sentimentCounts();
+  const perModel: Record<string, Record<SentimentLabel, number>> = {};
+  const scores: number[] = [];
+  for (const r of rows) {
+    const label = asLabel(r.sentiment.label);
+    overall[label]++;
+    (perModel[r.model] ??= sentimentCounts())[label]++;
+    if (r.sentiment.score !== null) scores.push(r.sentiment.score);
+  }
+  const rank: Record<SentimentLabel, number> = { negative: 0, positive: 1, neutral: 2, unknown: 3 };
+  const evidence = rows.filter((r) => r.sentiment.label !== "unknown")
+    .sort((a, b) => rank[asLabel(a.sentiment.label)] - rank[asLabel(b.sentiment.label)] || +b.checkedAt - +a.checkedAt)
+    .slice(0, limit)
+    .map((r) => ({
+      recordId: r.recordId, query: r.query, model: r.model, checkedAt: r.checkedAt, label: r.sentiment.label,
+      score: r.sentiment.score === null ? null : round2(r.sentiment.score),
+      quotes: r.sentiment.evidence.slice(0, 3).map((e) => ({ text: e.text, score: round2(e.score), terms: e.terms })),
+    }));
+  const findings = rows.flatMap((r) => r.hallucinations.findings.map((f) => ({ recordId: r.recordId, query: r.query, model: r.model, checkedAt: r.checkedAt, ...f })))
+    .sort((a, b) => +b.checkedAt - +a.checkedAt);
+  return {
+    method: { sentiment: rows[0]?.sentiment.method ?? null, hallucinations: rows[0]?.hallucinations.method ?? null },
+    samples: rows.length,
+    sentiment: { ...overall, averageScore: scores.length ? round2(scores.reduce((n, x) => n + x, 0) / scores.length) : null },
+    perModel,
+    evidence,
+    hallucinations: {
+      checkedFacts: Math.max(0, ...rows.map((r) => r.hallucinations.checkedFacts)),
+      findingCount: rows.reduce((n, r) => n + r.hallucinations.findingCount, 0),
+      affectedAnswers: rows.filter((r) => r.hallucinations.status === "needs_review").length,
+      items: findings.slice(0, limit),
+    },
+    textCoverage: { full: rows.filter((r) => r.textCoverage === "full").length, truncated: rows.filter((r) => r.textCoverage !== "full").length },
+  };
+}
+
+/** Stored synthetic-query intent when the gap query is a saved test prompt, otherwise the keyword classifier. */
+async function gapIntents(siteId: string, queries: string[]) {
+  const fingerprints = [...new Set(queries.map(fingerprintQuery))];
+  const stored = fingerprints.length
+    ? await prisma.syntheticQuery.findMany({ where: { siteId, fingerprint: { in: fingerprints } }, select: { fingerprint: true, intent: true } })
+    : [];
+  const known = new Map(stored.filter((q) => (QUERY_INTENTS as readonly string[]).includes(q.intent)).map((q) => [q.fingerprint, q.intent as QueryIntent]));
+  return (query: string) => {
+    const intent = known.get(fingerprintQuery(query));
+    return intent ? { intent, intentSource: "synthetic_query" as const } : { intent: classifyIntent(query), intentSource: "classifier" as const };
+  };
+}
+
 async function recompute(siteId: string, days: number) {
   const site = await getSiteOrThrow(siteId);
   const parsed = visibilityAnalysisSettings.safeParse(object(site.settings).visibilityAnalysis ?? {});
@@ -60,7 +127,6 @@ async function recompute(siteId: string, days: number) {
     where: { siteId, checkedAt: { gte: since } },
     orderBy: [{ checkedAt: "desc" }, { id: "desc" }],
     take: 1000,
-    select: { id: true, model: true, query: true, excerpt: true, responseMeta: true, citationStatus: true },
   });
   // analyzeSom drops overlapping competitors; its brand list is the source of truth for who is compared.
   const metrics = som.overall.brands;
@@ -97,7 +163,7 @@ async function recompute(siteId: string, days: number) {
       }),
     ),
   ]);
-  return { som, own, settingsValid: parsed.success };
+  return { som, own, records, site, config: parsed.success ? parsed.data : visibilityAnalysisSettings.parse({}), settingsValid: parsed.success };
 }
 
 /** Site vs competitors: SoM, citation gaps (queries a rival wins) and per-model citation shares. */
@@ -109,19 +175,31 @@ export async function getCompetitorReport(siteId: string, q: z.infer<typeof comp
   });
   if (!fresh) return { refreshed: false, site: null, competitors, citationGaps: [], perModel: null, window: null, warnings: [] };
   const { som, own } = fresh;
+  const intentOf = await gapIntents(siteId, som.citationGaps.map((g) => g.query));
+  const gapIntentCounts = Object.fromEntries(QUERY_INTENTS.map((i) => [i, 0])) as Record<QueryIntent, number>;
+  for (const g of som.citationGaps) gapIntentCounts[intentOf(g.query).intent]++;
   return {
     refreshed: true,
     method: som.method,
     site: own,
     competitors,
     citationGaps: som.citationGaps.slice(0, q.gapLimit).map((g) => ({
-      query: g.query, model: g.model, checkedAt: g.checkedAt, targetMentioned: g.targetMentioned, targetPage: g.targetPage,
+      query: g.query, model: g.model, checkedAt: g.checkedAt, targetMentioned: g.targetMentioned, targetPage: g.targetPage, ...intentOf(g.query),
       competitors: g.competitors.map((c) => ({ domain: c.domain, urls: c.urls.map((u) => u.url), missingFactors: [...new Set(c.urls.flatMap((u) => u.citeMagnet.missingFactors))] })),
     })),
     citationGapTotal: som.citationGaps.length,
+    gapIntents: gapIntentCounts,
     perModel: Object.fromEntries(
-      Object.entries(som.perModel).map(([model, d]) => [model, { samples: d.samples, shares: d.brands.map((b) => ({ domain: b.domain, citationShare: b.citationShare })) }]),
+      Object.entries(som.perModel).map(([model, d]) => [model, {
+        samples: d.samples,
+        shares: d.brands.map((b) => ({ domain: b.domain, citationShare: b.citationShare, recommendationShare: b.recommendationShare, citations: b.citations })),
+      }]),
     ),
+    trend: {
+      granularity: q.granularity,
+      points: somTrend({ title: fresh.site.title, url: fresh.site.url }, fresh.records, fresh.config, q.granularity),
+    },
+    brandSafety: summarizeBrandSafety(som.brandSafety, q.evidenceLimit),
     window: som.window,
     settingsValid: fresh.settingsValid,
     warnings: som.warnings,

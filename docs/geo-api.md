@@ -28,7 +28,7 @@ bearer token or a dashboard session (see `src/proxy.ts`).
 Insertions keep their anchor block in `suggestedSnippet`, so applying a suggestion always means
 "replace `originalSnippet` with `suggestedSnippet`".
 
-## Competitors — `GET /competitors?days=30&gapLimit=50&refresh=true`
+## Competitors — `GET /competitors?days=30&gapLimit=50&refresh=true&granularity=day&evidenceLimit=30`
 
 Recomputes the Share-of-Model analysis over stored visibility checks and upserts one `CompetitorAnalysis` row per
 competitor in `settings.visibilityAnalysis.competitors` (removed competitors are deleted). Response: `site` (the
@@ -36,6 +36,18 @@ site's own metrics), `competitors[]` (`shareOfModel`, `mentionShare`, `citedQuer
 `topCitedUrls`, `sentimentScore`), `citationGaps[]` (queries a competitor wins and the site does not, with missing
 cite-magnet factors), `perModel` shares and the analysis `window`. Shares are among the site and configured
 competitors only. `refresh=false` returns the stored rows without recomputing.
+
+Also returned on refresh:
+
+- `citationGaps[].intent` / `intentSource` — the stored synthetic-query intent when the gap query is a saved test
+  prompt (`synthetic_query`), otherwise the keyword classifier (`classifier`); `gapIntents` counts all gaps per intent.
+- `perModel.*.shares[]` also carry `recommendationShare` and `citations`.
+- `trend` — `{ granularity, points: [{ start, samples, shares: [{ domain, citationShare }] }] }`, one independent SoM
+  distribution per UTC day or ISO week (`granularity=week`, Monday start).
+- `brandSafety` — site tone counts (overall and per model), the strongest sentiment evidence (negative first) and
+  potential hallucinations (`visibilityAnalysis.facts` conflicts with the quoted clause), capped by `evidenceLimit`.
+
+The dashboard panel is `/sites/:id/competitors` (Model Payı & Rakipler).
 
 ## Entities — `/entities/reconcile`
 
