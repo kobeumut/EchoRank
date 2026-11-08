@@ -4,17 +4,17 @@
 
 ## Run a batch
 
-Configure `API_TOKEN` plus the key and model environment variables for each provider you want to use (see `.env.example`). Model IDs must support the selected search tool and be available to your account; unavailable models produce per-provider failures, not fabricated results.
+Configure `API_TOKEN`, then give each provider you want either its key and model environment variables or an installed, signed-in CLI ([below](#key-less-cli-transport-claude-codex-agy); see `.env.example`). With no API key at all, the dashboard's "Görünürlük simülasyonu" panel and this endpoint run on `claude`, `codex` and `agy`. Model IDs must support the selected search tool and be available to your account; unavailable models produce per-provider failures, not fabricated results.
 
 ```sh
 curl -X POST "http://localhost:3000/api/sites/$SITE_ID/visibility" \
   -H "Authorization: Bearer $API_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"queries":["What are the best natural olive oil brands?"],"models":["chatgpt","gemini","claude","perplexity"]}'
+  -d '{"queries":["What are the best natural olive oil brands?"],"models":["chatgpt","gemini","claude","perplexity"],"transport":"cli"}'
 ```
 
-- Empty body / `{}`: generated queries and all four providers. With generated queries, `intents` (subset of the four) and `languages` (`tr`, `en`: the language of the generated test prompts) narrow the selection; each record's `responseMeta` then carries `queryIntent`, `queryLanguage`, `queryBranded` and `querySource` (explicit queries get a heuristic `queryIntent` only). `queries`: 1–10 strings, each 1–500 characters. `models`: subset of the four names. Duplicate queries/models collapse. `refresh: true` bypasses cache.
+- Empty body / `{}`: generated queries and all four providers. With generated queries, `intents` (subset of the four) and `languages` (`tr`, `en`: the language of the generated test prompts) narrow the selection; each record's `responseMeta` then carries `queryIntent`, `queryLanguage`, `queryBranded` and `querySource` (explicit queries get a heuristic `queryIntent` only). `queries`: 1–10 strings, each 1–500 characters. `models`: subset of the four names. Duplicate queries/models collapse. `refresh: true` bypasses cache. `transport` (`auto` | `api` | `cli`) overrides `LLM_TRANSPORT` for this run; the GET response lists what each mode would use per model (`providers`), plus `defaultTransport` and `limits.cliMaxCalls`.
 - Paid POST requires `API_TOKEN` even when the existing optional proxy guard is disabled (503 if unconfigured, 401 for invalid credentials). This is a shared-token, single-tenant API, not per-user authorization.
-- A response contains `items`, `attempted`, `successful`, `failed`, overall `citationRate`, and `perModel`. Each item has either `{ record, cached }` or a sanitized `error`: `not_configured`, `rate_limited`, `timeout`, `provider_error`, `invalid_response`.
+- A response contains `items`, `attempted`, `successful`, `failed`, overall `citationRate`, and `perModel`. Each item has either `{ record, cached }` or a sanitized `error`: `not_configured` (no key/model and no installed CLI), `unauthorized` (CLI not signed in), `rate_limited`, `timeout`, `provider_error`, `invalid_response`.
 - Partial or total upstream failure returns HTTP 200 with explicit counts/errors. Validation/not-found/conflict errors use 400/404/409. Database failures remain HTTP 500, not successful provider outcomes.
 
 ## Providers and evidence
@@ -38,13 +38,32 @@ A successful check saves one `LlmVisibilityRecord`. `responseMeta` stores model 
 - **Competitors:** other source hostnames, explicitly labelled `other-source-domains`. These are candidates; a cited publisher is not necessarily a recommended business competitor.
 - Citation URLs are never fetched. In particular, opaque Google grounding redirect URIs cannot be attributed to their hidden destination; this can undercount citations. No guessed redirect attribution or arbitrary-URL SSRF is introduced.
 
+## Key-less CLI transport (claude, codex, agy)
+
+Every model slot can be answered by the vendor's own agent CLI instead of an API key. The CLI runs on the server, signed in with the operator's subscription, and uses its built-in web search.
+
+| Slot | CLI | Search mechanism |
+| --- | --- | --- |
+| chatgpt | `codex exec --search` | native `web_search` |
+| claude | `claude -p` | `WebSearch` tool |
+| gemini | `agy --print` | `search_web` tool (set `AGY_CLI_MODEL` to a Gemini model) |
+| perplexity | none | API key only |
+
+`LLM_TRANSPORT`: `auto` (default) uses a model's API when its key and model are set and the CLI otherwise; `api` never starts a CLI; `cli` ignores keys. `auto` therefore spends subscription quota where it used to report `not_configured`: set `LLM_TRANSPORT=api` to keep the old behaviour. Each CLI must be signed in once as the OS user that runs the server (and on PATH, or set `<CLAUDE|CODEX|AGY>_CLI_BIN`).
+
+- **Same prompt, different instrument.** The prompt is identical to the API one (no site or brand). But a CLI answer comes from an agent loop with its own search tool, not the API search tool and not the consumer app, so API and CLI numbers are not interchangeable. Each record stores `responseMeta.transport` (`api`/`cli`) and `modelId` (`cli:codex`, `cli:claude:<model>`, ...); caches never mix transports and the answer card shows a "CLI" badge.
+- **Sources.** CLIs return no structured citation metadata, so citations are the HTTP(S) links inside the answer text (the analyzer already accepts these). Counts can therefore differ from API runs.
+- **Isolation.** The answer is built from search results and crawled site text, which are untrusted input to an agent, so each CLI runs headless, single turn, in an empty throw-away directory, with a minimal environment: no `*_API_KEY`, `API_TOKEN`, `DATABASE_URL` or SMTP secrets (also keeps a stray API key from being billed instead of the subscription). `claude` runs `--restricted` with only `WebSearch` (no shell, files, WebFetch, MCP, skills or user settings); `codex` with shell tools disabled, a read-only sandbox and user config ignored. **`agy` has no tool allow-list**: it runs with `--sandbox` and without `--dangerously-skip-permissions`, so headless runs deny anything that needs approval (verified: it refuses `run_command`), but that is a weaker guarantee than the other two. Prefer `claude`/`codex` on a machine with sensitive files if that matters. Needs a Claude Code with `--restricted`; `--mode plan` is deliberately not used (the agent answers with an implementation plan instead).
+- **Time bounds.** CLI answers take about 15–50 s. Each call has `LLM_CLI_TIMEOUT_MS` (80 s) and the process group is killed on timeout; at most two run at a time. A batch may contain at most `2 × floor(400 s / timeout)` CLI calls (10 by default) and is rejected with HTTP 400 before any process starts when it exceeds that; cache hits count towards the limit. Narrow the queries/models, or use API keys for large batches.
+- **Operations.** Only the `API_TOKEN`-guarded POST can start CLIs; one batch per Node process. CLIs need a host that can run them, so this does not work on serverless platforms.
+
 ## Scores and cost bounds
 
 `citationRate = 100 × cited successful checks / successful checks`, rounded to an integer, per model and overall. Failed checks are excluded; a batch with zero successes yields `null` rather than false zero visibility. `/reports?days=30` adds the same citation-only metric to the existing mention-inclusive `visibilityRate`. Empty historical reports retain the existing zero convention; `totalChecks` distinguishes no data. Historical aggregation weights recorded checks equally, not models equally.
 
 Successful records are reused for 24 hours for the same site URL/title, provider/model, query and extraction version. Reuse returns the original ID/time and does not insert duplicate observations or inflate reports. Refresh performs a new measurement. Changing the site's title/URL or model invalidates the cache. Failures are never cached or inserted as `none`.
 
-A batch makes at most 40 calls, two at a time, with a 20-second request/body deadline and 1 MB response limit per call. No automatic retries (especially no paid-call replay after 429). One active batch per Node process returns 409 to competing batches. This is not a distributed rate limiter: use one replica, and add a shared queue/quotas before multi-replica or multi-tenant deployment. There is no detached background work; the request waits for the batch. Worst-case wall time is about 400 seconds plus DB overhead; hosting must support the 450-second route duration, or callers must use smaller batches. Provider/hosting timeouts may still incur charges.
+An API batch makes at most 40 calls, two at a time, with a 20-second request/body deadline and 1 MB response limit per call. No automatic retries (especially no paid-call replay after 429). One active batch per Node process returns 409 to competing batches. This is not a distributed rate limiter: use one replica, and add a shared queue/quotas before multi-replica or multi-tenant deployment. There is no detached background work; the request waits for the batch. Worst-case wall time is about 400 seconds plus DB overhead; hosting must support the 450-second route duration, or callers must use smaller batches. Provider/hosting timeouts may still incur charges.
 
 ## Verification
 
@@ -55,4 +74,4 @@ npm run typecheck
 npm run lint
 ```
 
-`tests/visibility.test.ts` runs four adapter fixtures through native-fetch mocks and a real migrated SQLite database. It covers query generation, extraction, score denominators, cache expiry/invalidation, pagination/site isolation, authorization/validation, partial failure, oversized/malformed bodies, timeouts and concurrent-batch limits. No live provider traffic is required.
+`tests/visibility-cli.test.ts` covers the CLI transport with stand-in executables (argv, cwd, scrubbed environment, parsers, failure mapping, timeout, batch limit, transport selection); no real CLI or login is needed, and the suite pins `LLM_TRANSPORT=api` so it never starts one. `tests/visibility.test.ts` runs four adapter fixtures through native-fetch mocks and a real migrated SQLite database. It covers query generation, extraction, score denominators, cache expiry/invalidation, pagination/site isolation, authorization/validation, partial failure, oversized/malformed bodies, timeouts and concurrent-batch limits. No live provider traffic is required.

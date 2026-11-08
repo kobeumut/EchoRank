@@ -58,6 +58,10 @@ model CrawlSession {
   maxDepth     Int       @default(5)
   pagesCrawled Int       @default(0)
   pagesFailed  Int       @default(0)
+  /// Live progress while running (see services/audit-progress.ts): estimated 0-100, current stage, crawl size estimate.
+  progress     Int       @default(0)
+  stage        String?
+  pagesTotal   Int?
   error        String?
   startedAt    DateTime?
   finishedAt   DateTime?

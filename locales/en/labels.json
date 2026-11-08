@@ -55,5 +55,8 @@
   "labels.time.monthsAgo_one": "{count} month ago",
   "labels.time.monthsAgo_other": "{count} months ago",
   "labels.time.yearsAgo_one": "{count} year ago",
-  "labels.time.yearsAgo_other": "{count} years ago"
+  "labels.time.yearsAgo_other": "{count} years ago",
+  "labels.duration.seconds": "{s} s",
+  "labels.duration.minutes": "{m} min {s} s",
+  "labels.duration.hours": "{h} h {m} min"
 }

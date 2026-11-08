@@ -1,17 +1,55 @@
 import { z } from "zod";
-import type { SearchAnswer, VisibilityModel } from "./visibility-analysis";
+import { VISIBILITY_MODELS, type SearchAnswer, type VisibilityModel } from "./visibility-analysis";
+import { askCli, CLI_FOR, cliModelFromEnv, resolveCli, type CliName } from "./visibility-cli";
+import { ProviderError } from "./visibility-errors";
+
+export { ProviderError };
 
 const ENV = { chatgpt: "OPENAI", gemini: "GEMINI", claude: "ANTHROPIC", perplexity: "PERPLEXITY" } as const;
-export class ProviderError extends Error {
-  constructor(public code: "not_configured" | "rate_limited" | "timeout" | "provider_error" | "invalid_response") { super(code); }
+
+/** `auto` = API when key + model are set, otherwise the vendor's CLI (claude / codex / agy) if installed. */
+export const TRANSPORT_MODES = ["auto", "api", "cli"] as const;
+export type TransportMode = (typeof TRANSPORT_MODES)[number];
+export type ProviderConfig =
+  | { transport: "api"; modelId: string; key: string; model: string }
+  | { transport: "cli"; modelId: string; cli: CliName; bin: string; model?: string };
+
+export function defaultTransportMode(): TransportMode {
+  const value = process.env.LLM_TRANSPORT?.trim().toLowerCase();
+  return value === "api" || value === "cli" ? value : "auto";
 }
 
-export function providerConfig(provider: VisibilityModel) {
+function apiConfig(provider: VisibilityModel): ProviderConfig | null {
   const prefix = ENV[provider];
   const key = process.env[`${prefix}_API_KEY`]?.trim();
   const model = process.env[`${prefix}_MODEL`]?.trim();
-  if (!key || !model) throw new ProviderError("not_configured");
-  return { key, model };
+  return key && model ? { transport: "api", modelId: model, key, model } : null;
+}
+
+function cliConfig(provider: VisibilityModel): ProviderConfig | null {
+  const cli = CLI_FOR[provider];
+  const bin = cli && resolveCli(cli);
+  if (!cli || !bin) return null;
+  const model = cliModelFromEnv(cli);
+  return { transport: "cli", modelId: `cli:${cli}${model ? `:${model}` : ""}`, cli, bin, model };
+}
+
+export function providerConfig(provider: VisibilityModel, mode: TransportMode = defaultTransportMode()): ProviderConfig {
+  const config = mode === "api" ? apiConfig(provider) : mode === "cli" ? cliConfig(provider) : apiConfig(provider) ?? cliConfig(provider);
+  if (!config) throw new ProviderError("not_configured");
+  return config;
+}
+
+/** What each transport mode would use per model right now. Names only: no keys, no filesystem paths. */
+export function providerAvailability() {
+  const resolve = (provider: VisibilityModel, mode: TransportMode) => {
+    try { return providerConfig(provider, mode).transport; } catch { return null; }
+  };
+  return VISIBILITY_MODELS.map((model) => ({
+    model,
+    cli: CLI_FOR[model] ?? null,
+    resolved: { auto: resolve(model, "auto"), api: resolve(model, "api"), cli: resolve(model, "cli") },
+  }));
 }
 
 const citation = z.object({ url: z.string().optional() });
@@ -75,11 +113,17 @@ export function parseSearchAnswer(provider: VisibilityModel, data: unknown): Sea
   }
 }
 
+/** Same prompt for every transport. Do not insert the tracked site/brand: that would bias an organic visibility measurement. */
+const searchPrompt = (query: string) => `${query}\nSearch the web for current information. Cite source URLs. If recommending alternatives, use a numbered list.`;
+
+export async function askSearchProvider(provider: VisibilityModel, query: string, mode?: TransportMode): Promise<SearchAnswer> {
+  const config = providerConfig(provider, mode);
+  const prompt = searchPrompt(query);
+  return config.transport === "cli" ? askCli(prompt, config) : askApi(provider, prompt, config);
+}
+
 /** Native fetch only. Never follows citation URLs or provider redirects; secrets stay server-side. */
-export async function askSearchProvider(provider: VisibilityModel, query: string): Promise<SearchAnswer> {
-  const { key, model } = providerConfig(provider);
-  // Do not insert the tracked site/brand: that would bias an organic visibility measurement.
-  const prompt = `${query}\nSearch the web for current information. Cite source URLs. If recommending alternatives, use a numbered list.`;
+async function askApi(provider: VisibilityModel, prompt: string, { key, model }: { key: string; model: string }): Promise<SearchAnswer> {
   let url: string;
   let body: object;
   let headers: Record<string, string> = { "content-type": "application/json" };

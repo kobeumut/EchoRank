@@ -7,7 +7,7 @@ import { highlightSegments, siteTerms } from "@/lib/dashboard/highlight";
 import { apiFetch, ApiError, useApi } from "./api";
 import { useSite } from "./site-shell";
 import { useToast } from "./toast";
-import type { QuerySuggestion, VisibilityList, VisibilityRecord, VisibilityRunResult } from "./types";
+import type { ProviderStatus, QuerySuggestion, TransportMode, VisibilityList, VisibilityRecord, VisibilityRunResult } from "./types";
 import { Badge, Button, Card, cx, EmptyState, ErrorState, inputClass, RichText, Segmented, SkeletonCard, Spinner } from "./ui";
 import { useFormat } from "./use-format";
 
@@ -24,6 +24,7 @@ const STATUS_TONE = { cited: "good", mentioned: "warning", none: "critical" } as
 /** Error codes returned per query/model by the visibility run → catalog keys. Unknown codes are shown as-is. */
 const ERROR_KEYS: Record<string, string> = {
   not_configured: "visibility.error.notConfigured",
+  unauthorized: "visibility.error.unauthorized",
   provider_error: "visibility.error.providerError",
   timeout: "visibility.error.timeout",
   rate_limited: "visibility.error.rateLimited",
@@ -33,7 +34,7 @@ const ERROR_KEYS: Record<string, string> = {
 function meta(r: VisibilityRecord) {
   const m = r.responseMeta && typeof r.responseMeta === "object" && !Array.isArray(r.responseMeta) ? (r.responseMeta as Record<string, unknown>) : {};
   const arr = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
-  return { citedUrls: arr(m.citedUrls), citations: arr(m.citations), competitors: arr(m.competitorDomains), modelId: typeof m.modelId === "string" ? m.modelId : null };
+  return { citedUrls: arr(m.citedUrls), citations: arr(m.citations), competitors: arr(m.competitorDomains), modelId: typeof m.modelId === "string" ? m.modelId : null, transport: m.transport === "cli" ? ("cli" as const) : ("api" as const) };
 }
 
 function Highlighted({ text, terms }: { text: string; terms: string[] }) {
@@ -68,6 +69,11 @@ function AnswerCard({ record, site }: { record: VisibilityRecord; site: { url: s
         <Badge tone={tone} icon>
           {label("citation", record.citationStatus)}
         </Badge>
+        {m.transport === "cli" && (
+          <span title={t("visibility.answer.cliTitle")}>
+            <Badge>CLI</Badge>
+          </span>
+        )}
         {record.position != null && <Badge>{t("visibility.answer.position", { position: record.position })}</Badge>}
         <span className="ml-auto text-xs text-zinc-400" title={formatDate(record.checkedAt)}>
           {timeAgo(record.checkedAt)}
@@ -110,7 +116,13 @@ function AnswerCard({ record, site }: { record: VisibilityRecord; site: { url: s
   );
 }
 
-export function RunPanel({ suggestions, details = [], onDone }: { suggestions: string[]; details?: QuerySuggestion[]; onDone: () => void }) {
+const TRANSPORT_MODES: { value: TransportMode; labelKey: string }[] = [
+  { value: "auto", labelKey: "visibility.transport.auto" },
+  { value: "api", labelKey: "visibility.transport.api" },
+  { value: "cli", labelKey: "visibility.transport.cli" },
+];
+
+export function RunPanel({ suggestions, details = [], providers, defaultTransport = "auto", cliMaxCalls, onDone }: { suggestions: string[]; details?: QuerySuggestion[]; providers?: ProviderStatus[]; defaultTransport?: TransportMode; cliMaxCalls?: number; onDone: () => void }) {
   const { t, label } = useFormat();
   const suggestionInfo = useMemo(() => new Map(details.map((d) => [d.text, d])), [details]);
   const { siteId } = useSite();
@@ -119,6 +131,7 @@ export function RunPanel({ suggestions, details = [], onDone }: { suggestions: s
   const [custom, setCustom] = useState("");
   const [models, setModels] = useState<Set<string>>(new Set(VISIBILITY_MODEL_ORDER));
   const [refresh, setRefresh] = useState(false);
+  const [transport, setTransport] = useState<TransportMode>(defaultTransport);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<VisibilityRunResult | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -129,6 +142,13 @@ export function RunPanel({ suggestions, details = [], onDone }: { suggestions: s
     .filter(Boolean);
   const queries = [...new Set([...selected, ...customQueries])];
   const tooMany = queries.length > 10;
+  // Older servers send no provider status: they only know API keys.
+  const via = (m: string) => (providers ? providers.find((p) => p.model === m)?.resolved[transport] ?? null : "api");
+  const selectedModels = VISIBILITY_MODEL_ORDER.filter((m) => models.has(m));
+  const apiCalls = queries.length * selectedModels.filter((m) => via(m) === "api").length;
+  const cliCalls = queries.length * selectedModels.filter((m) => via(m) === "cli").length;
+  const skipped = selectedModels.filter((m) => via(m) === null);
+  const tooManyCli = cliMaxCalls != null && cliCalls > cliMaxCalls;
 
   async function run() {
     setRunning(true);
@@ -137,7 +157,7 @@ export function RunPanel({ suggestions, details = [], onDone }: { suggestions: s
     try {
       const res = await apiFetch<VisibilityRunResult>(`/api/sites/${siteId}/visibility`, {
         method: "POST",
-        json: { queries, models: VISIBILITY_MODEL_ORDER.filter((m) => models.has(m)), refresh },
+        json: { queries, models: selectedModels, refresh, ...(providers ? { transport } : {}) },
       });
       setResult(res);
       toast.push(res.successful ? "success" : "error", res.successful ? t("visibility.run.toast.done", { successful: res.successful, attempted: res.attempted }) : t("visibility.run.toast.none"));
@@ -200,7 +220,10 @@ export function RunPanel({ suggestions, details = [], onDone }: { suggestions: s
           <textarea rows={3} placeholder={t("visibility.run.customPlaceholder")} value={custom} onChange={(e) => setCustom(e.target.value)} className={`${inputClass} mt-3`} aria-label={t("visibility.run.customLabel")} />
         </div>
         <div className="flex flex-col">
-          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">{t("visibility.models")}</div>
+          <div className="mb-2 flex flex-wrap items-center gap-3">
+            <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">{t("visibility.models")}</div>
+            {providers && <Segmented label={t("visibility.transport.label")} value={transport} onChange={setTransport} options={TRANSPORT_MODES.map((o) => ({ value: o.value, label: t(o.labelKey) }))} />}
+          </div>
           <div className="flex flex-wrap gap-2">
             {VISIBILITY_MODEL_ORDER.map((m) => (
               <label key={m} className={cx("flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm", models.has(m) ? "border-indigo-400 bg-indigo-50 dark:border-indigo-700 dark:bg-indigo-950/50" : "border-zinc-200 dark:border-zinc-700")}>
@@ -217,7 +240,10 @@ export function RunPanel({ suggestions, details = [], onDone }: { suggestions: s
                     })
                   }
                 />
-                {label("model", m)}
+                <span>
+                  {label("model", m)}
+                  {providers && <TransportHint provider={providers.find((p) => p.model === m)} via={via(m)} />}
+                </span>
               </label>
             ))}
           </div>
@@ -228,15 +254,24 @@ export function RunPanel({ suggestions, details = [], onDone }: { suggestions: s
           <div className="mt-auto pt-4">
             <p className="mb-2 text-xs text-zinc-500">
               {t("visibility.run.queryCount", { count: queries.length })} × {t("visibility.run.modelCount", { count: models.size })} = <b>{queries.length * models.size}</b>{" "}
-              {t("visibility.run.paidCalls", { count: queries.length * models.size })}
+              {providers ? (
+                <>
+                  {t("visibility.run.calls", { count: queries.length * models.size })}{" "}
+                  <RichText message={t("visibility.run.callSplit")} slots={{ api: <b>{apiCalls}</b>, cli: <b>{cliCalls}</b> }} />
+                </>
+              ) : (
+                t("visibility.run.paidCalls", { count: queries.length * models.size })
+              )}
+              {skipped.length > 0 && <span className="text-amber-700 dark:text-amber-300"> {t("visibility.run.skippedModels", { models: skipped.map((m) => label("model", m)).join(", ") })}</span>}
               {tooMany && <span className="text-red-600 dark:text-red-400"> {t("visibility.run.tooMany")}</span>}
+              {tooManyCli && <span className="text-red-600 dark:text-red-400"> {t("visibility.run.tooManyCli", { max: cliMaxCalls ?? 0 })}</span>}
             </p>
-            <Button variant="primary" onClick={() => void run()} loading={running} disabled={!queries.length || !models.size || tooMany}>
+            <Button variant="primary" onClick={() => void run()} loading={running} disabled={!queries.length || !models.size || tooMany || tooManyCli}>
               {t("visibility.run.start")}
             </Button>
             {running && (
               <p className="mt-2 flex items-center gap-2 text-xs text-zinc-500">
-                <Spinner className="h-3 w-3" /> {t("visibility.run.running")}
+                <Spinner className="h-3 w-3" /> {t(cliCalls > 0 ? "visibility.run.runningCli" : "visibility.run.running")}
               </p>
             )}
           </div>
@@ -269,6 +304,13 @@ export function RunPanel({ suggestions, details = [], onDone }: { suggestions: s
       )}
     </Card>
   );
+}
+
+/** Which route a model takes right now: API key, the vendor's CLI (claude / codex / agy), or neither. */
+function TransportHint({ provider, via }: { provider?: ProviderStatus; via: "api" | "cli" | null }) {
+  const { t } = useFormat();
+  const text = via === "api" ? t("visibility.transport.viaApi") : via === "cli" ? t("visibility.transport.viaCli", { cli: provider?.cli ?? "" }) : provider?.cli ? t("visibility.transport.cliMissing", { cli: provider.cli }) : t("visibility.transport.noKey");
+  return <span className={cx("ml-2 text-xs", via ? "text-zinc-500" : "text-amber-700 dark:text-amber-300")}>{text}</span>;
 }
 
 export function VisibilityView() {
@@ -308,7 +350,15 @@ export function VisibilityView() {
 
   return (
     <div className="space-y-4">
-      <RunPanel key={list.data!.queries.join("|")} suggestions={list.data!.queries} details={list.data!.querySuggestions} onDone={() => setReload((r) => r + 1)} />
+      <RunPanel
+        key={list.data!.queries.join("|")}
+        suggestions={list.data!.queries}
+        details={list.data!.querySuggestions}
+        providers={list.data!.providers}
+        defaultTransport={list.data!.defaultTransport}
+        cliMaxCalls={list.data!.limits?.cliMaxCalls}
+        onDone={() => setReload((r) => r + 1)}
+      />
 
       {!items.length ? (
         <EmptyState icon="🤖" title={t("visibility.empty.title")}>

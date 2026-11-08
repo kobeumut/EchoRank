@@ -216,6 +216,7 @@ export async function applyAuditResult(siteId: string, auditId: string, input: A
   const audit = await prisma.geoAudit.findUnique({ where: { id: auditId } });
   if (!audit || audit.siteId !== siteId) throw notFound("Audit");
   if (audit.status === "failed") throw new HttpError(409, "Audit already failed; start a new audit");
+  if (audit.status === "cancelled") throw new HttpError(409, "Audit was cancelled; start a new audit");
 
   const crawl = input.crawl ? await applyCrawlRecords(siteId, audit.crawlSessionId, input.crawl) : null;
   const autogeoItems = input.autogeo
@@ -228,6 +229,9 @@ export async function applyAuditResult(siteId: string, auditId: string, input: A
 
   const result = await prisma.$transaction(
     async (tx) => {
+      // A cancel can land while the crawl rows were being written: never turn it back into a completed audit.
+      const current = await tx.geoAudit.findUniqueOrThrow({ where: { id: auditId }, select: { status: true } });
+      if (current.status === "cancelled") throw new HttpError(409, "Audit was cancelled; start a new audit");
       const now = new Date();
       const updated = await tx.geoAudit.update({
         where: { id: auditId },

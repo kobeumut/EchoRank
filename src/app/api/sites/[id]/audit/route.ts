@@ -6,10 +6,13 @@ import { startAuditSchema } from "@/lib/validation";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-/** Lists recent audits (with their crawl session state). */
+/**
+ * Lists recent audits (with their crawl session state and estimated progress). `runner` tells whether this
+ * server executes audits itself (GEO_AUDIT_BIN); without it a queued audit waits for an external worker.
+ */
 export const GET = handle<Ctx>(async (_req, { params }) => {
   const { id } = await params;
-  return json({ items: await listAudits(id) });
+  return json({ items: await listAudits(id), runner: !!getAuditRunner() });
 });
 
 /**

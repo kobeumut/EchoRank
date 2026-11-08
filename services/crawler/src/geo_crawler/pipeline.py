@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from .crawler import CrawlConfig, SiteCrawler
 from .extractor import extract_entities
@@ -92,6 +92,10 @@ def build_index(crawl: CrawlResult, keywords_per_page: int = 6) -> IndexResult:
     return IndexResult(crawl, extraction, kg, gaps)
 
 
-async def index_site(url: str, config: CrawlConfig | None = None, keywords_per_page: int = 6, **crawler_kwargs) -> IndexResult:
+async def index_site(url: str, config: CrawlConfig | None = None, keywords_per_page: int = 6,
+                     on_stage: Callable[[str], None] | None = None, **crawler_kwargs) -> IndexResult:
+    """Crawl, then build the graph. `on_stage("graph")` fires between the two (the crawl reports via `on_page`)."""
     crawl = await SiteCrawler(url, config, **crawler_kwargs).crawl()
+    if on_stage:
+        on_stage("graph")
     return build_index(crawl, keywords_per_page)

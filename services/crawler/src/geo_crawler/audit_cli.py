@@ -47,6 +47,19 @@ def render_text(report: AuditReport, max_actions: int = 20, show_code: bool = Fa
     return "\n".join(out)
 
 
+def emit_progress(**event) -> None:
+    """One machine-readable line per event on stderr; stdout stays free for `-o -`."""
+    print("GEO_PROGRESS " + json.dumps(event), file=sys.stderr, flush=True)
+
+
+def progress_hooks(max_pages: int) -> dict:
+    """`audit_site` kwargs that report the stage and, while crawling, pages done / estimated total (<= max_pages)."""
+    return {
+        "on_stage": lambda stage: emit_progress(stage=stage, **({"done": 0, "total": max_pages} if stage == "crawl" else {})),
+        "on_page": lambda _page, done, total: emit_progress(stage="crawl", done=done, total=total),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="geo-audit", description="GEO / SEO / E-E-A-T audit with action recommendations")
     ap.add_argument("url")
@@ -63,6 +76,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--rps", type=float, default=5.0)
     ap.add_argument("--timeout", type=float, default=15.0)
     ap.add_argument("--no-ua-probe", action="store_true", help="skip AI user-agent WAF probes")
+    ap.add_argument("--progress", action="store_true",
+                    help="print 'GEO_PROGRESS {json}' lines to stderr (stage, pages crawled / estimated total)")
     ap.add_argument("--reconcile", action="store_true",
                     help="match graph entities to Wikidata before writing --crawl-records (network calls)")
     ap.add_argument("--jsonld", help="write the site's Schema.org @graph JSON-LD to this path")
@@ -73,7 +88,8 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING, format="%(levelname)s %(message)s")
     cfg = CrawlConfig(max_depth=args.depth, max_pages=args.max_pages, concurrency=args.concurrency,
                       requests_per_second=args.rps, timeout=args.timeout)
-    index, report = asyncio.run(audit_site(args.url, cfg, probe_user_agents=not args.no_ua_probe, lang=args.lang))
+    hooks = progress_hooks(cfg.max_pages) if args.progress else {}
+    index, report = asyncio.run(audit_site(args.url, cfg, probe_user_agents=not args.no_ua_probe, lang=args.lang, **hooks))
     if args.reconcile:  # after scoring, so the audit stays a pure function of the crawl
         asyncio.run(reconcile(index.graph, lang=args.wikidata_lang, max_concepts=args.max_concepts))
     if args.jsonld:

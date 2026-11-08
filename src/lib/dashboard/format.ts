@@ -71,6 +71,15 @@ export function timeAgo(value: string | Date | null | undefined, t: Translator, 
   return t("labels.time.yearsAgo", { count: Math.round(month / 12) });
 }
 
+/** Elapsed time for a running job: "45 s", "2 min 05 s", "1 h 03 min" (units from the catalog). */
+export function formatDuration(ms: number, t: Translator): string {
+  const sec = Math.max(0, Math.floor(ms / 1000));
+  if (sec < 60) return t("labels.duration.seconds", { s: sec });
+  const min = Math.floor(sec / 60);
+  if (min < 60) return t("labels.duration.minutes", { m: min, s: String(sec % 60).padStart(2, "0") });
+  return t("labels.duration.hours", { h: Math.floor(min / 60), m: String(min % 60).padStart(2, "0") });
+}
+
 export function hostOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, "");

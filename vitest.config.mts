@@ -6,7 +6,9 @@ export default defineConfig({
   test: {
     environment: "node",
     globalSetup: ["./tests/global-setup.ts"],
-    env: { DATABASE_URL: "file:./test.db", NODE_ENV: "test" },
+    // Pinned to `api` so the suite never falls back to a real claude/codex/agy installed on the machine.
+    // GEO_AUDIT_BIN is blanked so a local .env (loaded by Prisma) cannot start a real audit runner in tests.
+    env: { DATABASE_URL: "file:./test.db", NODE_ENV: "test", LLM_TRANSPORT: "api", GEO_AUDIT_BIN: "" },
     fileParallelism: false,
   },
 });
