@@ -34,7 +34,7 @@ ai-visibility/
 │   │   ├── db.ts            # Prisma client singleton
 │   │   └── validation.ts    # Zod request validators
 │   ├── components/dashboard/ # Client UI: site shell, overview, actions, graph, visibility, distribution
-│   ├── lib/dashboard/       # Pure UI helpers (score bands, highlight, competitors, graph issues)
+│   ├── lib/dashboard/       # Pure UI helpers (score bands, highlight, competitors, competitor intel, graph issues)
 │   └── proxy.ts             # API token / dashboard session guard
 ├── prisma/                  # Database schema & migrations (SQLite/PostgreSQL)
 ├── services/
@@ -112,7 +112,8 @@ geo-crawler https://example.com -o graph.json --db-records records.json --depth 
 | Siteler | `/` | Site cards with GEO / SEO / E-E-A-T scores, open action count, add-site form ("Ekle ve Analiz Et" = create + one-click audit), search |
 | Genel Bakış | `/sites/:id` | GEO score (grade, delta), AI bot accessibility checks, E-E-A-T checks, technical SEO, per-model visibility (ChatGPT / Gemini / Claude / Perplexity), score history, 4-pillar breakdown, top actions, audit history |
 | Ne Yapılmalı? | `/sites/:id/actions` | Prioritized action cards (Kritik / Önemli / İyileştirme = impact high / medium / low), category filter, evidence, affected URLs, copy / download ready-made JSON-LD, robots.txt, `llms.txt` snippets; "Çözüldü Olarak İşaretle", "Yeniden Kontrol Et" (new audit verifies the fix — still-failing items reopen), dismiss / reopen |
-| Bilgi Grafı | `/sites/:id/graph` | Interactive force-directed knowledge graph (canvas + `d3-force`): pan / zoom / drag, type filters, search, node details & relations; flags orphan pages, isolated nodes, schema-less pages, thin pages and uncategorized products, with an accessible table of problem nodes |
+| Bilgi Grafı | `/sites/:id/graph` | Interactive force-directed knowledge graph (canvas + `d3-force`): pan / zoom / drag, type filters, search, node details & relations; flags orphan pages, isolated nodes, schema-less pages, thin pages and uncategorized products, with an accessible table of problem nodes. Verified Wikidata entities carry a green **W** badge; the node panel shows the QID (→ wikidata.org) / Wikipedia link and opens a one-click Wikidata search & reconcile modal (`/entities/reconcile`); the enrichment table filters verified / pending / unmatched entities; the JSON-LD modal previews and copies the enriched `@graph` (`/jsonld`) |
+| AI Bot Teşhis | `/sites/:id/bots` | Live AI crawler diagnostic center (`/simulation/bots`): status cards for GPTBot, ClaudeBot, PerplexityBot, Google-Extended (+ Applebot-Extended) — green 200 OK, red WAF/403 (with vendor), yellow JS shell — with average load time and token weight; one-click live test (optional URL list), bot-only blocks, CSR-shell pages, URL × bot matrix and a copy-paste allow-rule generator for Cloudflare WAF, nginx, Apache/.htaccess and robots.txt |
 | LLM Görünürlük | `/sites/:id/visibility` | Runs bounded paid visibility checks (query × model), shows each model's answer with the site's name / domain / cited URLs highlighted, position, sources; competitor citation table |
 | AI Dağıtım | `/sites/:id/distribution` | IndexNow key create / download / verify, channel toggles, queue counters, "IndexNow bildirimini tetikle" (dispatch), crawl sync, manual URL announce, submission history, live `llms.txt` / `llms-full.txt` preview with copy & download |
 

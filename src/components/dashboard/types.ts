@@ -167,3 +167,111 @@ export type CmsApplyResult = {
   suggestion: AutoGeoSuggestionRow;
   deliveries: { url: string; status: "sent" | "failed"; httpStatus: number | null; message: string }[];
 };
+
+export type EntityEnrichment = {
+  id: string;
+  entityId: string | null;
+  entityKey: string;
+  entityName: string;
+  entityType: string;
+  status: string;
+  wikidataId: string | null;
+  wikipediaUrl: string | null;
+  sameAsLinks: unknown;
+  matchConfidence: number;
+  isVerified: boolean;
+  updatedAt?: string;
+};
+export type EnrichmentList = {
+  items: EntityEnrichment[];
+  total: number;
+  byStatus: Record<string, number>;
+  sameAs: { entityKey: string; entityName: string; entityType: string; wikidataId: string | null; sameAsLinks: unknown }[];
+};
+export type WikidataCandidate = { qid: string; label: string; description: string | null; url: string; score: number; signals?: unknown };
+export type ReconciledEntity = {
+  id: string;
+  name: string;
+  type: string;
+  status: string;
+  confidence: number | null;
+  wikidataId: string | null;
+  wikipediaUrl: string | null;
+  candidates: WikidataCandidate[];
+};
+export type ReconcileResult = { action: string; entity?: ReconciledEntity; enrichment?: EntityEnrichment | null };
+export type SiteJsonLd = { jsonld: Record<string, unknown>; valid: boolean; errors: string[]; script: string; nodes: number };
+
+export type QueryIntent = "informational" | "comparative" | "transactional" | "reputation";
+export type SentimentLabel = "positive" | "neutral" | "negative" | "unknown";
+export type CompetitorSnapshot = {
+  id?: string;
+  competitorDomain: string;
+  competitorName: string | null;
+  shareOfModel: number;
+  mentionShare: number | null;
+  citedQueriesCount: number;
+  gapQueriesCount: number;
+  topCitedUrls: { url: string; count: number }[] | null;
+  sentimentScore: number | null;
+  samples: number;
+  windowDays: number;
+  lastCheckedAt: string;
+};
+export type CitationGap = {
+  query: string;
+  model: string;
+  checkedAt: string;
+  targetMentioned: boolean;
+  targetPage: string | null;
+  intent: QueryIntent;
+  intentSource: "synthetic_query" | "classifier";
+  competitors: { domain: string; urls: string[]; missingFactors: string[] }[];
+};
+export type ModelShare = { domain: string; citationShare: number | null; recommendationShare: number | null; citations: number };
+export type SentimentCounts = Record<SentimentLabel, number>;
+export type HallucinationFinding = {
+  recordId: string;
+  query: string;
+  model: string;
+  checkedAt: string;
+  subject: string;
+  text: string;
+  conflictingClaim: string;
+  expected: string;
+  sourceUrl: string;
+  verifiedAt: string;
+};
+export type BrandSafetySummary = {
+  method: { sentiment: string | null; hallucinations: string | null };
+  samples: number;
+  sentiment: SentimentCounts & { averageScore: number | null };
+  perModel: Record<string, SentimentCounts>;
+  evidence: {
+    recordId: string;
+    query: string;
+    model: string;
+    checkedAt: string;
+    label: SentimentLabel;
+    score: number | null;
+    quotes: { text: string; score: number; terms: { term: string; polarity: number }[] }[];
+  }[];
+  hallucinations: { checkedFacts: number; findingCount: number; affectedAnswers: number; items: HallucinationFinding[] };
+  textCoverage: { full: number; truncated: number };
+};
+export type CompetitorReport = {
+  refreshed: true;
+  method: string;
+  site: CompetitorSnapshot;
+  competitors: CompetitorSnapshot[];
+  citationGaps: CitationGap[];
+  citationGapTotal: number;
+  gapIntents: Record<QueryIntent, number>;
+  perModel: Record<string, { samples: number; shares: ModelShare[] }>;
+  trend: { granularity: "day" | "week"; points: { start: string; samples: number; shares: { domain: string; citationShare: number | null }[] }[] };
+  brandSafety: BrandSafetySummary;
+  window: { days: number; since: string; total: number; limit: number; truncated: boolean };
+  settingsValid: boolean;
+  warnings: string[];
+>>>>>>> origin/main
+};

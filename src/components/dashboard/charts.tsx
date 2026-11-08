@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { formatDate, formatDay, scoreLabel, scoreTone } from "@/lib/dashboard/format";
 import { Button, TONE_COLOR, TONE_ICON } from "./ui";
 
-function useWidth<T extends HTMLElement>() {
+export function useWidth<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   const [width, setWidth] = useState(0);
   useEffect(() => {
