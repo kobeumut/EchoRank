@@ -47,3 +47,17 @@ export type CitationStatus = (typeof CITATION_STATUSES)[number];
 export type ActionCategory = (typeof ACTION_CATEGORIES)[number];
 export type ActionImpact = (typeof ACTION_IMPACTS)[number];
 export type ReportFrequency = (typeof REPORT_FREQUENCIES)[number];
+
+// ---- AI distribution (GENE-97) ----
+/** Per-URL notification channels. Google Search Console sitemap submits are site-level, not queued per URL. */
+export const QUEUE_CHANNELS = ["indexnow", "google_indexing"] as const;
+export const QUEUE_STATUSES = ["pending", "processing", "sent", "failed", "skipped"] as const;
+export const CHANGE_REASONS = ["created", "updated", "deleted"] as const;
+/** PlatformSubmission.platform values written by the distribution engine. */
+export const SUBMISSION_PLATFORMS = ["indexnow", "google_indexing", "google_search_console", "webhook"] as const;
+export const SYNDICATION_FREQUENCIES = ["daily", "weekly"] as const;
+
+export type QueueChannel = (typeof QUEUE_CHANNELS)[number];
+export type QueueStatus = (typeof QUEUE_STATUSES)[number];
+export type ChangeReason = (typeof CHANGE_REASONS)[number];
+export type SubmissionPlatform = (typeof SUBMISSION_PLATFORMS)[number];

@@ -39,6 +39,7 @@ model Site {
   actionItems      ActionItem[]
   scheduledReports ScheduledReport[]
   submissions      PlatformSubmission[]
+  submissionQueue  SubmissionQueueItem[]
 }
 
 /// One crawl run over a site. status: queued | running | completed | failed | cancelled
@@ -226,4 +227,33 @@ model PlatformSubmission {
   site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([siteId, createdAt])
+}
+
+/// Outbound URL notification queue: one row per site + url + channel, the latest change wins.
+/// channel: indexnow | google_indexing ; reason: created | updated | deleted
+/// status: pending | processing | sent | failed | skipped
+model SubmissionQueueItem {
+  id            String    @id @default(cuid())
+  siteId        String
+  url           String
+  channel       String
+  reason        String    @default("updated")
+  status        String    @default("pending")
+  /// Fingerprint of the page content at enqueue time; change detection compares against it.
+  contentHash   String?
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now())
+  /// Set while a dispatcher owns the row, so concurrent runs never send it twice.
+  claimId       String?
+  lastError     String?
+  submissionId  String?
+  sentAt        DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, url, channel])
+  @@index([status, nextAttemptAt])
+  @@index([siteId, status])
 }

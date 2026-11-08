@@ -3,8 +3,11 @@ import {
   ACTION_CATEGORIES,
   ACTION_IMPACTS,
   ACTION_STATUSES,
+  CHANGE_REASONS,
   CRAWL_TRIGGERS,
   ENTITY_TYPES,
+  QUEUE_CHANNELS,
+  QUEUE_STATUSES,
   REPORT_FREQUENCIES,
 } from "./constants";
 import { normalizeSiteUrl } from "./url";
@@ -19,8 +22,9 @@ const siteUrl = z.string().transform((value, ctx) => {
 });
 
 const keywords = z.array(z.string().trim().min(1).max(200)).max(500);
-/** Integration keys: flat map of provider -> secret/config string. */
-const integrations = z.record(z.string().min(1).max(64), z.string().max(2000));
+/** Integration keys: flat map of provider -> secret/config string (10k fits a Google service-account JSON). */
+const INTEGRATION_VALUE_MAX = 10_000;
+const integrations = z.record(z.string().min(1).max(64), z.string().max(INTEGRATION_VALUE_MAX));
 const settings = z
   .object({
     maxPages: z.number().int().min(1).max(50_000).optional(),
@@ -47,7 +51,7 @@ export const updateSiteSchema = z
     settings,
     targetKeywords: keywords,
     /** Merged into existing integrations; a null value removes that key. */
-    integrations: z.record(z.string().min(1).max(64), z.string().max(2000).nullable()),
+    integrations: z.record(z.string().min(1).max(64), z.string().max(INTEGRATION_VALUE_MAX).nullable()),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, { message: "At least one field is required" });
@@ -91,3 +95,21 @@ export const actionItemSchema = z.object({
 export type CreateSiteInput = z.infer<typeof createSiteSchema>;
 export type UpdateSiteInput = z.infer<typeof updateSiteSchema>;
 export type StartAuditInput = z.infer<typeof startAuditSchema>;
+
+// ---- AI distribution (GENE-97) ----
+export const enqueueUrlsSchema = z.object({
+  urls: z.array(z.string().min(1).max(2_048)).min(1).max(10_000),
+  reason: z.enum(CHANGE_REASONS).default("updated"),
+  channels: z.array(z.enum(QUEUE_CHANNELS)).min(1).optional(),
+});
+
+export const queueQuerySchema = z.object({
+  status: z.enum(QUEUE_STATUSES).optional(),
+  channel: z.enum(QUEUE_CHANNELS).optional(),
+  limit: z.coerce.number().int().min(1).max(1_000).default(100),
+});
+
+export const syncSchema = z.object({ mode: z.enum(["notify", "baseline"]).default("notify") }).default({ mode: "notify" });
+export const dispatchSchema = z.object({ limit: z.number().int().min(1).max(10_000).optional() }).default({});
+export const rotateKeySchema = z.object({ rotate: z.boolean().default(false) }).default({ rotate: false });
+export const syndicateSchema = z.object({ force: z.boolean().default(false) }).default({ force: false });
