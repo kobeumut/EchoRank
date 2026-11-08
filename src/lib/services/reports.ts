@@ -42,9 +42,9 @@ export async function getSiteReport(siteId: string, days: number) {
     latest?.[k] != null && previous?.[k] != null ? latest[k]! - previous[k]! : null;
 
   // Visibility per model: share of answers that cite or mention the site.
-  const perModel: Record<string, { cited: number; mentioned: number; none: number; total: number; visibilityRate: number }> = {};
+  const perModel: Record<string, { cited: number; mentioned: number; none: number; total: number; visibilityRate: number; citationRate: number }> = {};
   for (const row of visibility) {
-    const m = (perModel[row.model] ??= { cited: 0, mentioned: 0, none: 0, total: 0, visibilityRate: 0 });
+    const m = (perModel[row.model] ??= { cited: 0, mentioned: 0, none: 0, total: 0, visibilityRate: 0, citationRate: 0 });
     const n = row._count._all;
     if (row.citationStatus === "cited" || row.citationStatus === "mentioned" || row.citationStatus === "none") {
       m[row.citationStatus] += n;
@@ -53,10 +53,13 @@ export async function getSiteReport(siteId: string, days: number) {
   }
   let visTotal = 0;
   let visHit = 0;
+  let visCited = 0;
   for (const m of Object.values(perModel)) {
     m.visibilityRate = m.total ? Math.round(((m.cited + m.mentioned) / m.total) * 100) : 0;
+    m.citationRate = m.total ? Math.round((m.cited / m.total) * 100) : 0;
     visTotal += m.total;
     visHit += m.cited + m.mentioned;
+    visCited += m.cited;
   }
 
   const actions = { open: 0, byImpact: { high: 0, medium: 0, low: 0 } as Record<string, number>, byCategory: {} as Record<string, number>, byStatus: {} as Record<string, number> };
@@ -86,6 +89,7 @@ export async function getSiteReport(siteId: string, days: number) {
     history: audits.map((a) => ({ date: a.createdAt, geo: a.geoScore, seo: a.seoScore, eeat: a.eeatScore })),
     visibility: {
       totalChecks: visTotal,
+      citationRate: visTotal ? Math.round((visCited / visTotal) * 100) : 0,
       visibilityRate: visTotal ? Math.round((visHit / visTotal) * 100) : 0,
       perModel,
     },
