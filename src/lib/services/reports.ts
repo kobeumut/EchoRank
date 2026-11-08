@@ -1,5 +1,8 @@
+import type { z } from "zod";
 import { prisma } from "../db";
 import type { ReportFrequency } from "../constants";
+import { HttpError, notFound } from "../http";
+import type { createScheduleSchema, updateScheduleSchema } from "../validation";
 import { getSiteOrThrow } from "./sites";
 
 /** Next run time: daily -> +1 day, weekly -> +7 days, aligned to 06:00 UTC. */
@@ -98,12 +101,51 @@ export async function getSiteReport(siteId: string, days: number) {
   };
 }
 
-export async function createSchedule(
-  siteId: string,
-  input: { frequency: ReportFrequency; recipients: string[]; enabled: boolean },
-) {
+type ScheduleInput = z.infer<typeof createScheduleSchema>;
+type SchedulePatch = z.infer<typeof updateScheduleSchema>;
+
+export async function createSchedule(siteId: string, input: ScheduleInput) {
   await getSiteOrThrow(siteId);
   return prisma.scheduledReport.create({
-    data: { siteId, ...input, nextRunAt: input.enabled ? computeNextRun(input.frequency) : null },
+    data: {
+      siteId,
+      frequency: input.frequency,
+      recipients: input.recipients,
+      webhooks: input.webhooks,
+      alerts: input.alerts,
+      enabled: input.enabled,
+      nextRunAt: input.enabled ? computeNextRun(input.frequency) : null,
+    },
   });
+}
+
+export async function getScheduleOrThrow(siteId: string, scheduleId: string) {
+  const schedule = await prisma.scheduledReport.findFirst({ where: { id: scheduleId, siteId } });
+  if (!schedule) throw notFound("Schedule");
+  return schedule;
+}
+
+/** Partial update; frequency / enabled changes re-plan nextRunAt. Keeps at least one channel. */
+export async function updateSchedule(siteId: string, scheduleId: string, patch: SchedulePatch) {
+  const current = await getScheduleOrThrow(siteId, scheduleId);
+  const recipients = patch.recipients ?? (Array.isArray(current.recipients) ? current.recipients : []);
+  const webhooks = patch.webhooks ?? (Array.isArray(current.webhooks) ? current.webhooks : []);
+  if (recipients.length + webhooks.length === 0) {
+    throw new HttpError(400, "A schedule needs at least one e-mail recipient or webhook");
+  }
+  const frequency = (patch.frequency ?? current.frequency) as ReportFrequency;
+  const enabled = patch.enabled ?? current.enabled;
+  const replan = patch.frequency !== undefined || patch.enabled !== undefined;
+  return prisma.scheduledReport.update({
+    where: { id: scheduleId },
+    data: {
+      ...patch,
+      ...(replan && { nextRunAt: enabled ? computeNextRun(frequency) : null }),
+    },
+  });
+}
+
+export async function deleteSchedule(siteId: string, scheduleId: string) {
+  await getScheduleOrThrow(siteId, scheduleId);
+  await prisma.scheduledReport.delete({ where: { id: scheduleId } });
 }

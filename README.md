@@ -13,7 +13,7 @@ A comprehensive Generative Engine Optimization (GEO) & SEO tracking, scoring, an
   4. *Schema.org JSON-LD Completeness*.
 - **Modern AI Submitter & Feeder**: IndexNow protocol for real-time Bing/ChatGPT indexing, dynamic `llms.txt` generation, and structured product syndication.
 - **Actionable Remediation Engine**: Prioritized, copy-pasteable schema and configuration recommendations.
-- **Scheduled Audits & Reporting**: Daily and weekly automated audits with trend reports.
+- **Scheduled Audits & Reporting**: Daily (LLM visibility + IndexNow) and weekly (full crawl + scoring) jobs, score time series with anomaly detection, HTML/PDF executive reports by e-mail, Slack, Discord or signed webhooks ([details](docs/scheduler-reports.md)).
 
 ---
 
@@ -31,9 +31,14 @@ ai-visibility/
 │   ├── lib/
 │   │   ├── services/        # Domain services (audit, graph, sites, reports)
 │   │   ├── distribution/    # AI distribution engine (IndexNow, Google, llms.txt, feeds)
+│   │   ├── scheduler/       # Job runner (locks, run log) and node-cron wiring
+│   │   ├── monitoring/      # Trend snapshots and anomaly detection
+│   │   ├── reports/         # Report builder, HTML / PDF renderers, delivery
+│   │   ├── notify/          # E-mail (SMTP / Resend / SendGrid) and Slack / Discord / webhook senders
 │   │   ├── db.ts            # Prisma client singleton
 │   │   └── validation.ts    # Zod request validators
 │   └── proxy.ts             # API token security guard
+├── scripts/                 # `npm run scheduler` worker and `npm run jobs` CLI
 ├── prisma/                  # Database schema & migrations (SQLite/PostgreSQL)
 ├── services/
 │   └── crawler/             # Python 3.10+ async crawler & Knowledge Graph engine
@@ -113,7 +118,10 @@ geo-crawler https://example.com -o graph.json --db-records records.json --depth 
 | `GeoAudit` | GEO / SEO / E-E-A-T scores (0–100) plus sub-`metrics` |
 | `LlmVisibilityRecord` | One AI engine check: model, query, `cited`/`mentioned`/`none`, position, excerpt |
 | `ActionItem` | Recommendation: category (`crawler`, `schema`, `content`, `authority`, `technical`), impact, status |
-| `ScheduledReport` | `daily`/`weekly` report: recipients, last/next run |
+| `ScheduledReport` | `daily`/`weekly` report: e-mail recipients, webhooks, anomaly alerts flag, last/next run and status |
+| `MetricSnapshot` | Time-series point: scores, visibility / citation rates, per-model stats, competitors, detected anomalies |
+| `ReportDelivery` | Log of report / alert deliveries per channel and target |
+| `JobRun` / `JobLock` | Scheduled job history and cross-process lock leases |
 | `PlatformSubmission` | Log of URL/content pushes (`indexnow`, `google_indexing`, `google_search_console`, `webhook`) with the remote response |
 | `SubmissionQueueItem` | Outbound notification queue: one row per `(site, url, channel)`, change reason, content fingerprint, attempts / backoff |
 
@@ -139,6 +147,13 @@ All responses are formatted in JSON with standard HTTP status codes.
 | `GET/POST` | `/api/sites/:id/visibility` | Query suggestions/history and bounded multi-model visibility checks ([usage](docs/visibility.md)) |
 | `GET` | `/api/sites/:id/reports` | Get score trends, LLM visibility metrics, and action items |
 | `GET/POST`| `/api/sites/:id/reports/schedules` | Manage daily and weekly automated report schedules |
+| `GET/PATCH/DELETE` | `/api/sites/:id/reports/schedules/:scheduleId` | Read / update / delete a schedule |
+| `POST` | `/api/sites/:id/reports/schedules/:scheduleId/send` | Send a schedule's report now (`{ dryRun?, force? }`) |
+| `GET` | `/api/sites/:id/reports/summary?frequency=&format=json\|html\|pdf\|text` | Daily / weekly executive report |
+| `GET` | `/api/sites/:id/reports/deliveries` | Report and alert delivery log |
+| `GET/POST` | `/api/sites/:id/trends?days=&kind=` | Score / visibility time series and anomalies; record a snapshot |
+| `GET` | `/api/jobs` | Scheduled job history and cron configuration |
+| `POST` | `/api/jobs/run` | Trigger `daily`, `weekly`, `reports`, `distribution` or `snapshot` (`{ job, dryRun?, siteId? }`) |
 
 ### AI Distribution Endpoints
 
@@ -180,7 +195,8 @@ Refer to `.env.example` for all configurable environment variables:
 - `OPENAI_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `PERPLEXITY_API_KEY`: Multi-model visibility testing keys.
 - `INDEXNOW_KEY`, `INDEXNOW_HOST`: Instant Bing / ChatGPT search indexation configuration.
 - `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY`: Google Search Console & Indexing API credentials.
-- `SMTP_*`: Notification and scheduled report delivery settings.
+- `SMTP_*`, `RESEND_API_KEY`, `SENDGRID_API_KEY`, `EMAIL_PROVIDER`, `REPORT_FROM_EMAIL`: Report and alert e-mail delivery.
+- `CRON_DAILY`, `CRON_WEEKLY`, `CRON_REPORTS`, `CRON_DISTRIBUTION`, `SCHEDULER_TIMEZONE`, `REPORTS_DRY_RUN`, `APP_BASE_URL`: Scheduler and reports ([docs](docs/scheduler-reports.md)).
 
 ---
 

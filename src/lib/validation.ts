@@ -8,7 +8,11 @@ import {
   ENTITY_TYPES,
   QUEUE_CHANNELS,
   QUEUE_STATUSES,
+  JOB_NAMES,
+  REPORT_FORMATS,
   REPORT_FREQUENCIES,
+  SNAPSHOT_KINDS,
+  WEBHOOK_TYPES,
 } from "./constants";
 import { normalizeSiteUrl } from "./url";
 
@@ -77,10 +81,73 @@ export const reportQuerySchema = z.object({
   days: z.coerce.number().int().min(1).max(365).default(30),
 });
 
-export const createScheduleSchema = z.object({
+/** Report / alert webhook: Slack incoming webhook, Discord webhook or any JSON endpoint. */
+export const webhookTargetSchema = z.object({
+  url: z.url({ protocol: /^https?$/ }).max(2_048),
+  /** Auto-detected from the URL (hooks.slack.com, discord.com/api/webhooks) when omitted. */
+  type: z.enum(WEBHOOK_TYPES).optional(),
+});
+
+const scheduleFields = {
   frequency: z.enum(REPORT_FREQUENCIES),
-  recipients: z.array(z.email()).min(1).max(50),
-  enabled: z.boolean().default(true),
+  recipients: z.array(z.email()).max(50),
+  webhooks: z.array(webhookTargetSchema).max(10),
+  /** Push anomaly alerts (sudden drops, competitor surges) to the same channels right away. */
+  alerts: z.boolean(),
+  enabled: z.boolean(),
+};
+
+export const createScheduleSchema = z
+  .object({
+    frequency: scheduleFields.frequency,
+    recipients: scheduleFields.recipients.default([]),
+    webhooks: scheduleFields.webhooks.default([]),
+    alerts: scheduleFields.alerts.default(true),
+    enabled: scheduleFields.enabled.default(true),
+  })
+  .refine((v) => v.recipients.length + v.webhooks.length > 0, {
+    message: "Provide at least one e-mail recipient or webhook",
+    path: ["recipients"],
+  });
+
+export const updateScheduleSchema = z
+  .object(scheduleFields)
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, { message: "At least one field is required" });
+
+export const sendReportSchema = z
+  .object({
+    /** Simulate every channel (no e-mail / webhook leaves the server). */
+    dryRun: z.boolean().default(false),
+    /** Re-send to targets that already received this period. */
+    force: z.boolean().default(false),
+  })
+  .default({ dryRun: false, force: false });
+
+export const reportSummaryQuerySchema = z.object({
+  frequency: z.enum(REPORT_FREQUENCIES).default("weekly"),
+  format: z.enum(REPORT_FORMATS).default("json"),
+  download: z
+    .enum(["0", "1", "true", "false"])
+    .optional()
+    .transform((v) => v === "1" || v === "true"),
+});
+
+export const trendQuerySchema = z.object({
+  days: z.coerce.number().int().min(1).max(730).default(90),
+  kind: z.enum(SNAPSHOT_KINDS).optional(),
+});
+
+export const runJobSchema = z.object({
+  job: z.enum(JOB_NAMES),
+  dryRun: z.boolean().default(false),
+  /** Restrict site-level jobs to one site. */
+  siteId: z.string().min(1).max(64).optional(),
+});
+
+export const jobListQuerySchema = z.object({
+  job: z.enum(JOB_NAMES).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
 });
 
 export const actionItemSchema = z.object({

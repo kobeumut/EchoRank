@@ -40,6 +40,8 @@ model Site {
   scheduledReports ScheduledReport[]
   submissions      PlatformSubmission[]
   submissionQueue  SubmissionQueueItem[]
+  snapshots        MetricSnapshot[]
+  reportDeliveries ReportDelivery[]
 }
 
 /// One crawl run over a site. status: queued | running | completed | failed | cancelled
@@ -209,14 +211,23 @@ model ScheduledReport {
   id         String    @id @default(cuid())
   siteId     String
   frequency  String
-  recipients Json?      
+  /// E-mail addresses (string[]).
+  recipients Json?
+  /// Webhook targets: [{ url, type: slack | discord | generic }]
+  webhooks   Json?
+  /// Also push immediate alerts to these channels when an anomaly is detected.
+  alerts     Boolean   @default(true)
   enabled    Boolean   @default(true)
   lastRunAt  DateTime?
   nextRunAt  DateTime?
+  /// Outcome of the last run: sent | partial | failed | simulated
+  lastStatus String?
+  lastError  String?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  site       Site             @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  deliveries ReportDelivery[]
 
   @@index([enabled, nextRunAt])
 }
@@ -265,4 +276,88 @@ model SubmissionQueueItem {
   @@unique([siteId, url, channel])
   @@index([status, nextAttemptAt])
   @@index([siteId, status])
+}
+
+/// Time-series point of a site's visibility state (GENE-99). kind: daily | weekly | manual
+/// Visibility figures cover the `windowDays` before `capturedAt`; scores come from the latest completed audit.
+model MetricSnapshot {
+  id              String    @id @default(cuid())
+  siteId          String
+  kind            String
+  windowDays      Int
+  auditId         String?
+  geoScore        Int?
+  seoScore        Int?
+  /// E-E-A-T = information trustworthiness score.
+  eeatScore       Int?
+  /// % of LLM answers that cite or mention the site (null when no checks ran in the window).
+  visibilityRate  Int?
+  /// % of LLM answers that cite the site.
+  citationRate    Int?
+  citedCount      Int       @default(0)
+  mentionedCount  Int       @default(0)
+  totalChecks     Int       @default(0)
+  openActions     Int       @default(0)
+  criticalActions Int       @default(0)
+  /// { [model]: { total, cited, mentioned, visibilityRate, citationRate } }
+  perModel        Json?
+  /// Top competitor domains in LLM answers: [{ domain, count, share }]
+  competitors     Json?
+  /// Detected anomalies vs. history: [{ type, metric, severity, previous, current, change, message }]
+  anomalies       Json?
+  /// Set once anomaly alerts were pushed, so a snapshot alerts at most once.
+  alertedAt       DateTime?
+  capturedAt      DateTime  @default(now())
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, kind, capturedAt])
+  @@index([siteId, capturedAt])
+}
+
+/// One report / alert delivery attempt. kind: report | alert ; channel: email | webhook
+/// status: sent | failed | simulated | skipped
+model ReportDelivery {
+  id         String   @id @default(cuid())
+  siteId     String
+  scheduleId String?
+  kind       String   @default("report")
+  channel    String
+  target     String
+  status     String
+  subject    String?
+  /// Report period key, e.g. "weekly:2026-11-02" — used to avoid sending the same period twice.
+  periodKey  String?
+  error      String?
+  response   Json?
+  createdAt  DateTime @default(now())
+
+  site     Site             @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  schedule ScheduledReport? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+
+  @@index([siteId, createdAt])
+  @@index([scheduleId, createdAt])
+}
+
+/// Log of scheduled job executions. job: daily | weekly | reports | distribution | snapshot
+/// trigger: cron | manual | api ; status: running | completed | partial | failed
+model JobRun {
+  id         String    @id @default(cuid())
+  job        String
+  trigger    String    @default("manual")
+  status     String    @default("running")
+  dryRun     Boolean   @default(false)
+  summary    Json?
+  error      String?
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([job, startedAt])
+}
+
+/// Cross-process mutex: one row per job while it runs. Expired leases can be taken over.
+model JobLock {
+  job       String   @id
+  runId     String
+  expiresAt DateTime
 }

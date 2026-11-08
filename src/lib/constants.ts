@@ -64,3 +64,16 @@ export type QueueChannel = (typeof QUEUE_CHANNELS)[number];
 export type QueueStatus = (typeof QUEUE_STATUSES)[number];
 export type ChangeReason = (typeof CHANGE_REASONS)[number];
 export type SubmissionPlatform = (typeof SUBMISSION_PLATFORMS)[number];
+
+// ---- Scheduler, trends & reporting (GENE-99) ----
+/** daily: LLM visibility + IndexNow; weekly: full crawl/graph/E-E-A-T audit; reports: due report deliveries. */
+export const JOB_NAMES = ["daily", "weekly", "reports", "distribution", "snapshot"] as const;
+export const JOB_TRIGGERS = ["cron", "manual", "api"] as const;
+export const SNAPSHOT_KINDS = ["daily", "weekly", "manual"] as const;
+export const WEBHOOK_TYPES = ["slack", "discord", "generic"] as const;
+export const REPORT_FORMATS = ["json", "html", "pdf", "text"] as const;
+
+export type JobName = (typeof JOB_NAMES)[number];
+export type JobTrigger = (typeof JOB_TRIGGERS)[number];
+export type SnapshotKind = (typeof SNAPSHOT_KINDS)[number];
+export type WebhookType = (typeof WEBHOOK_TYPES)[number];
