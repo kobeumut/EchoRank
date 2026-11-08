@@ -15,6 +15,10 @@ export const ENTITY_TYPES = [
   "Brand",
   "Article",
   "Concept",
+  "Person",
+  "Question",
+  "Offer",
+  "WikidataEntity",
 ] as const;
 
 export const RELATION_TYPES = [
@@ -26,6 +30,10 @@ export const RELATION_TYPES = [
   "answers_question",
   "same_as",
   "part_of",
+  "has_brand",
+  "has_offer",
+  "published_by",
+  "related_product",
 ] as const;
 
 export const LLM_MODELS = ["chatgpt", "gemini", "claude", "perplexity", "copilot", "other"] as const;

@@ -28,6 +28,7 @@ class EntityType(str, Enum):
     QUESTION = "Question"
     ORGANIZATION = "Organization"
     CONCEPT = "Concept"  # keyword / topic
+    WIKIDATA_ENTITY = "WikidataEntity"  # external Wikidata item a site entity is reconciled to
 
 
 class RelationType(str, Enum):
@@ -41,6 +42,7 @@ class RelationType(str, Enum):
     HAS_OFFER = "has_offer"
     PUBLISHED_BY = "published_by"
     RELATED_PRODUCT = "related_product"
+    SAME_AS = "same_as"  # entity -> wikidata:Q… node, or two site entities sharing a QID
 
 
 @dataclass

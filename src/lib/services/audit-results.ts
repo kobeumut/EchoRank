@@ -11,6 +11,7 @@ import {
   CRAWL_STATUSES,
 } from "../constants";
 import { HttpError, notFound } from "../http";
+import { preserveManualReconciliation, restoreManualLinks } from "./wikidata";
 import { AUTOGEO_RULE_PREFIX, autoGeoReportSchema, autogeoToActionItems, summarizeAutoGeo } from "./autogeo";
 
 const score = z.number().int().min(0).max(100);
@@ -149,13 +150,20 @@ export async function applyCrawlRecords(siteId: string, crawlSessionId: string |
 
       if (rec.graphEntities.length === 0) return { pages: rec.crawledPages.length, entities: 0, relations: 0 };
       const ids = new Map<string, string>();
+      // Wikidata matches a user verified/rejected outlive the crawler's own reconciliation.
+      const previous = new Map(
+        (await tx.graphEntity.findMany({ where: { siteId }, select: { key: true, properties: true } })).map((e) => [e.key, e.properties]),
+      );
+      const manual = new Map<string, string | null>(); // entity key -> pinned QID (null = rejected)
       for (const e of rec.graphEntities) {
+        const kept = preserveManualReconciliation(e.properties, previous.get(e.key));
+        if (kept.manualQid !== undefined) manual.set(e.key, kept.manualQid);
         const data = {
           crawlSessionId,
           entityType: e.entityType,
           name: e.name,
           url: e.url ?? null,
-          properties: jsonValue(e.properties),
+          properties: jsonValue(e.properties == null && kept.manualQid === undefined ? null : kept.properties),
         };
         const row = await tx.graphEntity.upsert({
           where: { siteId_key: { siteId, key: e.key } },
@@ -174,6 +182,8 @@ export async function applyCrawlRecords(siteId: string, crawlSessionId: string |
         const targetId = ids.get(r.targetKey);
         const k = `${sourceId}|${targetId}|${r.relationType}`;
         if (!sourceId || !targetId || seen.has(k)) continue;
+        // the crawler's same_as for a manually decided entity is replaced by restoreManualLinks below
+        if (r.relationType === "same_as" && manual.has(r.sourceKey) && r.targetKey.startsWith("wikidata:")) continue;
         seen.add(k);
         relations.push({
           siteId,
@@ -185,6 +195,7 @@ export async function applyCrawlRecords(siteId: string, crawlSessionId: string |
         });
       }
       if (relations.length) await tx.graphRelation.createMany({ data: relations });
+      await restoreManualLinks(tx, siteId, new Map([...manual].flatMap(([key, qid]) => (ids.has(key) ? [[ids.get(key)!, qid]] : []))));
       return { pages: rec.crawledPages.length, entities: ids.size, relations: relations.length };
     },
     { timeout: 120_000, maxWait: 10_000 },

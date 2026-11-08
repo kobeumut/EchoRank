@@ -85,6 +85,18 @@ FAQPage / Organization / Product / Article+author / BreadcrumbList JSON-LD, Q&A 
 policy-page footer + schema, contact `<address>` + ContactPoint, citation/footnote markup, HSTS nginx config,
 meta descriptions, 301 rewrites.
 
+## Wikidata reconciliation + JSON-LD `@graph`
+
+```bash
+.venv/bin/geo-reconcile graph.json -o graph.reconciled.json --jsonld schema.json
+.venv/bin/geo-audit https://example.com --reconcile --crawl-records crawl.json --jsonld schema.json
+```
+
+Organization / Brand / Person / Product / Concept nodes are matched to Wikidata QIDs (`wikidata.py`: search →
+claims → name/type/context/website scoring, SPARQL class closure, Wikipedia + Crunchbase fallbacks) and get
+`wikidataId`, `wikipediaUrl`, `sameAs`, `confidence` and `same_as` edges; `jsonld.py` turns the graph into a
+Rich Results-valid Schema.org `@graph`. Details, thresholds and the review API: [`docs/wikidata.md`](../../docs/wikidata.md).
+
 ## AutoGEO content engine (`geo_crawler.scoring.autogeo`)
 
 Six content metrics from GEO (KDD 2024) and AutoGEO (ICLR 2026): statistics, quotations, citations, answer
