@@ -41,6 +41,11 @@ model Site {
   reportRuns       ReportRun[]
   submissions      PlatformSubmission[]
   submissionQueue  SubmissionQueueItem[]
+  autoGeoSuggestions AutoGeoSuggestion[]
+  competitorAnalyses CompetitorAnalysis[]
+  entityEnrichments  EntityEnrichment[]
+  botSimulations     BotSimulationRecord[]
+  syntheticQueries   SyntheticQuery[]
 }
 
 /// One crawl run over a site. status: queued | running | completed | failed | cancelled
@@ -109,6 +114,7 @@ model GraphEntity {
   crawlSession CrawlSession? @relation(fields: [crawlSessionId], references: [id], onDelete: SetNull)
   outgoing     GraphRelation[] @relation("RelationSource")
   incoming     GraphRelation[] @relation("RelationTarget")
+  enrichment   EntityEnrichment?
 
   @@unique([siteId, key])
   @@index([siteId, entityType])
@@ -292,4 +298,141 @@ model SubmissionQueueItem {
   @@unique([siteId, url, channel])
   @@index([status, nextAttemptAt])
   @@index([siteId, status])
+}
+
+// ---- GEO Stage 2 (GENE-109): persisted AutoGEO / competitor / entity / bot / query data ----
+
+/// One block-level AutoGEO rewrite or insertion for a page (see services/autogeo-suggestions.ts).
+/// ruleType: stats | quotes | citations | answer_capsule | tone | keyword_stuffing | comparison_table
+/// status: pending | applied | dismissed
+model AutoGeoSuggestion {
+  id               String   @id @default(cuid())
+  siteId           String
+  pageUrl          String
+  ruleType         String
+  /// Engine rule that produced the suggestion, e.g. "autogeo.statistics".
+  ruleId           String?
+  title            String?
+  originalSnippet  String
+  suggestedSnippet String
+  /// Unified diff (Markdown) from originalSnippet to suggestedSnippet.
+  diffMarkdown     String?
+  /// Expected visibility gain in percent (GEO paper estimates).
+  expectedGain     Float    @default(0)
+  status           String   @default("pending")
+  /// Stable hash of page + rule + snippets: re-running an analysis never duplicates a suggestion.
+  fingerprint      String
+  actionItemId     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, fingerprint])
+  @@index([siteId, status])
+  @@index([siteId, pageUrl])
+}
+
+/// Latest Share-of-Model snapshot per configured competitor (recomputed from LlmVisibilityRecord).
+model CompetitorAnalysis {
+  id                String   @id @default(cuid())
+  siteId            String
+  competitorDomain  String
+  competitorName    String?
+  /// Citation share among the site + configured competitors, 0-100.
+  shareOfModel      Float    @default(0)
+  mentionShare      Float?
+  citedQueriesCount Int      @default(0)
+  /// Queries where this competitor is cited and the site is not.
+  gapQueriesCount   Int      @default(0)
+  /// [{ url, count }] most cited competitor URLs.
+  topCitedUrls      Json?
+  /// Mean lexicon sentiment -1..1; null when no brand clause was found.
+  sentimentScore    Float?
+  samples           Int      @default(0)
+  windowDays        Int      @default(30)
+  lastCheckedAt     DateTime @default(now())
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, competitorDomain])
+}
+
+/// Wikidata enrichment of a knowledge-graph entity (mirror of GraphEntity.properties reconciliation).
+model EntityEnrichment {
+  id              String   @id @default(cuid())
+  siteId          String
+  entityId        String?  @unique
+  entityKey       String
+  entityName      String
+  entityType      String
+  /// pending | matched | declared | review | unmatched | error | verified | rejected
+  status          String   @default("pending")
+  wikidataId      String?
+  wikipediaUrl    String?
+  sameAsLinks     Json?
+  matchConfidence Float    @default(0)
+  isVerified      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  site   Site         @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  entity GraphEntity? @relation(fields: [entityId], references: [id], onDelete: SetNull)
+
+  @@unique([siteId, entityKey])
+  @@index([siteId, isVerified])
+}
+
+/// One live fetch of a site URL with an AI crawler identity.
+/// botName: GPTBot | ClaudeBot | PerplexityBot | Google-Extended | Applebot-Extended | ...
+model BotSimulationRecord {
+  id          String   @id @default(cuid())
+  siteId      String
+  /// Groups the records of one simulation request.
+  runId       String
+  url         String
+  botName     String
+  statusCode  Int?
+  isBlocked   Boolean  @default(false)
+  /// cloudflare | imperva | akamai | aws_waf | sucuri | http_status | robots | network | null
+  blockedBy   String?
+  isCsrShell  Boolean  @default(false)
+  /// Approximate LLM tokens of the visible text (chars / 4).
+  tokenCount  Int      @default(0)
+  bytes       Int      @default(0)
+  loadTimeMs  Int      @default(0)
+  headers     Json?
+  /// { textChars, scriptBytes, shellSelector, reasons[], error }
+  diagnostics Json?
+  checkedAt   DateTime @default(now())
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, checkedAt])
+  @@index([siteId, runId])
+}
+
+/// GEO-bench style test prompt. intent: informational | comparative | transactional | reputation
+/// source: template | manual | llm ; status: active | archived
+model SyntheticQuery {
+  id          String   @id @default(cuid())
+  siteId      String
+  query       String
+  intent      String
+  language    String   @default("tr")
+  entityKey   String?
+  entityName  String?
+  /// 0-100 heuristic competitiveness of the prompt.
+  difficulty  Int      @default(50)
+  source      String   @default("template")
+  status      String   @default("active")
+  /// Normalized text: case/diacritics-insensitive duplicate guard.
+  fingerprint String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, fingerprint])
+  @@index([siteId, intent, status])
 }

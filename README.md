@@ -160,7 +160,12 @@ All responses are formatted in JSON with standard HTTP status codes.
 | `POST` | `/api/sites/:id/audit` | Trigger an asynchronous GEO audit and crawl run |
 | `GET` | `/api/sites/:id/audit` | Get recent audits and active crawl session progress |
 | `GET` | `/api/sites/:id/graph` | Fetch knowledge graph nodes, edges, and semantic gaps |
-| `GET` | `/api/sites/:id/autogeo` | AutoGEO content metrics + copy-paste rewrite diffs ([usage](docs/autogeo.md)) |
+| `GET/POST` | `/api/sites/:id/autogeo` | AutoGEO content metrics + persisted page suggestions; POST extracts suggestions ([usage](docs/autogeo.md), [API](docs/geo-api.md)) |
+| `PATCH` | `/api/sites/:id/autogeo/:suggestionId` | Mark a suggestion `applied` / `dismissed` / `pending` |
+| `GET` | `/api/sites/:id/competitors` | Share of Model vs configured competitors, citation gaps ([API](docs/geo-api.md)) |
+| `GET/POST` | `/api/sites/:id/entities/reconcile` | Wikidata enrichments + verified `sameAs`; sync / verify / reject / requery |
+| `GET/POST` | `/api/sites/:id/simulation/bots` | Live AI crawler simulation (WAF block, CSR shell, token weight) |
+| `GET/POST` | `/api/sites/:id/queries/synthetic` | GEO-bench style multi-intent TR/EN test prompts |
 | `GET/POST` | `/api/sites/:id/visibility` | Query suggestions/history and bounded multi-model visibility checks ([usage](docs/visibility.md)) |
 | `GET` | `/api/sites/:id/reports` | Get score trends, LLM visibility metrics, and action items |
 | `GET/POST`| `/api/sites/:id/reports/schedules` | Manage daily and weekly automated report schedules |

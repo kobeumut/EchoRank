@@ -13,6 +13,9 @@ import {
 import { HttpError, notFound } from "../http";
 import { preserveManualReconciliation, restoreManualLinks } from "./wikidata";
 import { AUTOGEO_RULE_PREFIX, autoGeoReportSchema, autogeoToActionItems, summarizeAutoGeo } from "./autogeo";
+import { storeAutoGeoReport } from "./autogeo-suggestions";
+
+type SuggestionStats = Awaited<ReturnType<typeof storeAutoGeoReport>>;
 
 const score = z.number().int().min(0).max(100);
 const json = z.record(z.string(), z.unknown());
@@ -223,7 +226,7 @@ export async function applyAuditResult(siteId: string, auditId: string, input: A
     ? { ...input.audit.metrics, autogeo: summarizeAutoGeo(input.autogeo) }
     : input.audit.metrics;
 
-  return prisma.$transaction(
+  const result = await prisma.$transaction(
     async (tx) => {
       const now = new Date();
       const updated = await tx.geoAudit.update({
@@ -301,11 +304,18 @@ export async function applyAuditResult(siteId: string, auditId: string, input: A
         audit: updated,
         actionItems: stats,
         crawl,
-        autogeo: input.autogeo ? { score: Math.round(input.autogeo.score), actionItems: autogeoItems.length } : null,
+        autogeo: input.autogeo
+          ? { score: Math.round(input.autogeo.score), actionItems: autogeoItems.length, suggestions: null as SuggestionStats | null }
+          : null,
       };
     },
     { timeout: 60_000, maxWait: 10_000 },
   );
+  // After the commit, so suggestions link to this audit's AutoGEO action items.
+  if (input.autogeo && result.autogeo) {
+    result.autogeo.suggestions = await storeAutoGeoReport(siteId, input.autogeo);
+  }
+  return result;
 }
 
 export const actionListQuerySchema = z.object({
