@@ -77,6 +77,10 @@ class PageData:
     faqs: list[dict[str, str]] = field(default_factory=list)  # HTML-detected Q/A pairs
     from_sitemap: bool = False
     page_type: PageType = PageType.OTHER
+    # raw-HTML signals for render / density / trust scoring (see parser._content_stats)
+    content_stats: dict[str, Any] = field(default_factory=dict)
+    # subset of response headers relevant to auditing (x-robots-tag, hsts, last-modified, ...)
+    headers: dict[str, str] = field(default_factory=dict)
     error: str | None = None
 
     @property
@@ -119,6 +123,8 @@ class CrawlResult:
     pages: dict[str, PageData] = field(default_factory=dict)
     sitemap_urls: set[str] = field(default_factory=set)
     robots_disallowed: list[str] = field(default_factory=list)
+    robots_txt: str = ""
+    robots_status: int | None = None
     errors: dict[str, str] = field(default_factory=dict)
     started_at: str = ""
     finished_at: str = ""
