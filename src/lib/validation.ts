@@ -119,3 +119,15 @@ export const syncSchema = z.object({ mode: z.enum(["notify", "baseline"]).defaul
 export const dispatchSchema = z.object({ limit: z.number().int().min(1).max(10_000).optional() }).default({});
 export const rotateKeySchema = z.object({ rotate: z.boolean().default(false) }).default({ rotate: false });
 export const syndicateSchema = z.object({ force: z.boolean().default(false) }).default({ force: false });
+
+// ---- query-string helpers (GENE-109) ----
+/** "a,b" -> ["a", "b"] validated against `values`; empty -> undefined. */
+export const csvEnum = <T extends readonly [string, ...string[]]>(values: T) =>
+  z
+    .string()
+    .optional()
+    .transform((v) => (v ? v.split(",").map((s) => s.trim()).filter(Boolean) : undefined))
+    .pipe(z.array(z.enum(values)).optional());
+
+/** "true"/"1" -> true, "false"/"0" -> false (z.coerce.boolean treats "false" as true). */
+export const queryBool = z.enum(["true", "false", "1", "0"]).transform((v) => v === "true" || v === "1");
