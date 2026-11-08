@@ -12,6 +12,7 @@ import {
 } from "../constants";
 import { HttpError, notFound } from "../http";
 import { preserveManualReconciliation, restoreManualLinks } from "./wikidata";
+import { AUTOGEO_RULE_PREFIX, autoGeoReportSchema, autogeoToActionItems, summarizeAutoGeo } from "./autogeo";
 
 const score = z.number().int().min(0).max(100);
 const json = z.record(z.string(), z.unknown());
@@ -38,6 +39,8 @@ export const auditResultSchema = z.object({
     summary: z.string().max(5000).nullish(),
   }),
   actionItems: z.array(auditActionItemSchema).max(500).default([]),
+  /** Optional page-level AutoGEO reports (content metrics + rewrite diffs) -> extra ActionItems. */
+  autogeo: autoGeoReportSchema.optional(),
   /** Optional crawl/graph rows from the same run (geo-audit --crawl-records). */
   crawl: z
     .object({
@@ -98,6 +101,7 @@ export type AuditResultInput = z.infer<typeof auditResultSchema>;
 export type CrawlRecordsInput = NonNullable<AuditResultInput["crawl"]>;
 
 const OPEN: string[] = ["open", "in_progress"];
+const MAX_ACTION_ITEMS = 500;
 const jsonValue = (v: unknown) => (v == null ? Prisma.DbNull : (v as Prisma.InputJsonValue));
 const itemKey = (i: { ruleId?: string | null; title: string; targetUrl?: string | null }) =>
   `${i.ruleId ?? `title:${i.title}`}|${i.targetUrl ?? ""}`;
@@ -211,6 +215,13 @@ export async function applyAuditResult(siteId: string, auditId: string, input: A
   if (audit.status === "failed") throw new HttpError(409, "Audit already failed; start a new audit");
 
   const crawl = input.crawl ? await applyCrawlRecords(siteId, audit.crawlSessionId, input.crawl) : null;
+  const autogeoItems = input.autogeo
+    ? autogeoToActionItems(input.autogeo, { maxItems: MAX_ACTION_ITEMS - input.actionItems.length })
+    : [];
+  const actionItems = [...input.actionItems, ...autogeoItems];
+  const metrics = input.autogeo
+    ? { ...input.audit.metrics, autogeo: summarizeAutoGeo(input.autogeo) }
+    : input.audit.metrics;
 
   return prisma.$transaction(
     async (tx) => {
@@ -222,7 +233,7 @@ export async function applyAuditResult(siteId: string, auditId: string, input: A
           geoScore: input.audit.geoScore,
           seoScore: input.audit.seoScore,
           eeatScore: input.audit.eeatScore,
-          metrics: input.audit.metrics as Prisma.InputJsonValue,
+          metrics: metrics as Prisma.InputJsonValue,
           summary: input.audit.summary ?? null,
           error: null,
           completedAt: now,
@@ -243,7 +254,7 @@ export async function applyAuditResult(siteId: string, auditId: string, input: A
       const stats = { created: 0, updated: 0, resolved: 0, skippedDismissed: 0 };
       const touched = new Set<string>();
 
-      for (const item of input.actionItems) {
+      for (const item of actionItems) {
         const key = itemKey(item);
         if (touched.has(key)) continue;
         touched.add(key);
@@ -271,7 +282,14 @@ export async function applyAuditResult(siteId: string, auditId: string, input: A
         }
       }
 
-      const stale = existing.filter((i) => i.ruleId && OPEN.includes(i.status) && !touched.has(itemKey(i)));
+      // A payload without AutoGEO data (older crawler) says nothing about AutoGEO items: keep them open.
+      const stale = existing.filter(
+        (i) =>
+          i.ruleId &&
+          OPEN.includes(i.status) &&
+          !touched.has(itemKey(i)) &&
+          (input.autogeo || !i.ruleId.startsWith(AUTOGEO_RULE_PREFIX)),
+      );
       if (stale.length) {
         await tx.actionItem.updateMany({
           where: { id: { in: stale.map((i) => i.id) } },
@@ -279,7 +297,12 @@ export async function applyAuditResult(siteId: string, auditId: string, input: A
         });
         stats.resolved = stale.length;
       }
-      return { audit: updated, actionItems: stats, crawl };
+      return {
+        audit: updated,
+        actionItems: stats,
+        crawl,
+        autogeo: input.autogeo ? { score: Math.round(input.autogeo.score), actionItems: autogeoItems.length } : null,
+      };
     },
     { timeout: 60_000, maxWait: 10_000 },
   );

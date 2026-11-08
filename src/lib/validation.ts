@@ -11,6 +11,7 @@ import {
   REPORT_FREQUENCIES,
 } from "./constants";
 import { normalizeSiteUrl } from "./url";
+import { visibilityAnalysisSettings } from "./visibility-analysis";
 
 const siteUrl = z.string().transform((value, ctx) => {
   try {
@@ -31,6 +32,7 @@ const settings = z
     maxDepth: z.number().int().min(0).max(20).optional(),
     locale: z.string().max(20).optional(),
     respectRobotsTxt: z.boolean().optional(),
+    visibilityAnalysis: visibilityAnalysisSettings.optional(),
   })
   .catchall(z.unknown());
 
@@ -79,9 +81,13 @@ export const reportQuerySchema = z.object({
 
 export const createScheduleSchema = z.object({
   frequency: z.enum(REPORT_FREQUENCIES),
-  recipients: z.array(z.email()).min(1).max(50),
+  recipients: z.array(z.email()).max(50).default([]),
+  webhookUrl: z.url().max(2048).refine((raw) => {
+    const url = new URL(raw);
+    return url.protocol === "https:" && !url.username && !url.password && !url.hash;
+  }, "Webhook must be HTTPS without credentials or fragment").optional(),
   enabled: z.boolean().default(true),
-});
+}).strict().refine((v) => v.recipients.length > 0 || !!v.webhookUrl, "At least one delivery channel is required");
 
 export const actionItemSchema = z.object({
   title: z.string().min(1).max(300),

@@ -33,7 +33,8 @@ export async function getSiteReport(siteId: string, days: number) {
       where: { siteId },
       _count: { _all: true },
     }),
-    prisma.scheduledReport.findMany({ where: { siteId }, orderBy: { createdAt: "asc" } }),
+    // Overview never exposes notification addresses, secret webhook paths, or worker claims.
+    prisma.scheduledReport.findMany({ where: { siteId }, orderBy: { createdAt: "asc" }, select: { id: true, siteId: true, frequency: true, enabled: true, lastRunAt: true, nextRunAt: true, createdAt: true, updatedAt: true } }),
   ]);
 
   const latest = audits.at(-1) ?? null;
@@ -100,7 +101,7 @@ export async function getSiteReport(siteId: string, days: number) {
 
 export async function createSchedule(
   siteId: string,
-  input: { frequency: ReportFrequency; recipients: string[]; enabled: boolean },
+  input: { frequency: ReportFrequency; recipients: string[]; enabled: boolean; webhookUrl?: string },
 ) {
   await getSiteOrThrow(siteId);
   return prisma.scheduledReport.create({

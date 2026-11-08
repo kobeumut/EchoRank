@@ -97,6 +97,19 @@ claims → name/type/context/website scoring, SPARQL class closure, Wikipedia + 
 `wikidataId`, `wikipediaUrl`, `sameAs`, `confidence` and `same_as` edges; `jsonld.py` turns the graph into a
 Rich Results-valid Schema.org `@graph`. Details, thresholds and the review API: [`docs/wikidata.md`](../../docs/wikidata.md).
 
+## AutoGEO content engine (`geo_crawler.scoring.autogeo`)
+
+Six content metrics from GEO (KDD 2024) and AutoGEO (ICLR 2026): statistics, quotations, citations, answer
+capsules, authority/fluency and keyword stuffing. For each weak block it also produces Markdown/HTML rewrite
+diffs. Details: [`docs/autogeo.md`](../../docs/autogeo.md).
+
+```bash
+.venv/bin/geo-autogeo https://example.com/blog/post --type article   # or a local .html / .md file, --json
+```
+
+The parser keeps document-order content blocks (`PageData.content_blocks`, from `blocks.py`), so `geo-audit`
+runs AutoGEO on the crawled pages and ships the result under `autogeo` in `--db-records`.
+
 ## Notes
 
 - Content links are crawled before template (nav/header/footer/aside) links, so page caps reach products/articles instead of only menu pages.

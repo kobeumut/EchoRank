@@ -249,19 +249,19 @@ export interface ChannelReport {
 }
 
 /** Sends every due pending row of one site. Safe to call concurrently. */
-export async function dispatchSite(siteId: string, opts: { limit?: number } = {}) {
+export async function dispatchSite(siteId: string, opts: { limit?: number; channels?: ("indexnow" | "google_indexing")[] } = {}) {
   const site = await getSiteOrThrow(siteId);
   const settings = getDistributionSettings(site);
   const now = new Date();
 
   // Recover rows whose dispatcher died mid-flight.
   await prisma.submissionQueueItem.updateMany({
-    where: { siteId, status: "processing", updatedAt: { lt: new Date(now.getTime() - STALE_CLAIM_MS) } },
+    where: { siteId, ...(opts.channels && { channel: { in: opts.channels } }), status: "processing", updatedAt: { lt: new Date(now.getTime() - STALE_CLAIM_MS) } },
     data: { status: "pending", claimId: null },
   });
 
   const due = await prisma.submissionQueueItem.findMany({
-    where: { siteId, status: "pending", nextAttemptAt: { lte: now } },
+    where: { siteId, ...(opts.channels && { channel: { in: opts.channels } }), status: "pending", nextAttemptAt: { lte: now } },
     orderBy: { nextAttemptAt: "asc" },
     take: opts.limit ?? 10_000,
     select: { id: true },
@@ -286,7 +286,7 @@ export async function dispatchSite(siteId: string, opts: { limit?: number } = {}
   }
 
   const anySent = reports.some((r) => r.sent > 0);
-  if (anySent && settings.enabled && settings.channels.googleSearchConsole) {
+  if (anySent && !opts.channels && settings.enabled && settings.channels.googleSearchConsole) {
     reports.push(await maybeSubmitSitemaps(site));
   }
   return { siteId, claimed: claimed.length, channels: reports };

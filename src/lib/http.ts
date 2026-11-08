@@ -13,6 +13,13 @@ export class HttpError extends Error {
 
 export const notFound = (what = "Resource") => new HttpError(404, `${what} not found`);
 
+/** Required even in development for endpoints enabling paid/outbound background work. */
+export function requireApiToken(request: Request) {
+  const token = process.env.API_TOKEN;
+  if (!token) throw new HttpError(503, "Configure API_TOKEN before using scheduled reports");
+  if (request.headers.get("authorization") !== `Bearer ${token}`) throw new HttpError(401, "Unauthorized");
+}
+
 export function json(data: unknown, status = 200) {
   return Response.json(data, { status });
 }

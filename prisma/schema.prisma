@@ -38,6 +38,7 @@ model Site {
   visibilityChecks LlmVisibilityRecord[]
   actionItems      ActionItem[]
   scheduledReports ScheduledReport[]
+  reportRuns       ReportRun[]
   submissions      PlatformSubmission[]
   submissionQueue  SubmissionQueueItem[]
 }
@@ -210,7 +211,11 @@ model ScheduledReport {
   id         String    @id @default(cuid())
   siteId     String
   frequency  String
-  recipients Json?      
+  recipients Json?
+  webhookUrl String?
+  /// Durable, non-expiring claim. Interrupted runs require explicit operator recovery.
+  claimId    String?
+  claimedAt  DateTime?
   enabled    Boolean   @default(true)
   lastRunAt  DateTime?
   nextRunAt  DateTime?
@@ -220,6 +225,27 @@ model ScheduledReport {
   site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([enabled, nextRunAt])
+}
+
+/// Immutable report evidence and delivery outcomes. status: running | completed | partial | failed | interrupted
+model ReportRun {
+  id         String   @id @default(cuid())
+  siteId     String
+  scheduleId String
+  frequency  String
+  status     String   @default("running")
+  auditId    String?
+  crawlSessionId String?
+  snapshot   Json?
+  steps      Json?
+  deliveries Json?
+  createdAt  DateTime @default(now())
+  finishedAt DateTime?
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, createdAt])
+  @@index([scheduleId, status])
 }
 
 /// Log of content/URL pushes to external platforms (IndexNow, AI platforms).

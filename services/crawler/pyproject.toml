@@ -23,6 +23,7 @@ dev = ["pytest>=8", "pytest-asyncio>=0.23", "respx>=0.21"]
 geo-crawler = "geo_crawler.cli:main"
 geo-audit = "geo_crawler.audit_cli:main"
 geo-reconcile = "geo_crawler.reconcile_cli:main"
+geo-autogeo = "geo_crawler.scoring.autogeo:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
