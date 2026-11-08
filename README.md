@@ -162,6 +162,7 @@ All responses are formatted in JSON with standard HTTP status codes.
 | `GET` | `/api/sites/:id/graph` | Fetch knowledge graph nodes, edges, and semantic gaps |
 | `GET` | `/api/sites/:id/autogeo` | AutoGEO content metrics + copy-paste rewrite diffs ([usage](docs/autogeo.md)) |
 | `GET/POST` | `/api/sites/:id/visibility` | Query suggestions/history and bounded multi-model visibility checks ([usage](docs/visibility.md)) |
+| `GET` | `/api/sites/:id/queries` | Multi-intent synthetic test prompts (TR/EN) with intent, difficulty and volume labels ([details](docs/query-generator.md)) |
 | `GET` | `/api/sites/:id/reports` | Get score trends, LLM visibility metrics, and action items |
 | `GET/POST`| `/api/sites/:id/reports/schedules` | Manage daily and weekly automated report schedules |
 

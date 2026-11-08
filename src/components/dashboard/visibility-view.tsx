@@ -7,8 +7,16 @@ import { highlightSegments, siteTerms } from "@/lib/dashboard/highlight";
 import { apiFetch, ApiError, useApi } from "./api";
 import { useSite } from "./site-shell";
 import { useToast } from "./toast";
-import type { VisibilityList, VisibilityRecord, VisibilityRunResult } from "./types";
+import type { QuerySuggestion, VisibilityList, VisibilityRecord, VisibilityRunResult } from "./types";
 import { Badge, Button, Card, cx, EmptyState, ErrorState, inputClass, Segmented, SkeletonCard, Spinner } from "./ui";
+
+const INTENT_LABELS: Record<QuerySuggestion["intent"], string> = {
+  informational: "Bilgi",
+  comparative: "Karşılaştırma",
+  transactional: "Satın alma",
+  reputation: "İtibar",
+};
+const LEVEL_LABELS = { low: "düşük", medium: "orta", high: "yüksek" } as const;
 
 const STATUS_TONE = { cited: "good", mentioned: "warning", none: "critical" } as const;
 const ERROR_LABELS: Record<string, string> = {
@@ -98,7 +106,8 @@ function AnswerCard({ record, site }: { record: VisibilityRecord; site: { url: s
   );
 }
 
-function RunPanel({ suggestions, onDone }: { suggestions: string[]; onDone: () => void }) {
+function RunPanel({ suggestions, details = [], onDone }: { suggestions: string[]; details?: QuerySuggestion[]; onDone: () => void }) {
+  const labels = useMemo(() => new Map(details.map((d) => [d.text, d])), [details]);
   const { siteId } = useSite();
   const toast = useToast();
   const [selected, setSelected] = useState<Set<string>>(() => new Set(suggestions.slice(0, 3)));
@@ -161,7 +170,18 @@ function RunPanel({ suggestions, onDone }: { suggestions: string[]; onDone: () =
                         })
                       }
                     />
-                    <span>{q}</span>
+                    <span>
+                      {q}
+                      {labels.get(q) && (
+                        <span
+                          className="ml-2 inline-flex gap-1 align-middle"
+                          title={`Rekabet: ${LEVEL_LABELS[labels.get(q)!.difficulty.level]} · Tahmini hacim: ${LEVEL_LABELS[labels.get(q)!.volume.level]}${labels.get(q)!.branded ? " · Marka adı içerir" : ""}`}
+                        >
+                          <Badge>{INTENT_LABELS[labels.get(q)!.intent]}</Badge>
+                          <Badge>{labels.get(q)!.language.toUpperCase()}</Badge>
+                        </span>
+                      )}
+                    </span>
                   </label>
                 </li>
               ))}
@@ -272,7 +292,7 @@ export function VisibilityView() {
 
   return (
     <div className="space-y-4">
-      <RunPanel key={list.data!.queries.join("|")} suggestions={list.data!.queries} onDone={() => setReload((r) => r + 1)} />
+      <RunPanel key={list.data!.queries.join("|")} suggestions={list.data!.queries} details={list.data!.querySuggestions} onDone={() => setReload((r) => r + 1)} />
 
       {!items.length ? (
         <EmptyState icon="🤖" title="Henüz görünürlük kaydı yok">
