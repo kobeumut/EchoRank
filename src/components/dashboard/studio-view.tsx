@@ -3,30 +3,34 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { markdownToHtml } from "@/lib/autogeo/markdown";
+import type { Translator } from "@/lib/i18n/translate";
 import {
   addedSignals,
   collectCapsules,
   collectTables,
   IMPACTS,
+  impactLabel,
   impactOfGain,
   pagePath,
-  RULE_TYPE_LABELS,
-  SIGNAL_LABELS,
+  ruleTypeLabel,
+  signalLabel,
   simulateScore,
   STUDIO_RULE_TYPES,
-  SUGGESTION_STATUS_LABELS,
+  suggestionStatusLabel,
   placeholderCount,
   type Impact,
   type SignalTag,
 } from "@/lib/dashboard/autogeo-studio";
-import { formatDate, scoreTone } from "@/lib/dashboard/format";
+import { scoreTone } from "@/lib/dashboard/format";
 import { apiFetch, ApiError, errorMessage, useApi } from "./api";
+import { rich } from "./rich-text";
 import { useSite } from "./site-shell";
 import { CapsuleGrid, TableList } from "./studio-capsules";
 import { DiffViewer, SignalLegend, TAG_SWATCH, type DiffMode } from "./studio-diff";
 import { useToast } from "./toast";
 import type { AutoGeoOverview, AutoGeoSuggestionRow, CmsApplyResult } from "./types";
 import { Badge, Button, copyText, cx, EmptyState, ErrorState, inputBase, Segmented, Skeleton, SkeletonCard, TONE_COLOR } from "./ui";
+import { useFormat } from "./use-format";
 
 type StatusView = "pending" | "applied" | "dismissed" | "all";
 type Tab = "diff" | "capsules" | "tables";
@@ -50,14 +54,15 @@ function ScoreSimulator({
   onSelectAll: () => void;
   onClear: () => void;
 }) {
+  const { t } = useFormat();
   const tone = scoreTone(sim.projected);
   const total = Math.round((sim.projected - sim.current) * 10) / 10;
   return (
-    <section aria-label="GEO skor simülatörü" className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <section aria-label={t("studio.sim.aria")} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
       <header className="flex items-start justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold">GEO Skor Simülatörü</h2>
-          <p className="mt-0.5 text-xs text-zinc-500">Seçtiğiniz öneriler uygulanırsa beklenen AutoGEO içerik skoru.</p>
+          <h2 className="text-sm font-semibold">{t("studio.sim.title")}</h2>
+          <p className="mt-0.5 text-xs text-zinc-500">{t("studio.sim.intro")}</p>
         </div>
         <span aria-live="polite" className={cx("rounded-lg px-2.5 py-1 text-lg font-bold tabular-nums", total > 0 ? "bg-emerald-50 text-[#006300] dark:bg-emerald-950/50 dark:text-[#0ca30c]" : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800")}>
           +{total.toFixed(1)}
@@ -68,7 +73,7 @@ function ScoreSimulator({
         <span className="text-3xl font-bold" style={{ color: TONE_COLOR[tone] }}>
           {sim.projected.toFixed(1)}
         </span>
-        <span className="text-sm text-zinc-500">/ 100 · şu an {sim.current.toFixed(1)}</span>
+        <span className="text-sm text-zinc-500">{t("studio.sim.outOf", { current: sim.current.toFixed(1) })}</span>
       </div>
 
       {/* stacked progress: current | applied (awaiting re-audit) | selected; ghost = all pending */}
@@ -78,7 +83,7 @@ function ScoreSimulator({
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={sim.projected}
-        aria-label={`Tahmini skor ${sim.projected}`}
+        aria-label={t("studio.sim.meterLabel", { score: sim.projected })}
       >
         <div className="absolute inset-y-0 left-0 bg-zinc-300/70 dark:bg-zinc-700/70" style={{ width: `${maxProjected}%` }} />
         <div className="absolute inset-y-0 left-0 bg-zinc-500 dark:bg-zinc-400" style={{ width: `${sim.current}%`, transition: "width 400ms ease" }} />
@@ -88,31 +93,31 @@ function ScoreSimulator({
       <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
         <div>
           <dt className="flex items-center gap-1 text-zinc-500">
-            <span aria-hidden className="h-2 w-2 rounded-sm bg-zinc-500" /> Mevcut
+            <span aria-hidden className="h-2 w-2 rounded-sm bg-zinc-500" /> {t("studio.sim.current")}
           </dt>
           <dd className="font-semibold tabular-nums">{sim.current.toFixed(1)}</dd>
         </div>
         <div>
           <dt className="flex items-center gap-1 text-zinc-500">
-            <span aria-hidden className="h-2 w-2 rounded-sm bg-emerald-300 dark:bg-emerald-700" /> Uygulanan
+            <span aria-hidden className="h-2 w-2 rounded-sm bg-emerald-300 dark:bg-emerald-700" /> {t("studio.sim.applied")}
           </dt>
           <dd className="font-semibold tabular-nums">+{sim.appliedGain.toFixed(1)}</dd>
         </div>
         <div>
           <dt className="flex items-center gap-1 text-zinc-500">
-            <span aria-hidden className="h-2 w-2 rounded-sm bg-emerald-600 dark:bg-emerald-400" /> Seçilen
+            <span aria-hidden className="h-2 w-2 rounded-sm bg-emerald-600 dark:bg-emerald-400" /> {t("studio.sim.selected")}
           </dt>
           <dd className="font-semibold tabular-nums">+{sim.selectedGain.toFixed(1)}</dd>
         </div>
       </dl>
-      <p className="mt-2 text-[11px] text-zinc-500">Tüm bekleyen öneriler uygulanırsa: {maxProjected.toFixed(1)} (açık gri).</p>
+      <p className="mt-2 text-[11px] text-zinc-500">{t("studio.sim.allPending", { value: maxProjected.toFixed(1) })}</p>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
         <Button size="sm" onClick={onSelectAll} disabled={!pendingCount}>
-          Görünenleri seç
+          {t("studio.sim.selectVisible")}
         </Button>
         <Button size="sm" variant="ghost" onClick={onClear} disabled={!selectedCount}>
-          Temizle ({selectedCount})
+          {t("studio.sim.clear", { count: selectedCount })}
         </Button>
       </div>
 
@@ -133,7 +138,7 @@ function ScoreSimulator({
         </ul>
       )}
       <p className="mt-3 text-[11px] leading-snug text-zinc-400">
-        Tahmin: her öneri, sayfanın 100&apos;e kalan farkını GEO makalesindeki görünürlük kazancı oranında kapatır (azalan getiri). Kesin skor yeni analizle doğrulanır.
+        {t("studio.sim.note")}
       </p>
     </section>
   );
@@ -162,6 +167,7 @@ function SuggestionCard({
   onStatus: (status: "applied" | "dismissed" | "pending") => void;
   onApplyCms: () => void;
 }) {
+  const { t, intlLocale, formatDate } = useFormat();
   const toast = useToast();
   const impact = impactOfGain(s.expectedGain);
   const tier = IMPACTS.find((i) => i.value === impact)!;
@@ -170,7 +176,7 @@ function SuggestionCard({
   const placeholders = placeholderCount(s.suggestedSnippet);
   const copy = async (text: string, what: string) => {
     const ok = await copyText(text);
-    toast.push(ok ? "success" : "error", ok ? `${what} panoya kopyalandı.` : "Kopyalanamadı.");
+    toast.push(ok ? "success" : "error", ok ? t("studio.toast.copied", { what }) : t("studio.toast.copyFailed"));
   };
 
   return (
@@ -188,31 +194,31 @@ function SuggestionCard({
             type="checkbox"
             checked={selected}
             onChange={(e) => onSelect(e.target.checked)}
-            aria-label="Simülasyona dahil et"
-            title="Skor simülasyonuna dahil et"
+            aria-label={t("studio.card.include")}
+            title={t("studio.card.includeTitle")}
             className="mt-1 h-4 w-4 shrink-0 accent-indigo-600"
           />
         )}
         <button type="button" onClick={onToggle} aria-expanded={expanded} className="min-w-0 flex-1 text-left">
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge tone={tier.tone} icon>
-              {tier.label} etki
+              {t("studio.card.impact", { impact: impactLabel(t, tier.value) })}
             </Badge>
-            <Badge>{RULE_TYPE_LABELS[s.ruleType] ?? s.ruleType}</Badge>
-            {s.status !== "pending" && <Badge tone={STATUS_TONE[s.status] ?? "neutral"}>{SUGGESTION_STATUS_LABELS[s.status] ?? s.status}</Badge>}
-            {placeholders > 0 && <Badge tone="warning">{placeholders} alan doldurulmalı</Badge>}
-            <span className="ml-auto text-xs font-semibold tabular-nums text-[#006300] dark:text-[#0ca30c]">+%{s.expectedGain.toFixed(1)} görünürlük</span>
+            <Badge>{ruleTypeLabel(t, s.ruleType)}</Badge>
+            {s.status !== "pending" && <Badge tone={STATUS_TONE[s.status] ?? "neutral"}>{suggestionStatusLabel(t, s.status)}</Badge>}
+            {placeholders > 0 && <Badge tone="warning">{t("studio.card.fieldsToFill", { count: placeholders })}</Badge>}
+            <span className="ml-auto text-xs font-semibold tabular-nums text-[#006300] dark:text-[#0ca30c]">{t("studio.card.gain", { gain: s.expectedGain.toFixed(1) })}</span>
           </div>
-          <h3 className="mt-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{s.title ?? RULE_TYPE_LABELS[s.ruleType]}</h3>
+          <h3 className="mt-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{s.title ?? ruleTypeLabel(t, s.ruleType, "")}</h3>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
             <span className="truncate font-mono" title={s.pageUrl}>
               {pagePath(s.pageUrl)}
             </span>
             {(Object.keys(signals) as SignalTag[])
-              .filter((t) => t !== "placeholder" && signals[t] > 0)
-              .map((t) => (
-                <span key={t} className={cx("px-0.5", TAG_SWATCH[t])}>
-                  +{signals[t]} {SIGNAL_LABELS[t].toLowerCase()}
+              .filter((tag) => tag !== "placeholder" && signals[tag] > 0)
+              .map((tag) => (
+                <span key={tag} className={cx("px-0.5", TAG_SWATCH[tag])}>
+                  +{signals[tag]} {signalLabel(t, tag).toLocaleLowerCase(intlLocale)}
                 </span>
               ))}
           </div>
@@ -228,35 +234,35 @@ function SuggestionCard({
           <SignalLegend />
           <div className="flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
             <Button size="sm" onClick={() => void copy(s.suggestedSnippet, "Markdown")}>
-              Copy Markdown
+              {t("studio.card.copyMarkdown")}
             </Button>
             <Button size="sm" onClick={() => void copy(html, "HTML")}>
-              Copy HTML
+              {t("studio.card.copyHtml")}
             </Button>
             {s.diffMarkdown && (
-              <Button size="sm" variant="ghost" onClick={() => void copy(s.diffMarkdown!, "Diff yaması")}>
-                Copy Diff
+              <Button size="sm" variant="ghost" onClick={() => void copy(s.diffMarkdown!, t("studio.toast.whatDiff"))}>
+                {t("studio.card.copyDiff")}
               </Button>
             )}
             <span className="mx-1 hidden h-5 w-px bg-zinc-200 sm:block dark:bg-zinc-700" />
             {s.status === "pending" ? (
               <>
-                <Button size="sm" variant="primary" loading={busy === "cms"} disabled={!!busy} onClick={onApplyCms} title="CMS webhook'una gönderir ve Uygulandı olarak işaretler">
-                  Apply to CMS
+                <Button size="sm" variant="primary" loading={busy === "cms"} disabled={!!busy} onClick={onApplyCms} title={t("studio.card.applyCmsTitle")}>
+                  {t("studio.card.applyCms")}
                 </Button>
                 <Button size="sm" loading={busy === "applied"} disabled={!!busy} onClick={() => onStatus("applied")}>
-                  ✓ Uygulandı
+                  {t("studio.card.markApplied")}
                 </Button>
                 <Button size="sm" variant="ghost" loading={busy === "dismissed"} disabled={!!busy} onClick={() => onStatus("dismissed")}>
-                  Yoksay
+                  {t("studio.card.dismiss")}
                 </Button>
               </>
             ) : (
               <Button size="sm" loading={busy === "pending"} disabled={!!busy} onClick={() => onStatus("pending")}>
-                ↺ Geri al
+                {t("studio.card.undo")}
               </Button>
             )}
-            <span className="ml-auto text-[11px] text-zinc-400">Güncellendi: {formatDate(s.updatedAt)}</span>
+            <span className="ml-auto text-[11px] text-zinc-400">{t("studio.card.updated", { date: formatDate(s.updatedAt) })}</span>
           </div>
         </div>
       )}
@@ -267,8 +273,9 @@ function SuggestionCard({
 // ---------------------------------------------------------------- view
 
 function StudioSkeleton() {
+  const { t } = useFormat();
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]" role="status" aria-label="Yükleniyor">
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]" role="status" aria-label={t("studio.loading")}>
       <div className="space-y-4">
         <Skeleton className="h-12 w-full" />
         <SkeletonCard lines={3} />
@@ -281,6 +288,7 @@ function StudioSkeleton() {
 }
 
 export function StudioView() {
+  const { t, formatDate } = useFormat();
   const { siteId, version, auditActive, startAudit, startingAudit } = useSite();
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("diff");
@@ -336,7 +344,7 @@ export function StudioView() {
   );
 
   const capsules = useMemo(() => collectCapsules(baseFiltered, pageUrl ? items.filter((i) => i.targetUrl === pageUrl) : items), [baseFiltered, items, pageUrl]);
-  const tables = useMemo(() => collectTables(baseFiltered, pageUrl ? items.filter((i) => i.targetUrl === pageUrl) : items), [baseFiltered, items, pageUrl]);
+  const tables = useMemo(() => collectTables(baseFiltered, pageUrl ? items.filter((i) => i.targetUrl === pageUrl) : items, t), [baseFiltered, items, pageUrl, t]);
 
   const expandedId = expanded ?? visible[0]?.id ?? null;
 
@@ -365,10 +373,7 @@ export function StudioView() {
     try {
       const row = await apiFetch<AutoGeoSuggestionRow>(`/api/sites/${siteId}/autogeo/${s.id}`, { method: "PATCH", json: { status } });
       patchLocal(row);
-      toast.push(
-        "success",
-        { applied: "Uygulandı olarak işaretlendi. Skoru doğrulamak için yeni analiz başlatın.", dismissed: "Öneri yoksayıldı; yeniden analizde geri gelmez.", pending: "Öneri yeniden bekleyenlere alındı." }[status],
-      );
+      toast.push("success", t(`studio.toast.${status}`));
     } catch (err) {
       toast.push("error", errorMessage(err));
     } finally {
@@ -382,17 +387,14 @@ export function StudioView() {
       const res = await apiFetch<CmsApplyResult>(`/api/sites/${siteId}/autogeo/${s.id}/apply`, { method: "POST" });
       if (!res.configured) {
         const ok = await copyText(markdownToHtml(s.suggestedSnippet));
-        toast.push(
-          "info",
-          `CMS webhook'u tanımlı değil (AI Dağıtım → Webhook). ${ok ? "HTML panoya kopyalandı; " : ""}sayfanıza yapıştırdıktan sonra “Uygulandı” ile işaretleyin.`,
-        );
+        toast.push("info", t(ok ? "studio.toast.cmsNotConfiguredCopied" : "studio.toast.cmsNotConfigured"));
         return;
       }
       patchLocal(res.suggestion);
       const sent = res.deliveries.filter((d) => d.status === "sent").length;
-      toast.push("success", `CMS'e gönderildi (${sent}/${res.deliveries.length} webhook) ve Uygulandı olarak işaretlendi.`);
+      toast.push("success", t("studio.toast.cmsSent", { sent, total: res.deliveries.length }));
     } catch (err) {
-      toast.push("error", err instanceof ApiError && err.status === 502 ? "CMS webhook'ları öneriyi kabul etmedi. Webhook ayarlarını kontrol edin." : errorMessage(err));
+      toast.push("error", err instanceof ApiError && err.status === 502 ? t("studio.toast.cmsRejected") : errorMessage(err));
     } finally {
       setBusy(null);
     }
@@ -402,7 +404,7 @@ export function StudioView() {
     setRebuilding(true);
     try {
       const res = await apiFetch<{ created: number; updated: number; superseded: number }>(`/api/sites/${siteId}/autogeo`, { method: "POST", json: {} });
-      toast.push("success", `Öneriler yenilendi: ${res.created} yeni, ${res.updated} güncel, ${res.superseded} eskidi.`);
+      toast.push("success", t("studio.toast.rebuilt", { created: res.created, updated: res.updated, superseded: res.superseded }));
       await data.reload();
     } catch (err) {
       toast.push("error", errorMessage(err));
@@ -422,18 +424,18 @@ export function StudioView() {
   const header = (
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h2 className="text-lg font-semibold">AutoGEO İçerik Stüdyosu</h2>
+        <h2 className="text-lg font-semibold">{t("studio.header.title")}</h2>
         <p className="text-sm text-zinc-500">
-          AI motorlarının alıntılama olasılığını artıran içerik önerileri: satır satır karşılaştırın, yanıt kapsüllerini ve tabloları tek tıkla kopyalayın.
-          {data.data?.completedAt && <> Son AutoGEO analizi: {formatDate(data.data.completedAt)}.</>}
+          {t("studio.header.intro")}
+          {data.data?.completedAt && <> {t("studio.header.lastAnalysis", { date: formatDate(data.data.completedAt) })}</>}
         </p>
       </div>
       <div className="flex gap-2">
-        <Button onClick={() => void rebuild()} loading={rebuilding} disabled={data.loading} title="Açık AutoGEO aksiyonlarından önerileri yeniden oluşturur">
-          ↻ Önerileri yenile
+        <Button onClick={() => void rebuild()} loading={rebuilding} disabled={data.loading} title={t("studio.header.refreshTitle")}>
+          {t("studio.header.refresh")}
         </Button>
         <Button variant="primary" onClick={() => void startAudit()} loading={startingAudit} disabled={auditActive}>
-          {auditActive ? "Analiz sürüyor…" : "Yeniden analiz et"}
+          {auditActive ? t("studio.header.analyzing") : t("studio.header.reanalyze")}
         </Button>
       </div>
     </div>
@@ -459,21 +461,21 @@ export function StudioView() {
         {header}
         <EmptyState
           icon="✎"
-          title="Henüz AutoGEO önerisi yok"
+          title={t("studio.empty.title")}
           action={
             <div className="flex flex-wrap justify-center gap-2">
               <Button variant="primary" onClick={() => void startAudit()} loading={startingAudit} disabled={auditActive}>
-                {auditActive ? "Analiz sürüyor…" : "Analizi Başlat"}
+                {auditActive ? t("studio.header.analyzing") : t("studio.empty.start")}
               </Button>
               {items.length > 0 && (
                 <Button onClick={() => void rebuild()} loading={rebuilding}>
-                  Aksiyonlardan öneri oluştur
+                  {t("studio.empty.fromActions")}
                 </Button>
               )}
             </div>
           }
         >
-          Site analizi içerik sayfalarını (en az 80 kelime) AutoGEO motoruyla puanlar ve istatistik, alıntı, kaynak ve yanıt kapsülü önerileri üretir. Analiz bitince öneriler burada otomatik belirir.
+          {t("studio.empty.hint")}
         </EmptyState>
       </div>
     );
@@ -489,28 +491,28 @@ export function StudioView() {
           {/* filters */}
           <div className="space-y-3 rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
             <div className="flex flex-wrap items-center gap-2">
-              <select aria-label="Sayfa" value={pageUrl} onChange={(e) => setPageUrl(e.target.value)} className={`${inputBase} w-full py-1.5 text-xs sm:w-72`}>
-                <option value="">Tüm sayfalar ({pages.length})</option>
+              <select aria-label={t("studio.filter.page")} value={pageUrl} onChange={(e) => setPageUrl(e.target.value)} className={`${inputBase} w-full py-1.5 text-xs sm:w-72`}>
+                <option value="">{t("studio.filter.allPages", { count: pages.length })}</option>
                 {pages.map((p) => (
                   <option key={p.url} value={p.url}>
                     {pagePath(p.url)}
-                    {p.score != null ? ` — skor ${p.score}` : ""}
+                    {p.score != null ? t("studio.filter.pageScore", { score: p.score }) : ""}
                   </option>
                 ))}
               </select>
               <Segmented
-                label="Etki derecesi"
+                label={t("studio.filter.impact")}
                 value={impact}
                 onChange={setImpact}
-                options={[{ value: "all" as const, label: "Tüm etkiler" }, ...IMPACTS.map((i) => ({ value: i.value, label: i.label }))]}
+                options={[{ value: "all" as const, label: t("studio.filter.allImpacts") }, ...IMPACTS.map((i) => ({ value: i.value, label: impactLabel(t, i.value) }))]}
               />
-              <select aria-label="Sıralama" value={sort} onChange={(e) => setSort(e.target.value as "gain" | "recent")} className={`${inputBase} w-auto py-1.5 text-xs`}>
-                <option value="gain">En yüksek kazanç</option>
-                <option value="recent">En yeni</option>
+              <select aria-label={t("studio.filter.sort")} value={sort} onChange={(e) => setSort(e.target.value as "gain" | "recent")} className={`${inputBase} w-auto py-1.5 text-xs`}>
+                <option value="gain">{t("studio.filter.sortGain")}</option>
+                <option value="recent">{t("studio.filter.sortRecent")}</option>
               </select>
             </div>
-            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Kural türü">
-              <span className="mr-1 text-xs text-zinc-500">Kural:</span>
+            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={t("studio.filter.ruleGroup")}>
+              <span className="mr-1 text-xs text-zinc-500">{t("studio.filter.rule")}</span>
               {STUDIO_RULE_TYPES.filter((r) => ruleCounts[r] || ruleTypes.has(r)).map((r) => (
                 <button
                   key={r}
@@ -524,7 +526,7 @@ export function StudioView() {
                       : "border-zinc-300 text-zinc-600 hover:border-zinc-400 dark:border-zinc-700 dark:text-zinc-300",
                   )}
                 >
-                  {RULE_TYPE_LABELS[r]} <span className="tabular-nums text-zinc-400">{ruleCounts[r] ?? 0}</span>
+                  {ruleTypeLabel(t, r)} <span className="tabular-nums text-zinc-400">{ruleCounts[r] ?? 0}</span>
                 </button>
               ))}
               {(ruleTypes.size > 0 || pageUrl || impact !== "all") && (
@@ -537,7 +539,7 @@ export function StudioView() {
                     setImpact("all");
                   }}
                 >
-                  Filtreleri temizle
+                  {t("studio.filter.clear")}
                 </button>
               )}
             </div>
@@ -545,45 +547,45 @@ export function StudioView() {
 
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Segmented
-              label="Çalışma alanı"
+              label={t("studio.tabs.label")}
               value={tab}
               onChange={setTab}
               options={[
-                { value: "diff" as const, label: "Öneriler & Diff", count: visible.length },
-                { value: "capsules" as const, label: "Yanıt Kapsülleri", count: capsules.length },
-                { value: "tables" as const, label: "Tablolar", count: tables.length },
+                { value: "diff" as const, label: t("studio.tabs.diff"), count: visible.length },
+                { value: "capsules" as const, label: t("studio.tabs.capsules"), count: capsules.length },
+                { value: "tables" as const, label: t("studio.tabs.tables"), count: tables.length },
               ]}
             />
             {tab === "diff" && (
               <div className="flex flex-wrap gap-2">
                 <Segmented
-                  label="Durum"
+                  label={t("studio.statusView.label")}
                   value={statusView}
                   onChange={(v) => {
                     setStatusView(v);
                     setExpanded(null);
                   }}
                   options={[
-                    { value: "pending" as const, label: "Bekleyen", count: statusCounts.pending ?? 0 },
-                    { value: "applied" as const, label: "Uygulanan", count: statusCounts.applied ?? 0 },
-                    { value: "dismissed" as const, label: "Yoksayılan", count: statusCounts.dismissed ?? 0 },
-                    { value: "all" as const, label: "Tümü", count: statusCounts.all ?? 0 },
+                    { value: "pending" as const, label: t("studio.statusView.pending"), count: statusCounts.pending ?? 0 },
+                    { value: "applied" as const, label: t("studio.statusView.applied"), count: statusCounts.applied ?? 0 },
+                    { value: "dismissed" as const, label: t("studio.statusView.dismissed"), count: statusCounts.dismissed ?? 0 },
+                    { value: "all" as const, label: t("studio.statusView.all"), count: statusCounts.all ?? 0 },
                   ]}
                 />
                 <Segmented
-                  label="Diff görünümü"
+                  label={t("studio.diffMode.label")}
                   value={mode}
                   onChange={setMode}
                   options={[
-                    { value: "split" as const, label: "Yan yana" },
-                    { value: "unified" as const, label: "Birleşik" },
+                    { value: "split" as const, label: t("studio.diffMode.split") },
+                    { value: "unified" as const, label: t("studio.diffMode.unified") },
                   ]}
                 />
               </div>
             )}
           </div>
 
-          {truncated && <p className="text-xs text-amber-700 dark:text-amber-400">İlk {all.length} öneri gösteriliyor ({data.data?.suggestions.total} toplam). Sayfa filtresiyle daraltın.</p>}
+          {truncated && <p className="text-xs text-amber-700 dark:text-amber-400">{t("studio.truncated", { shown: all.length, total: data.data?.suggestions.total ?? all.length })}</p>}
 
           {tab === "capsules" ? (
             <CapsuleGrid capsules={capsules} />
@@ -591,12 +593,12 @@ export function StudioView() {
             <TableList tables={tables} />
           ) : !visible.length ? (
             statusView === "pending" && !baseFiltered.some((s) => s.status === "pending") && !pageUrl && !ruleTypes.size && impact === "all" ? (
-              <EmptyState icon="🎉" title="Bekleyen öneri kalmadı" action={<Button variant="primary" onClick={() => void startAudit()} loading={startingAudit} disabled={auditActive}>Yeniden analiz et</Button>}>
-                Tüm öneriler uygulandı veya yoksayıldı. Yeni analiz, değişiklikleri doğrular ve skoru günceller.
+              <EmptyState icon="🎉" title={t("studio.empty.noPendingTitle")} action={<Button variant="primary" onClick={() => void startAudit()} loading={startingAudit} disabled={auditActive}>{t("studio.header.reanalyze")}</Button>}>
+                {t("studio.empty.noPendingHint")}
               </EmptyState>
             ) : (
-              <EmptyState icon="∅" title="Bu filtreye uyan öneri yok">
-                Sayfa, kural türü veya etki filtresini değiştirmeyi deneyin.
+              <EmptyState icon="∅" title={t("studio.empty.noMatchTitle")}>
+                {t("studio.empty.noMatchHint")}
               </EmptyState>
             )
           ) : (
@@ -637,11 +639,11 @@ export function StudioView() {
           />
           {summary && (
             <section className="rounded-xl border border-zinc-200 bg-white p-4 text-xs shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-              <h2 className="mb-2 text-sm font-semibold">Metrik ortalamaları</h2>
+              <h2 className="mb-2 text-sm font-semibold">{t("studio.sim.metricsTitle")}</h2>
               <ul className="space-y-1.5">
                 {Object.entries(summary.metrics).map(([k, v]) => (
                   <li key={k} className="flex items-center gap-2">
-                    <span className="w-32 truncate text-zinc-600 dark:text-zinc-400">{METRIC_LABELS[k] ?? k}</span>
+                    <span className="w-32 truncate text-zinc-600 dark:text-zinc-400">{metricLabel(t, k)}</span>
                     <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--chart-grid)]">
                       <span className="block h-full rounded-full" style={{ width: `${Math.max(2, v)}%`, background: TONE_COLOR[scoreTone(v)] }} />
                     </span>
@@ -650,7 +652,14 @@ export function StudioView() {
                 ))}
               </ul>
               <p className="mt-3 text-zinc-500">
-                CMS entegrasyonu için <Link href={`/sites/${siteId}/distribution`} className="text-indigo-600 hover:underline dark:text-indigo-400">AI Dağıtım</Link> sayfasından webhook ekleyin; “Apply to CMS” imzalı <code>autogeo.suggestion.applied</code> olayı gönderir.
+                {rich(t("studio.cmsHelp", { apply: t("studio.card.applyCms") }), {
+                  link: (
+                    <Link href={`/sites/${siteId}/distribution`} className="text-indigo-600 hover:underline dark:text-indigo-400">
+                      {t("studio.cmsHelp.linkLabel")}
+                    </Link>
+                  ),
+                  code: <code>autogeo.suggestion.applied</code>,
+                })}
               </p>
             </section>
           )}
@@ -660,11 +669,6 @@ export function StudioView() {
   );
 }
 
-const METRIC_LABELS: Record<string, string> = {
-  statistics: "İstatistik",
-  quotations: "Alıntı",
-  citations: "Kaynak gösterimi",
-  answer_capsules: "Yanıt kapsülü",
-  authority_fluency: "Otoriter ton",
-  keyword_stuffing: "Anahtar kelime dengesi",
-};
+const METRIC_KEYS = ["statistics", "quotations", "citations", "answer_capsules", "authority_fluency", "keyword_stuffing"];
+/** Label of an AutoGEO metric (`studio.metric.*`); unknown metrics are shown as-is. */
+const metricLabel = (t: Translator, metric: string) => (METRIC_KEYS.includes(metric) ? t(`studio.metric.${metric}`) : metric);

@@ -18,6 +18,7 @@ from .keywords import document_terms, extract_keywords
 from .models import Entity, EntityType, ExtractionResult, PageData, PageType, Relation, RelationType
 from .urls import normalize_url
 
+# ASCII folding of Turkish letters for stable slugs/ids (deliberate: Turkish entity names are first-class input)
 _TR_MAP = str.maketrans("çğıöşüÇĞİÖŞÜâîû", "cgiosuCGIOSUaiu")
 
 
@@ -318,6 +319,7 @@ class EntityExtractor:
                         fake["offers"]["priceCurrency"] = _currency(m.group(0))
                         st = STOCK_TEXT.search(page.text[:5000])
                         if st and not fake["offers"]["availability"]:
+                            # "yok" / "tükendi" = Turkish for "none" / "sold out" (Turkish storefronts)
                             fake["offers"]["availability"] = "OutOfStock" if re.search(r"out of|yok|tükendi", st.group(0), re.I) else "InStock"
                     else:
                         fake.pop("offers")

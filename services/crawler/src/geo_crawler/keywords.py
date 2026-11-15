@@ -5,6 +5,8 @@ import math
 import re
 from collections import Counter
 
+# English + Turkish stop-words. The Turkish half is deliberate language data: without it keyword/concept extraction
+# would be dominated by function words on Turkish pages (ve = and, için = for, bir = a/one, ...).
 STOPWORDS = set(
     """
     a an and are as at be been but by can do does for from has have how i if in into is it its
@@ -20,6 +22,7 @@ STOPWORDS = set(
     """.split()
 )
 
+# letters of the Latin alphabet plus the Turkish ones (ç ğ ı ö ş ü) and the circumflex vowels used in Turkish loanwords
 _TOKEN = re.compile(r"[0-9a-zçğıöşüâîû]+", re.I)
 
 

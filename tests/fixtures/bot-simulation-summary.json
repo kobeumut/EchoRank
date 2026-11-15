@@ -68,32 +68,32 @@
     {
       "code": "waf_challenge",
       "severity": "critical",
-      "title": "2 AI botu challenge/CAPTCHA sayfasına takılıyor"
+      "title": "2 AI bots are stuck on a challenge/CAPTCHA page"
     },
     {
       "code": "waf_block",
       "severity": "critical",
-      "title": "1 AI botu sunucu/WAF tarafından reddediliyor"
+      "title": "1 AI bot is rejected by the server/WAF"
     },
     {
       "code": "csr_shell",
       "severity": "critical",
-      "title": "1 sayfa AI botlarına boş JS kabuğu döndürüyor"
+      "title": "1 page returns an empty JS shell to AI bots"
     },
     {
       "code": "robots_disallow",
       "severity": "warning",
-      "title": "1 AI botu robots.txt ile engelli"
+      "title": "1 AI bot is blocked by robots.txt"
     },
     {
       "code": "token_bloat",
       "severity": "warning",
-      "title": "1 sayfada şişkin DOM / gömülü veri"
+      "title": "1 page has a bloated DOM / embedded data"
     },
     {
       "code": "no_compression",
       "severity": "info",
-      "title": "HTML yanıtı sıkıştırılmadan gönderiliyor"
+      "title": "The HTML response is sent uncompressed"
     }
   ]
 }

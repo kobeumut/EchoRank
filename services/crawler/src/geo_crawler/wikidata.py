@@ -103,10 +103,12 @@ SAME_AS_PROPS: list[tuple[str, str]] = [
     ("P214", "https://viaf.org/viaf/{}"),
 ]
 
+# folds Turkish letters to ASCII so "Kahve Dükkanı" and "KAHVE DUKKANI" compare equal (deliberate Turkish handling)
 _TR_FOLD = str.maketrans("çğıöşüÇĞİÖŞÜâîû", "cgiosuCGIOSUaiu")
 _LEGAL_SUFFIX = re.compile(
     r"\b(a\.?\s?s|ltd|sti|san|tic|ve|inc|llc|gmbh|corp|corporation|co|company|plc|ag|sa|srl|bv|limited|holding)\b\.?",
 )
+# English + Turkish (ve = and, ile = with, bir = a, icin = for, de/da = also) stop-words for entity-name similarity
 _STOP = {"the", "and", "of", "a", "an", "ve", "ile", "bir", "icin", "for", "in", "de", "da"}
 
 
@@ -612,7 +614,7 @@ def apply_result(kg: KnowledgeGraph, res: ReconciliationResult, *, now: str | No
 
 
 def link_shared_identities(kg: KnowledgeGraph) -> int:
-    """Site entities resolved to the same QID (Brand "Brevio" + Organization "Brevio A.Ş.") get a direct same_as edge."""
+    """Site entities resolved to the same QID (Brand "Brevio" + Organization "Brevio Ltd.") get a direct same_as edge."""
     by_qid: dict[str, list[str]] = {}
     for n, d in kg.g.nodes(data=True):
         q = d.get("properties", {}).get("wikidataId")

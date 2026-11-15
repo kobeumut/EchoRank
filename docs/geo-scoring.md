@@ -11,6 +11,14 @@ This page covers how its output reaches the database and the API.
 | In-process | Set `GEO_AUDIT_BIN=services/crawler/.venv/bin/geo-audit` (optional `GEO_AUDIT_ARGS="--rps 2"`). `POST /api/sites/:id/audit` then runs crawl → graph → scoring and stores everything. |
 | External worker | Leave `GEO_AUDIT_BIN` empty. Audits stay `queued`; a worker runs `geo-audit <url> --db-records rows.json --crawl-records crawl.json` and posts `{...rows, crawl}` to the result endpoint. |
 
+### Language of the generated text
+
+The engine writes check details, summaries and action cards in the language given by `--lang en|tr` (default `en`).
+In-process runs pass the locale of the request that started the audit (`?lang=`, `locale` cookie or `Accept-Language`; scheduled
+audits use the site's `settings.locale`), unless `GEO_AUDIT_ARGS` already contains `--lang`. External workers choose the
+language themselves. The text is stored as generated, so an audit keeps its language until it is re-run. Rule ids, check ids,
+field names and enum values do not depend on the language.
+
 ## Endpoints
 
 | Method | Endpoint | Description |
@@ -33,5 +41,6 @@ Action items are identified across audits by `(ruleId, targetUrl)`:
 `ActionItem.details` holds `{ check_id, evidence[], expected_gain, affected_urls[], affected_count, snippet: { language, code, filename, instructions } }`.
 
 `GeoAudit.metrics` holds flat sub-scores (`aiAccess`, `llmReadability`, `eeat`, `technicalSeo`, one key per check such
-as `robotsAiBots`, `renderMode`, `llmsTxt`, `schemaValidity`, `trust`, ...), `grade`, `caps` and the full
-`pillars` breakdown with the reason text of every check.
+as `robotsAiBots`, `renderMode`, `llmsTxt`, `schemaValidity`, `trust`, ...), `scoringVersion`, `grade`, `caps`, the
+`botSimulation` and `autogeo` summaries when those analyses ran, and the full `pillars` breakdown with the reason text of
+every check.

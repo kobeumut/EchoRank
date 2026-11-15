@@ -5,9 +5,20 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "geo-crawler"
 version = "0.1.0"
-description = "Async web crawler + entity extraction + knowledge graph (graphify) engine for the GEO & SEO platform"
+description = "Async web crawler, entity extraction, knowledge-graph (graphify) and GEO / SEO / E-E-A-T scoring engine for the AI Visibility platform"
+readme = "README.md"
 authors = [{ name = "Umut ADALI", email = "kobeumut@gmail.com" }]
 license = { text = "CC-BY-NC-SA-4.0" }
+keywords = ["geo", "generative-engine-optimization", "seo", "crawler", "knowledge-graph", "llms-txt", "ai-visibility"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+]
 requires-python = ">=3.10"
 dependencies = [
   "httpx>=0.27",
@@ -19,6 +30,11 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-asyncio>=0.23", "respx>=0.21"]
 tokens = ["tiktoken>=0.7"]  # exact cl100k_base token counts in the bot simulator (estimated otherwise)
+
+[project.urls]
+Homepage = "https://github.com/kobeumut/ai-visibility"
+Repository = "https://github.com/kobeumut/ai-visibility"
+Issues = "https://github.com/kobeumut/ai-visibility/issues"
 
 [project.scripts]
 geo-crawler = "geo_crawler.cli:main"

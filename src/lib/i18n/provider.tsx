@@ -35,7 +35,7 @@ function useI18n(): I18nValue {
   return value;
 }
 
-/** `const t = useT(); t("sites.title")` — `{param}` interpolation and `_one`/`_other` plurals via `count`. */
+/** `const t = useT(); t(key, params)` — `{param}` interpolation and `_one`/`_other` plurals via `count`. */
 export function useT(): Translator {
   return useI18n().t;
 }

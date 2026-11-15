@@ -1,16 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { BrandRow, TrendSeries } from "@/lib/dashboard/competitor-intel";
-import { formatDay, MODEL_LABELS } from "@/lib/dashboard/format";
 import { useWidth } from "./charts";
 import type { ModelShare } from "./types";
 import { Button, cx } from "./ui";
+import { useFormat } from "./use-format";
 
-const pct = (v: number | null | undefined) => (v == null ? "—" : `%${Math.round(v * 10) / 10}`);
+/** Locale-aware percentage formatter ("12.5%" / "%12,5"), one decimal at most; "—" for missing values. */
+function usePct() {
+  const { t, intlLocale } = useFormat();
+  return useMemo(() => {
+    const numberFormat = new Intl.NumberFormat(intlLocale, { maximumFractionDigits: 1 });
+    return (v: number | null | undefined) => (v == null ? "—" : t("shared.percent", { value: numberFormat.format(v) }));
+  }, [t, intlLocale]);
+}
 
 /** Overall Share of Model: donut (site segment outlined) + ranked bars with direct labels. */
 export function ShareDonut({ rows }: { rows: BrandRow[] }) {
+  const { t } = useFormat();
+  const pct = usePct();
   const [hover, setHover] = useState<string | null>(null);
   const size = 168;
   const stroke = 26;
@@ -24,7 +33,7 @@ export function ShareDonut({ rows }: { rows: BrandRow[] }) {
   const max = Math.max(1, ...rows.map((b) => b.share));
   return (
     <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`Model payı dağılımı: ${rows.map((b) => `${b.name} ${pct(b.share)}`).join(", ")}`} className="shrink-0">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={t("shared.som.donutLabel", { items: rows.map((b) => `${b.name} ${pct(b.share)}`).join(", ") })} className="shrink-0">
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--chart-grid)" strokeWidth={stroke} />
         {total > 0 &&
           rows.map((b) => {
@@ -54,10 +63,10 @@ export function ShareDonut({ rows }: { rows: BrandRow[] }) {
           {total > 0 ? pct(focus?.share) : "—"}
         </text>
         <text x="50%" y="62%" textAnchor="middle" dominantBaseline="central" fill="var(--chart-muted)" style={{ fontSize: 11 }}>
-          {total > 0 ? (focus?.isSite ? "Siteniz" : focus?.name.slice(0, 18)) : "Atıf yok"}
+          {total > 0 ? (focus?.isSite ? t("shared.yourSite") : focus?.name.slice(0, 18)) : t("shared.som.noCitations")}
         </text>
       </svg>
-      <ul className="w-full min-w-0 flex-1 space-y-2" aria-label="Marka bazında model payı">
+      <ul className="w-full min-w-0 flex-1 space-y-2" aria-label={t("shared.som.byBrand")}>
         {ranked.map((b) => (
           <li
             key={b.domain}
@@ -71,7 +80,7 @@ export function ShareDonut({ rows }: { rows: BrandRow[] }) {
                 <span className={cx("truncate", b.isSite ? "font-semibold" : "text-zinc-700 dark:text-zinc-300")} title={b.domain}>
                   {b.name}
                 </span>
-                {b.isSite && <span className="text-[10px] font-medium uppercase tracking-wide text-indigo-600 dark:text-indigo-400">Siz</span>}
+                {b.isSite && <span className="text-[10px] font-medium uppercase tracking-wide text-indigo-600 dark:text-indigo-400">{t("shared.som.you")}</span>}
               </span>
               <span className="tabular-nums text-sm font-semibold">{pct(b.share)}</span>
             </div>
@@ -87,6 +96,8 @@ export function ShareDonut({ rows }: { rows: BrandRow[] }) {
 
 /** Per-model 100% stacked brand shares; same brand colors as the donut. */
 export function ModelShareBars({ perModel, rows, models }: { perModel: Record<string, { samples: number; shares: ModelShare[] }>; rows: BrandRow[]; models: readonly string[] }) {
+  const { t, label } = useFormat();
+  const pct = usePct();
   const [hover, setHover] = useState<{ model: string; domain: string } | null>(null);
   const color = new Map(rows.map((b) => [b.domain, b]));
   return (
@@ -98,20 +109,20 @@ export function ModelShareBars({ perModel, rows, models }: { perModel: Record<st
         return (
           <div key={model}>
             <div className="mb-1 flex items-baseline justify-between gap-2 text-sm">
-              <span className="font-medium text-zinc-800 dark:text-zinc-200">{MODEL_LABELS[model] ?? model}</span>
+              <span className="font-medium text-zinc-800 dark:text-zinc-200">{label("model", model)}</span>
               <span className="text-xs text-zinc-500">
                 {!d?.samples ? (
-                  "Henüz yanıt yok"
+                  t("shared.som.noResponses")
                 ) : (
                   <>
-                    Siz <span className="text-sm font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">{pct(site?.citationShare ?? 0)}</span> · {d.samples} yanıt
+                    {t("shared.som.you")} <span className="text-sm font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">{pct(site?.citationShare ?? 0)}</span> · {t("shared.som.responses", { count: d.samples })}
                   </>
                 )}
               </span>
             </div>
             <div className="flex h-3.5 gap-[2px]">
               {!shares.length ? (
-                <div className="h-full w-full rounded bg-[var(--chart-grid)]" title={d?.samples ? "Bu modelde marka atfı yok" : undefined} />
+                <div className="h-full w-full rounded bg-[var(--chart-grid)]" title={d?.samples ? t("shared.som.noBrandCitations") : undefined} />
               ) : (
                 shares.map((s) => {
                   const b = color.get(s.domain);
@@ -126,12 +137,12 @@ export function ModelShareBars({ perModel, rows, models }: { perModel: Record<st
                       onMouseLeave={() => setHover(null)}
                       onFocus={() => setHover({ model, domain: s.domain })}
                       onBlur={() => setHover(null)}
-                      aria-label={`${MODEL_LABELS[model] ?? model} — ${b?.name ?? s.domain}: ${pct(s.citationShare)} (${s.citations} atıf)`}
+                      aria-label={t("shared.som.segmentLabel", { model: label("model", model), brand: b?.name ?? s.domain, share: pct(s.citationShare), count: s.citations })}
                     >
                       {active && (
                         <div className="pointer-events-none absolute bottom-5 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
-                          <span className="font-medium">{b?.name ?? s.domain}</span>: {pct(s.citationShare)} · {s.citations} atıf
-                          {s.recommendationShare != null && <> · tavsiye payı {pct(s.recommendationShare)}</>}
+                          <span className="font-medium">{b?.name ?? s.domain}</span>: {t("shared.som.tooltip", { share: pct(s.citationShare), count: s.citations })}
+                          {s.recommendationShare != null && <> · {t("shared.som.recommendationShare", { share: pct(s.recommendationShare) })}</>}
                         </div>
                       )}
                     </div>
@@ -148,6 +159,8 @@ export function ModelShareBars({ perModel, rows, models }: { perModel: Record<st
 
 /** Share of Model over time: one line per brand (site emphasised), crosshair tooltip, table view. */
 export function ShareTrendChart({ dates, series, granularity }: { dates: string[]; series: TrendSeries[]; granularity: "day" | "week" }) {
+  const { t, formatDay } = useFormat();
+  const pct = usePct();
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const [table, setTable] = useState(false);
@@ -161,13 +174,13 @@ export function ShareTrendChart({ dates, series, granularity }: { dates: string[
   const x = (i: number) => m.left + (n <= 1 ? w / 2 : (i / (n - 1)) * w);
   const y = (v: number) => m.top + h - (v / top) * h;
   const ticksX = n <= 6 ? dates.map((_, i) => i) : [0, Math.round((n - 1) / 3), Math.round((2 * (n - 1)) / 3), n - 1];
-  const label = (d: string) => (granularity === "week" ? `${formatDay(d)} haftası` : formatDay(d));
+  const dateLabel = (d: string) => (granularity === "week" ? t("shared.som.weekOf", { date: formatDay(d) }) : formatDay(d));
   const ordered = [...series].sort((a, b) => Number(a.isSite) - Number(b.isSite));
 
   return (
     <div>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <ul className="flex flex-wrap gap-3 text-xs text-zinc-600 dark:text-zinc-400" aria-label="Seriler">
+        <ul className="flex flex-wrap gap-3 text-xs text-zinc-600 dark:text-zinc-400" aria-label={t("shared.chart.series")}>
           {series.map((s) => (
             <li key={s.domain} className="flex items-center gap-1.5">
               <span aria-hidden className="inline-block w-4 rounded" style={{ background: s.color, height: s.isSite ? 3 : 2 }} />
@@ -175,8 +188,8 @@ export function ShareTrendChart({ dates, series, granularity }: { dates: string[
             </li>
           ))}
         </ul>
-        <Button size="sm" variant="ghost" onClick={() => setTable((t) => !t)} aria-pressed={table}>
-          {table ? "Grafik" : "Tablo"}
+        <Button size="sm" variant="ghost" onClick={() => setTable((v) => !v)} aria-pressed={table}>
+          {table ? t("shared.chart.chart") : t("shared.chart.table")}
         </Button>
       </div>
       {table ? (
@@ -184,7 +197,7 @@ export function ShareTrendChart({ dates, series, granularity }: { dates: string[
           <table className="w-full text-left text-xs">
             <thead className="text-zinc-500">
               <tr>
-                <th className="py-1 pr-2 font-medium">{granularity === "week" ? "Hafta" : "Gün"}</th>
+                <th className="py-1 pr-2 font-medium">{granularity === "week" ? t("shared.som.week") : t("shared.som.day")}</th>
                 {series.map((s) => (
                   <th key={s.domain} className="py-1 pr-2 text-right font-medium">
                     {s.domain}
@@ -195,7 +208,7 @@ export function ShareTrendChart({ dates, series, granularity }: { dates: string[
             <tbody className="tabular-nums">
               {dates.map((d, i) => (
                 <tr key={d} className="border-t border-zinc-100 dark:border-zinc-800">
-                  <td className="py-1 pr-2">{label(d)}</td>
+                  <td className="py-1 pr-2">{dateLabel(d)}</td>
                   {series.map((s) => (
                     <td key={s.domain} className="py-1 pr-2 text-right">
                       {pct(s.values[i])}
@@ -213,7 +226,7 @@ export function ShareTrendChart({ dates, series, granularity }: { dates: string[
               width={width}
               height={height}
               role="img"
-              aria-label="Model payı trend grafiği"
+              aria-label={t("shared.som.trendLabel")}
               onMouseLeave={() => setHover(null)}
               onMouseMove={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -225,7 +238,7 @@ export function ShareTrendChart({ dates, series, granularity }: { dates: string[
                 <g key={f}>
                   <line x1={m.left} x2={m.left + w} y1={y(top * f)} y2={y(top * f)} stroke={f === 0 ? "var(--chart-axis)" : "var(--chart-grid)"} strokeWidth={1} />
                   <text x={m.left - 6} y={y(top * f)} textAnchor="end" dominantBaseline="central" fill="var(--chart-muted)" style={{ fontSize: 10 }} className="tabular-nums">
-                    %{Math.round(top * f)}
+                    {t("shared.percent", { value: Math.round(top * f) })}
                   </text>
                 </g>
               ))}
@@ -258,7 +271,7 @@ export function ShareTrendChart({ dates, series, granularity }: { dates: string[
               className="pointer-events-none absolute top-0 z-10 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
               style={{ left: Math.min(Math.max(x(hover) + 12, 0), Math.max(0, width - 190)) }}
             >
-              <div className="mb-1 font-medium text-zinc-900 dark:text-zinc-100">{label(dates[hover])}</div>
+              <div className="mb-1 font-medium text-zinc-900 dark:text-zinc-100">{dateLabel(dates[hover])}</div>
               {[...series]
                 .sort((a, b) => (b.values[hover] ?? -1) - (a.values[hover] ?? -1))
                 .map((s) => (

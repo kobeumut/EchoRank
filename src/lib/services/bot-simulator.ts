@@ -5,10 +5,18 @@
 // robots.txt permission is not access: Cloudflare/Imperva/Akamai/AWS WAF challenges, UA rules and client-side
 // rendering silently hand AI crawlers a 403/503, an interstitial or an empty <div id="root">. Requests are made
 // from this server, not the vendors' IP ranges — WAFs that verify bots by IP may treat real crawlers differently.
+//
+// All human-readable text (protection names, evidence, reasons, findings, caveats and the comments inside the generated
+// fix recipes) is resolved through the `botsim.*` message catalog in the requested `locale` (default English). Report
+// field names, enum values and vendor / finding ids are language-independent. A stored report keeps the language it was
+// generated in.
 import { gzipSync } from "node:zlib";
 import { z } from "zod";
 import { prisma } from "../db";
 import { HttpError } from "../http";
+import { DEFAULT_LOCALE, type Locale } from "../i18n/config";
+import { serverT } from "../i18n/request";
+import type { Translator } from "../i18n/translate";
 import { getSiteOrThrow } from "./sites";
 
 export const SIMULATOR_VERSION = "1.0";
@@ -23,7 +31,8 @@ export type BotProfile = {
   purpose: "training" | "search" | "user";
   userAgent: string;
   crawler: string; // name inside the User-Agent (differs for robots-only tokens)
-  note?: string;
+  /** robots.txt-only token without its own fetcher: the report explains which crawler really fetches the content. */
+  robotsOnly?: boolean;
 };
 
 const GOOGLEBOT_UA =
@@ -46,16 +55,16 @@ const PROFILES: BotProfile[] = [
     userAgent: "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)" },
   { token: "Perplexity-User", vendor: "Perplexity", purpose: "user", crawler: "Perplexity-User",
     userAgent: "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Perplexity-User/1.0; +https://perplexity.ai/perplexity-user)" },
-  { token: "Google-Extended", vendor: "Google", purpose: "training", crawler: "Googlebot", userAgent: GOOGLEBOT_UA,
-    note: "Google-Extended yalnızca robots.txt jetonudur; Google içeriği Googlebot ile alır." },
-  { token: "Applebot-Extended", vendor: "Apple", purpose: "training", crawler: "Applebot", userAgent: APPLEBOT_UA,
-    note: "Applebot-Extended yalnızca robots.txt jetonudur; Apple içeriği Applebot ile alır." },
+  { token: "Google-Extended", vendor: "Google", purpose: "training", crawler: "Googlebot", userAgent: GOOGLEBOT_UA, robotsOnly: true },
+  { token: "Applebot-Extended", vendor: "Apple", purpose: "training", crawler: "Applebot", userAgent: APPLEBOT_UA, robotsOnly: true },
 ];
 export const BOT_PROFILES: Record<string, BotProfile> = Object.fromEntries(PROFILES.map((p) => [p.token, p]));
 export const BOT_TOKENS = PROFILES.map((p) => p.token) as [string, ...string[]];
 export const DEFAULT_BOTS = ["GPTBot", "ClaudeBot", "PerplexityBot", "Google-Extended", "Applebot-Extended"];
 
 const BOT_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7";
+// Baseline browser identity of the simulation. The Turkish-first Accept-Language mirrors the Python simulator (request data,
+// not UI text) so both produce comparable baselines; bots send no Accept-Language at all.
 export const BROWSER_HEADERS: Record<string, string> = {
   "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
   accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -89,20 +98,21 @@ const FINGERPRINTS: [string, string, RegExp | null][] = [
   ["datadome", "x-datadome", null], ["datadome", "server", /datadome/i],
 ];
 
+/** `name` is a vendor / product name, or a `botsim.protection.*` catalog key. */
 type Sig = [vendor: string, kind: Protection["kind"], name: string, rx: RegExp];
 // Strong markers only occur on interstitial / block pages.
 const STRONG_BODY: Sig[] = [
-  ["cloudflare", "rate_limit", "Cloudflare 1015 hız sınırı", /error code:?\s*1015|you are being rate limited/],
+  ["cloudflare", "rate_limit", "botsim.protection.cf1015", /error code:?\s*1015|you are being rate limited/],
   ["cloudflare", "challenge", "Cloudflare Challenge", /_cf_chl_opt|\/cdn-cgi\/challenge-platform\/|cf-chl-widget|<title>\s*just a moment\.\.\.\s*<\/title>/],
-  ["cloudflare", "block", "Cloudflare WAF engeli", /attention required! \| cloudflare|sorry, you have been blocked|cf-error-details|error code:?\s*10(?:0\d|1\d|20)\b/],
+  ["cloudflare", "block", "botsim.protection.cfBlock", /attention required! \| cloudflare|sorry, you have been blocked|cf-error-details|error code:?\s*10(?:0\d|1\d|20)\b/],
   ["vercel", "challenge", "Vercel Security Checkpoint", /vercel security checkpoint/],
-  ["imperva", "block", "Imperva (Incapsula) engeli", /incapsula incident id|_incapsula_resource/],
-  ["akamai", "block", "Akamai engeli", /errors\.edgesuite\.net|reference\s*(?:&#32;)?(?:#|&#35;)\s*\d+\.[0-9a-f]+\.\d+/],
+  ["imperva", "block", "botsim.protection.imperva", /incapsula incident id|_incapsula_resource/],
+  ["akamai", "block", "botsim.protection.akamai", /errors\.edgesuite\.net|reference\s*(?:&#32;)?(?:#|&#35;)\s*\d+\.[0-9a-f]+\.\d+/],
   ["aws_waf", "challenge", "AWS WAF Challenge/CAPTCHA", /awswaf|aws-waf-token|gokuprops/],
-  ["aws_waf", "block", "AWS WAF / CloudFront engeli", /generated by cloudfront \(cloudfront\)/],
+  ["aws_waf", "block", "botsim.protection.awsBlock", /generated by cloudfront \(cloudfront\)/],
   ["datadome", "captcha", "DataDome CAPTCHA", /captcha-delivery\.com/],
   ["perimeterx", "captcha", "HUMAN (PerimeterX) CAPTCHA", /px-captcha|_pxappid|perimeterx/],
-  ["sucuri", "block", "Sucuri WAF engeli", /sucuri website firewall|access denied - sucuri/],
+  ["sucuri", "block", "botsim.protection.sucuri", /sucuri website firewall|access denied - sucuri/],
   ["ddos-guard", "challenge", "DDoS-Guard Challenge", /ddos-guard/],
 ];
 // Weak markers also appear on normal pages (contact-form CAPTCHAs, copy): interstitial-like pages only.
@@ -110,8 +120,11 @@ const WEAK_BODY: Sig[] = [
   ["cloudflare", "captcha", "Cloudflare Turnstile", /challenges\.cloudflare\.com\/turnstile|cf-turnstile/],
   ["unknown", "captcha", "hCaptcha", /hcaptcha\.com\/1\/api\.js|class=["']h-captcha/],
   ["unknown", "captcha", "Google reCAPTCHA", /google\.com\/recaptcha|class=["']g-recaptcha/],
-  ["unknown", "block", "Genel bot engeli", /access denied|bot detected|are you a robot|unusual traffic|verify you are (?:a )?human|enable javascript and cookies to continue/],
+  ["unknown", "block", "botsim.protection.genericBlock", /access denied|bot detected|are you a robot|unusual traffic|verify you are (?:a )?human|enable javascript and cookies to continue/],
 ];
+
+/** Catalog keys sit in the static signature / marker tables below; plain strings there are vendor or product names. */
+const label = (t: Translator, name: string) => (name.startsWith("botsim.") ? t(name) : name);
 
 const lowerKeys = (h: HeaderMap): HeaderMap => Object.fromEntries(Object.entries(h).map(([k, v]) => [k.toLowerCase(), v]));
 
@@ -132,8 +145,9 @@ function cfChallengeName(low: string): string {
     interactive: "Cloudflare Interactive Challenge" } as Record<string, string>)[ctype] ?? "Cloudflare Managed Challenge";
 }
 
-/** Bot-protection verdict for one response, or null when it is a normal page. */
-export function detectProtection(status: number | null, headers: HeaderMap, body: string): Protection | null {
+/** Bot-protection verdict for one response, or null when it is a normal page. Names and evidence are in `locale`. */
+export function detectProtection(status: number | null, headers: HeaderMap, body: string, locale: Locale = DEFAULT_LOCALE): Protection | null {
+  const t = serverT(locale);
   const h = lowerKeys(headers);
   const low = body.slice(0, 300_000).toLowerCase();
   const vendor = fingerprint(h) ?? "unknown";
@@ -152,20 +166,27 @@ export function detectProtection(status: number | null, headers: HeaderMap, body
     const m = rx.exec(low);
     if (!m) continue;
     if (v === "aws_waf" && kind === "block" && (status ?? 0) < 400) continue;
-    return { vendor: v, kind, name: v === "cloudflare" && kind === "challenge" ? cfChallengeName(low) : name, evidence: [`gövde: '${m[0].slice(0, 60)}'`] };
+    return {
+      vendor: v, kind, name: v === "cloudflare" && kind === "challenge" ? cfChallengeName(low) : label(t, name),
+      evidence: [t("botsim.evidence.body", { match: m[0].slice(0, 60) })],
+    };
   }
   const interstitial = (status !== null && status >= 400) || visibleWords(body) < 150;
   if (interstitial)
     for (const [v, kind, name, rx] of WEAK_BODY) {
       const m = rx.exec(low);
-      if (m) return { vendor: v === "unknown" ? vendor : v, kind, name, evidence: [`gövde: '${m[0].slice(0, 60)}'`] };
+      if (m) return { vendor: v === "unknown" ? vendor : v, kind, name: label(t, name), evidence: [t("botsim.evidence.body", { match: m[0].slice(0, 60) })] };
     }
   if (status === 429) {
     const retry = h["retry-after"];
-    return { vendor, kind: "rate_limit", name: "HTTP 429 hız sınırı", evidence: [`HTTP 429${retry ? `, Retry-After: ${retry}` : ""}`] };
+    return { vendor, kind: "rate_limit", name: t("botsim.protection.http429"), evidence: [`HTTP 429${retry ? `, Retry-After: ${retry}` : ""}`] };
   }
   if (status !== null && [401, 403, 406, 451, 503].includes(status))
-    return { vendor, kind: "block", name: `${vendor === "unknown" ? "Sunucu/WAF" : vendor} HTTP ${status} engeli`, evidence: [`HTTP ${status}`] };
+    return {
+      vendor, kind: "block",
+      name: t("botsim.protection.httpBlock", { vendor: vendor === "unknown" ? t("botsim.protection.serverWaf") : vendor, status }),
+      evidence: [`HTTP ${status}`],
+    };
   return null;
 }
 
@@ -218,6 +239,8 @@ const HYDRATION_MARKERS: [string, string][] = [
   ["data-reactroot", "react"], ["data-server-rendered", "vue-ssr"], ["__remixContext", "remix"],
   ["data-sveltekit", "sveltekit"], ["astro-island", "astro"],
 ];
+// Functional language data: recognises "enable JavaScript" notices on English and Turkish sites, so the Turkish words
+// (etkinleştir / açın / aktif = enable / open / active, gerekli = required) must stay.
 const NOSCRIPT_JS = /(enable|etkinleştir|açın|aktif).{0,40}javascript|javascript.{0,40}(required|gerekli|enable|etkinleştir|açın|aktif)/i;
 const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
@@ -260,8 +283,9 @@ export type RenderView = {
   text_ratio: number;
 };
 
-/** Port of the crawler's `classify_render` over the raw HTML a crawler received. */
-export function analyzeRender(html: string): RenderView & { text: string } {
+/** Port of the crawler's `classify_render` over the raw HTML a crawler received. `reason` is in `locale`. */
+export function analyzeRender(html: string, locale: Locale = DEFAULT_LOCALE): RenderView & { text: string } {
+  const t = serverT(locale);
   const htmlBytes = Buffer.byteLength(html);
   const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
   const external = scripts.filter((s) => /\bsrc\s*=/i.test(s[1])).length;
@@ -289,12 +313,14 @@ export function analyzeRender(html: string): RenderView & { text: string } {
   let mode: RenderView["mode"], score: number, reason: string;
   if (words < 50 && (spaRoot?.empty || scriptHeavy)) {
     [mode, score] = ["csr_shell", 0];
-    reason = `${spaRoot?.empty ? `#${spaRoot.id} kökü boş, ` : ""}sunucu HTML'inde yalnızca ${words} kelime var; içerik JavaScript ile yükleniyor`;
-  } else if (words < 50) [mode, score, reason] = ["thin", 40, `sunucu HTML'inde yalnızca ${words} kelime var`];
+    reason = spaRoot?.empty
+      ? t("botsim.render.csrShellRoot", { id: spaRoot.id, count: words })
+      : t("botsim.render.csrShell", { count: words });
+  } else if (words < 50) [mode, score, reason] = ["thin", 40, t("botsim.render.thin", { count: words })];
   else if (textRatio < 0.02 && words < 200)
-    [mode, score, reason] = ["heavy_js", 70, `metin/HTML oranı %${(textRatio * 100).toFixed(1)}; içerik ağır JS içinde kaybolabilir`];
-  else if (hydration.length) [mode, score, reason] = ["ssr_hydrated", 100, `SSR/SSG (${hydration.join(", ")}) — içerik ilk HTML'de mevcut`];
-  else [mode, score, reason] = ["static", 100, "içerik ilk HTML yanıtında mevcut"];
+    [mode, score, reason] = ["heavy_js", 70, t("botsim.render.heavyJs", { pct: (textRatio * 100).toFixed(1) })];
+  else if (hydration.length) [mode, score, reason] = ["ssr_hydrated", 100, t("botsim.render.hydrated", { frameworks: hydration.join(", ") })];
+  else [mode, score, reason] = ["static", 100, t("botsim.render.static")];
   return {
     mode, score, reason, word_count: words, title, h1, frameworks: hydration, spa_root: spaRoot,
     script_tags: scripts.length, external_scripts: external, noscript_requires_js: NOSCRIPT_JS.test(noscript),
@@ -304,8 +330,9 @@ export function analyzeRender(html: string): RenderView & { text: string } {
 
 // ---------------------------------------------------------------- page bloat
 
+// [marker in the inline script, label] — a label is a product name or a `botsim.bloat.*` catalog key.
 const STATE_MARKERS: [string, string][] = [
-  ["self.__next_f.push", "Next.js RSC yükü"], ["window.__NUXT__", "Nuxt state"], ["__NUXT_DATA__", "Nuxt state"],
+  ["self.__next_f.push", "botsim.bloat.nextRsc"], ["window.__NUXT__", "Nuxt state"], ["__NUXT_DATA__", "Nuxt state"],
   ["__INITIAL_STATE__", "__INITIAL_STATE__"], ["__PRELOADED_STATE__", "Redux state"],
   ["__APOLLO_STATE__", "Apollo cache"], ["__remixContext", "Remix context"], ["window.__data", "window.__data"],
 ];
@@ -326,7 +353,9 @@ export type BloatView = {
   issues: string[];
 };
 
-export function analyzeBloat(html: string): BloatView {
+/** DOM / embedded-state weight of a page. `json_state[].kind` labels and `issues` are in `locale`. */
+export function analyzeBloat(html: string, locale: Locale = DEFAULT_LOCALE): BloatView {
+  const t = serverT(locale);
   const htmlBytes = Buffer.byteLength(html);
   // element count / nesting on markup with raw-text element bodies blanked
   const markup = html.replace(/<!--[\s\S]*?-->/g, "").replace(/<(script|style|textarea)\b([^>]*)>[\s\S]*?<\/\1>/gi, "<$1$2></$1>");
@@ -358,8 +387,9 @@ export function analyzeBloat(html: string): BloatView {
       const kind = /\bid\s*=\s*["']__NEXT_DATA__["']/i.test(attrs) ? "__NEXT_DATA__" : `<script type=${type}>`;
       merged.set(kind, (merged.get(kind) ?? 0) + size);
     } else if (!/\bsrc\s*=/i.test(attrs)) {
-      const label = STATE_MARKERS.find(([marker]) => s[2].slice(0, 2000).includes(marker))?.[1];
-      if (label) merged.set(label, (merged.get(label) ?? 0) + size);
+      const marker = STATE_MARKERS.find(([m]) => s[2].slice(0, 2000).includes(m))?.[1];
+      const stateKind = marker && label(t, marker);
+      if (stateKind) merged.set(stateKind, (merged.get(stateKind) ?? 0) + size);
       else inlineJs += size;
     }
   }
@@ -370,14 +400,17 @@ export function analyzeBloat(html: string): BloatView {
   const json_state = [...merged.entries()].sort((a, b) => b[1] - a[1]).map(([kind, bytes]) => ({ kind, bytes }));
 
   const issues: string[] = [];
-  if (nodes > DOM_NODES_WARN) issues.push(`DOM ${nodes} düğüm (>${DOM_NODES_WARN})`);
-  if (maxDepth > DOM_DEPTH_WARN) issues.push(`DOM derinliği ${maxDepth} (>${DOM_DEPTH_WARN})`);
+  const kb = (bytes: number) => Math.floor(bytes / 1024);
+  if (nodes > DOM_NODES_WARN) issues.push(t("botsim.bloat.domNodes", { nodes, limit: DOM_NODES_WARN }));
+  if (maxDepth > DOM_DEPTH_WARN) issues.push(t("botsim.bloat.domDepth", { depth: maxDepth, limit: DOM_DEPTH_WARN }));
   if (stateBytes > JSON_STATE_WARN || (htmlBytes && stateBytes / htmlBytes > 0.4 && stateBytes > 20_000))
-    issues.push(`gömülü JSON durum verisi ${Math.floor(stateBytes / 1024)} KB (%${Math.floor((100 * stateBytes) / Math.max(htmlBytes, 1))}, en büyüğü ${json_state[0].kind})`);
-  if (css > 150_000) issues.push(`satır içi CSS ${Math.floor(css / 1024)} KB`);
-  if (svg > 150_000) issues.push(`satır içi SVG ${Math.floor(svg / 1024)} KB`);
-  if (dataUri > 100_000) issues.push(`base64 data URI ${Math.floor(dataUri / 1024)} KB`);
-  if (inlineJs > 200_000) issues.push(`satır içi JavaScript ${Math.floor(inlineJs / 1024)} KB`);
+    issues.push(t("botsim.bloat.jsonState", {
+      kb: kb(stateBytes), pct: Math.floor((100 * stateBytes) / Math.max(htmlBytes, 1)), kind: json_state[0].kind,
+    }));
+  if (css > 150_000) issues.push(t("botsim.bloat.inlineCss", { kb: kb(css) }));
+  if (svg > 150_000) issues.push(t("botsim.bloat.inlineSvg", { kb: kb(svg) }));
+  if (dataUri > 100_000) issues.push(t("botsim.bloat.dataUri", { kb: kb(dataUri) }));
+  if (inlineJs > 200_000) issues.push(t("botsim.bloat.inlineJs", { kb: kb(inlineJs) }));
   return {
     dom_nodes: nodes, dom_depth: maxDepth, json_state_bytes: stateBytes, json_state, ld_json_bytes: ld,
     inline_script_bytes: inlineJs, inline_css_bytes: css, inline_svg_bytes: svg, data_uri_bytes: dataUri, issues,
@@ -448,14 +481,16 @@ export type Fix = {
 
 const escapeRx = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-export function ssrFix(exampleUrl: string): string {
-  return `// AI botları JavaScript çalıştırmaz; ${exampleUrl} ilk HTML'de içerik döndürmeli.
-// Next.js (App Router) — sayfayı Server Component olarak render edin:
-export const revalidate = 3600; // ISR: saatte bir statik yeniden üretim
+/** Next.js server-rendering example for the CSR finding; the explanatory comments are in `locale`. */
+export function ssrFix(exampleUrl: string, locale: Locale = DEFAULT_LOCALE): string {
+  const t = serverT(locale);
+  return `// ${t("botsim.fix.ssr.intro", { url: exampleUrl })}
+// ${t("botsim.fix.ssr.next")}
+export const revalidate = 3600; // ${t("botsim.fix.ssr.isr")}
 
 export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const data = await getData(slug); // sunucuda veri çek (useEffect + fetch DEĞİL)
+  const data = await getData(slug); // ${t("botsim.fix.ssr.fetch")}
   return (
     <article>
       <h1>{data.title}</h1>
@@ -463,17 +498,22 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
     </article>
   );
 }
-// Vite/CRA SPA: SSR'a (Next.js, Remix, Astro) geçin veya botlara prerender edilmiş HTML sunun.`;
+// ${t("botsim.fix.ssr.spa")}`;
 }
 
-/** Copy-paste allow rules for `bots` (the refused ones; every simulated bot when `preventive`). */
+/**
+ * Copy-paste allow rules for `bots` (the refused ones; every simulated bot when `preventive`). Titles, instructions and
+ * the comments inside the generated snippets are in `locale`; the configuration itself is language-independent.
+ */
 export function buildFixes(
   bots: BotProfile[],
   vendors: string[] = [],
   csrUrls: string[] = [],
   bloat = false,
   preventive = false,
+  locale: Locale = DEFAULT_LOCALE,
 ): Fix[] {
+  const t = serverT(locale);
   const crawlers = [...new Set(bots.map((b) => b.crawler))];
   const alt = crawlers.map(escapeRx).join("|");
   const fixes: Fix[] = [];
@@ -491,66 +531,66 @@ export function buildFixes(
       },
       logging: { enabled: true },
     };
-    add("cloudflare_waf_skip", "cloudflare", "Cloudflare WAF: AI botları için Skip kuralı", "text", `
-# Cloudflare → Security → WAF → Custom rules → Create rule (listenin EN ÜSTÜNE taşıyın)
+    add("cloudflare_waf_skip", "cloudflare", t("botsim.fix.cf.title"), "text", `
+# ${t("botsim.fix.cf.where")}
 # Rule name: Allow AI crawlers (GEO)
 # Expression (Edit expression):
 ${expr}
 # Action: Skip → All remaining custom rules, Rate limiting rules, Managed rules, Super Bot Fight Mode rules
-#         + "Log matching requests" açık
+#         ${t("botsim.fix.cf.logOn")}
 
-# Yalnızca doğrulanmış botlar (UA taklidine kapalı, önerilen sıkı sürüm):
+# ${t("botsim.fix.cf.strict")}
 (cf.verified_bot_category in {"AI Crawler" "AI Search" "AI Assistant"}) or (cf.client.bot)
 
-# Ayrıca: Security → Bots → "Block AI bots" = Off, "AI Labyrinth" = Off;
-# AI Crawl Control → ilgili crawler'lar = Allow. (Ücretsiz plandaki Bot Fight Mode Skip ile atlanamaz → kapatın.)
+# ${t("botsim.fix.cf.also1")}
+# ${t("botsim.fix.cf.also2")}
 
 # Rulesets API (PUT /zones/{zone_id}/rulesets/phases/http_request_firewall_custom/entrypoint → rules[0]):
 ${JSON.stringify(rule, null, 2)}`,
-      "Kuralı mevcut engelleme kurallarının üstüne yerleştirin; Security Events'te 'Skip' olarak görünmelidir.");
+      t("botsim.fix.cf.instructions"));
 
-    add("nginx_allow", "nginx", "nginx: AI botlarını UA engeli ve rate limit'ten muaf tutun", "nginx", `
-# http { } bloğu (örn. /etc/nginx/conf.d/ai-bots.conf)
+    add("nginx_allow", "nginx", t("botsim.fix.nginx.title"), "nginx", `
+# ${t("botsim.fix.nginx.http")}
 map $http_user_agent $is_ai_bot {
     default 0;
     "~*(${alt})" 1;   # ${crawlers.map((c) => `"${c}"`).join(" ")}
 }
-# rate limit anahtarı: AI botları için boş anahtar = limit uygulanmaz
+# ${t("botsim.fix.nginx.limitKey")}
 map $is_ai_bot $ai_limit_key {
     0 $binary_remote_addr;
     1 "";
 }
 limit_req_zone $ai_limit_key zone=perip:10m rate=10r/s;
 
-# server { } bloğu — mevcut UA engelinizi AI botları dışında bırakın:
+# ${t("botsim.fix.nginx.server")}
 set $block_ua 0;
-if ($http_user_agent ~* "(bot|crawl|spider|scrape)") { set $block_ua 1; }   # ← mevcut kuralınız
+if ($http_user_agent ~* "(bot|crawl|spider|scrape)") { set $block_ua 1; }   # ${t("botsim.fix.nginx.existing")}
 if ($is_ai_bot = 1) { set $block_ua 0; }
 if ($block_ua = 1) { return 403; }`,
-      "Mevcut 'deny'/'return 403' ve limit_req kurallarınızı bu değişkenlerle koşullandırıp `nginx -t && nginx -s reload` çalıştırın.");
+      t("botsim.fix.nginx.instructions"));
 
-    add("apache_allow", "apache", "Apache / LiteSpeed (.htaccess) ve ModSecurity istisnası", "apache", `
-# .htaccess veya <VirtualHost> — AI botlarını işaretle
+    add("apache_allow", "apache", t("botsim.fix.apache.title"), "apache", `
+# ${t("botsim.fix.apache.mark")}
 SetEnvIfNoCase User-Agent "(${alt})" ai_bot
 
-# 1) AI botlarını engelleyen RewriteRule'ları kaldırın veya istisna ekleyin:
+# ${t("botsim.fix.apache.step1")}
 RewriteEngine On
 RewriteCond %{ENV:ai_bot} !^1$
 RewriteCond %{HTTP_USER_AGENT} (bot|crawl|spider|scrape) [NC]
 RewriteRule .* - [F,L]
 
-# 2) Apache 2.4 erişim kuralı (Require not env bad_bot vb. kullanıyorsanız):
+# ${t("botsim.fix.apache.step2")}
 <RequireAny>
     Require env ai_bot
     Require all granted
 </RequireAny>
 
-# 3) ModSecurity / OWASP CRS tarayıcı tespitinden muaf tutun:
+# ${t("botsim.fix.apache.step3")}
 <IfModule mod_security2.c>
     SecRule REQUEST_HEADERS:User-Agent "@rx (?i)(${alt})" \\
         "id:1009001,phase:1,pass,nolog,ctl:ruleRemoveByTag=attack-reputation-scanner"
 </IfModule>`,
-      "Değişiklikten sonra `apachectl configtest && apachectl graceful` çalıştırın.");
+      t("botsim.fix.apache.instructions"));
 
     if (vendors.includes("aws_waf")) {
       const awsRule = {
@@ -560,45 +600,40 @@ RewriteRule .* - [F,L]
         Action: { Allow: {} },
         VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: "allow-ai-crawlers" },
       };
-      add("aws_waf_allow", "aws_waf", "AWS WAF: AI botları için Allow kuralı + Bot Control istisnası", "json",
+      add("aws_waf_allow", "aws_waf", t("botsim.fix.aws.title"), "json",
         JSON.stringify({ Rules: [awsRule], BotControlOverride: { ManagedRuleGroupStatement: { VendorName: "AWS",
           Name: "AWSManagedRulesBotControlRuleSet", RuleActionOverrides: [{ Name: "CategoryAI", ActionToUse: { Count: {} } }] } } }, null, 2),
-        "Allow kuralını Web ACL'de en düşük önceliğe (0) ekleyin; Bot Control'de CategoryAI kuralını Count'a çekin.");
+        t("botsim.fix.aws.instructions"));
     }
   }
 
   const list = crawlers.join(", ");
+  // Vendor consoles without a copy-paste config: [title, step-by-step instructions]
   const consoles: Record<string, [string, string]> = {
-    akamai: ["Akamai Bot Manager: AI botlarına izin verin",
-      `Security Configurations → Bot Manager → Known Bots → 'AI Crawlers' / 'Web Search Engine Bots' kategorilerinin aksiyonunu Allow (veya Monitor) yapın. Özel kural gerekiyorsa User-Agent regex: (${alt}).`],
-    imperva: ["Imperva: AI botlarını 'Good bots' olarak işaretleyin",
-      "Website → Security → Bot Protection → Good Bots listesine ilgili AI botlarını ekleyin; Client Classification'da 'Search bots/AI' için Block/CAPTCHA aksiyonunu kaldırın."],
-    vercel: ["Vercel Firewall: AI botlarını bypass edin",
-      `Project → Firewall → Bot Management → 'AI Bots' kuralını Log/Off yapın; Custom Rule: User Agent matches (${alt}) → Bypass. Attack Challenge Mode açıksa kapatın.`],
-    sucuri: ["Sucuri WAF: AI botlarını allowlist'e ekleyin",
-      `Firewall → Access Control → Allowlist User Agents bölümüne şu UA parçalarını ekleyin: ${list}.`],
-    datadome: ["DataDome: AI botları için izin kuralı",
-      `Dashboard → Custom Rules → 'User-Agent contains' (${list}) → Allow; veya Bot Management'te 'AI Agents' kategorisini Allow yapın.`],
-    perimeterx: ["HUMAN (PerimeterX): AI botlarını allowlist'e ekleyin", `Policies → Allowlist → User-Agent: ${list}.`],
+    akamai: [t("botsim.fix.akamai.title"), t("botsim.fix.akamai.instructions", { alt })],
+    imperva: [t("botsim.fix.imperva.title"), t("botsim.fix.imperva.instructions")],
+    vercel: [t("botsim.fix.vercel.title"), t("botsim.fix.vercel.instructions", { alt })],
+    sucuri: [t("botsim.fix.sucuri.title"), t("botsim.fix.sucuri.instructions", { list })],
+    datadome: [t("botsim.fix.datadome.title"), t("botsim.fix.datadome.instructions", { list })],
+    perimeterx: [t("botsim.fix.perimeterx.title"), t("botsim.fix.perimeterx.instructions", { list })],
   };
   for (const v of vendors)
     if (consoles[v] && crawlers.length)
-      add(`${v}_console`, v, consoles[v][0], "text", consoles[v][1], "Yönetim panelinden uygulayın ve simülasyonu tekrar çalıştırın.");
+      add(`${v}_console`, v, consoles[v][0], "text", consoles[v][1], t("botsim.fix.console.instructions"));
 
   if (csrUrls.length)
-    add("ssr_render", "nextjs", "İçeriği sunucu tarafında render edin (SSR/SSG/prerender)", "tsx", ssrFix(csrUrls[0]),
-      "Next.js/Nuxt/SvelteKit'te SSR veya statik üretim; saf React SPA için prerender (örn. Rendertron, prerender.io) ya da framework'e geçiş.");
+    add("ssr_render", "nextjs", t("botsim.fix.ssr.title"), "tsx", ssrFix(csrUrls[0], locale), t("botsim.fix.ssr.instructions"));
   if (bloat)
-    add("token_diet", "web", "AI token yükünü azaltın (DOM ve gömülü JSON)", "text", `
-# Gömülü durum verisi (__NEXT_DATA__ / RSC / __NUXT__):
-#  - getServerSideProps / loader / Server Component'ten yalnızca sayfanın kullandığı alanları döndürün
-#  - Büyük listeleri sayfalayın; ürün açıklamalarını hem HTML'de hem JSON'da iki kez göndermeyin
-# DOM:
-#  - Gizli mega menü / mobil menü kopyalarını ilk HTML'den çıkarıp etkileşimde yükleyin
-#  - Satır içi SVG ikonlarını <use href="/sprite.svg#icon"> ile tekrar kullanın; base64 görselleri dosyaya taşıyın
-# Aktarım:
-#  - gzip/brotli açık olmalı (nginx: gzip on; gzip_types text/html application/json;)`,
-      "Hedef: metin token'ı / HTML token'ı oranı ≥ %10, HTML < 500 KB.");
+    add("token_diet", "web", t("botsim.fix.diet.title"), "text", `
+# ${t("botsim.fix.diet.stateHeading")}
+#  - ${t("botsim.fix.diet.state1")}
+#  - ${t("botsim.fix.diet.state2")}
+# ${t("botsim.fix.diet.domHeading")}
+#  - ${t("botsim.fix.diet.dom1")}
+#  - ${t("botsim.fix.diet.dom2")}
+# ${t("botsim.fix.diet.transferHeading")}
+#  - ${t("botsim.fix.diet.transfer1")}`,
+      t("botsim.fix.diet.instructions"));
   return fixes;
 }
 
@@ -710,7 +745,7 @@ type FetchResult = {
   body: string;
 };
 
-async function fetchAs(fetchImpl: FetchLike, url: string, headers: Record<string, string>, timeoutMs: number): Promise<FetchResult> {
+async function fetchAs(fetchImpl: FetchLike, url: string, headers: Record<string, string>, timeoutMs: number, t: Translator): Promise<FetchResult> {
   const res: FetchResult = { url, finalUrl: "", status: null, headers: {}, contentEncoding: "", wireBytes: 0, htmlBytes: 0,
     truncated: false, ttfbMs: null, totalMs: 0, error: null, body: "" };
   const t0 = performance.now();
@@ -754,8 +789,8 @@ async function fetchAs(fetchImpl: FetchLike, url: string, headers: Record<string
     res.wireBytes = Number.isFinite(len) && res.contentEncoding ? len : res.contentEncoding ? gzipSync(raw).byteLength : raw.byteLength;
   } catch (err) {
     const e = err as { name?: string; message?: string; cause?: { code?: string; message?: string } };
-    res.error = e.name === "TimeoutError" || e.name === "AbortError" ? "zaman aşımı"
-      : /redirect/i.test(e.message ?? "") || /redirect/i.test(e.cause?.message ?? "") ? "yönlendirme döngüsü"
+    res.error = e.name === "TimeoutError" || e.name === "AbortError" ? t("botsim.error.timeout")
+      : /redirect/i.test(e.message ?? "") || /redirect/i.test(e.cause?.message ?? "") ? t("botsim.error.redirectLoop")
       : `${e.cause?.code ?? e.name ?? "Error"}: ${e.cause?.message ?? e.message ?? ""}`.slice(0, 200);
   }
   res.totalMs = Math.round(performance.now() - t0);
@@ -765,15 +800,11 @@ async function fetchAs(fetchImpl: FetchLike, url: string, headers: Record<string
 // ---------------------------------------------------------------- per-page analysis
 
 const ACCESS_CREDIT: Record<string, number> = { ok: 1, degraded: 0.5 };
-const OUTCOME_LABELS: Record<string, string> = {
-  ok: "erişilebilir", degraded: "eksik içerik", challenge: "challenge/CAPTCHA", blocked: "engellendi",
-  rate_limited: "hız sınırı", not_found: "bulunamadı", server_error: "sunucu hatası", error: "bağlantı hatası",
-};
 const BLOCKING = new Set(["blocked", "challenge", "rate_limited", "error"]);
 
-function outcomeOf(r: FetchResult): [BotResult["outcome"], Protection | null] {
+function outcomeOf(r: FetchResult, locale: Locale): [BotResult["outcome"], Protection | null] {
   if (r.error) return ["error", null];
-  const prot = detectProtection(r.status, r.headers, r.body);
+  const prot = detectProtection(r.status, r.headers, r.body, locale);
   if (prot) return [prot.kind === "rate_limit" ? "rate_limited" : prot.kind === "block" ? "blocked" : "challenge", prot];
   const st = r.status ?? 0;
   if (st === 404 || st === 410) return ["not_found", null];
@@ -782,8 +813,8 @@ function outcomeOf(r: FetchResult): [BotResult["outcome"], Protection | null] {
   return ["ok", null];
 }
 
-function analyzeView(r: FetchResult, source: string): AiView {
-  const { text, ...render } = analyzeRender(r.body);
+function analyzeView(r: FetchResult, source: string, locale: Locale): AiView {
+  const { text, ...render } = analyzeRender(r.body, locale);
   const htmlTokens = estimateTokens(r.body);
   const textTokens = estimateTokens(text);
   const compressed = ["gzip", "br", "deflate", "zstd"].includes(r.contentEncoding);
@@ -798,20 +829,20 @@ function analyzeView(r: FetchResult, source: string): AiView {
       compression_ratio: compressed && r.htmlBytes ? Math.round((r.wireBytes / r.htmlBytes) * 1000) / 1000 : null,
       truncated: r.truncated, score: Math.round(tokenEfficiency(ratio, r.htmlBytes, compressed)),
     },
-    bloat: analyzeBloat(r.body),
+    bloat: analyzeBloat(r.body, locale),
   };
 }
 
 type ReasonInput = { error: string | null; general: boolean; protection: Protection | null; status: number | null; outcome: string; parity: number | null; words: number };
 
-function botReason(r: ReasonInput): string {
-  if (r.error) return `${r.error}${r.general ? "" : " (tarayıcı isteği başarılı → AI UA bağlantısı düşürülüyor)"}`;
+function botReason(r: ReasonInput, t: Translator): string {
+  if (r.error) return r.general ? r.error : t("botsim.reason.errorSilent", { error: r.error });
   if (r.protection) return `${r.protection.name} (HTTP ${r.status})`;
-  if (r.outcome === "degraded") return `tarayıcıya göre içeriğin %${Math.round((r.parity ?? 0) * 100)}'i döndü (${r.words} kelime)`;
-  return `HTTP ${r.status}, ${r.words} kelime`;
+  if (r.outcome === "degraded") return t("botsim.reason.degraded", { pct: Math.round((r.parity ?? 0) * 100), count: r.words });
+  return t("botsim.reason.ok", { status: r.status, count: r.words });
 }
 
-function findingsOf(pages: Page[]): Finding[] {
+function findingsOf(pages: Page[], t: Translator): Finding[] {
   const out: Finding[] = [];
   const all = pages.flatMap((p) => p.results.map((r) => ({ p, r })));
   const group = (pred: (r: BotResult) => boolean) => {
@@ -823,62 +854,64 @@ function findingsOf(pages: Page[]): Finding[] {
 
   let g = group((r) => r.outcome === "challenge" && !r.general);
   if (g.rs.length)
-    add("waf_challenge", "critical", `${g.bots.length} AI botu challenge/CAPTCHA sayfasına takılıyor`,
-      `${[...new Set(g.rs.map((r) => r.protection?.name).filter(Boolean))].join(", ")}: AI tarayıcıları JavaScript çalıştıramaz ve CAPTCHA çözemez; içerik yerine doğrulama sayfası alıyorlar.`, g.bots, g.urls);
+    add("waf_challenge", "critical", t("botsim.finding.wafChallenge.title", { count: g.bots.length }),
+      t("botsim.finding.wafChallenge.detail", { names: [...new Set(g.rs.map((r) => r.protection?.name).filter(Boolean))].join(", ") }), g.bots, g.urls);
   g = group((r) => (r.outcome === "blocked" || r.outcome === "error") && !r.general);
   if (g.rs.length) {
     const silent = [...new Set(g.rs.filter((r) => r.silent_block).map((r) => r.token))];
-    add("waf_block", "critical", `${g.bots.length} AI botu sunucu/WAF tarafından reddediliyor`,
-      `${[...new Set(g.rs.map((r) => r.reason))].join(", ")}.${silent.length ? ` robots.txt ${silent.join(", ")} için izin verdiği hâlde (sessiz engel).` : ""}`, g.bots, g.urls);
+    add("waf_block", "critical", t("botsim.finding.wafBlock.title", { count: g.bots.length }),
+      `${[...new Set(g.rs.map((r) => r.reason))].join(", ")}.${silent.length ? ` ${t("botsim.finding.wafBlock.silent", { bots: silent.join(", ") })}` : ""}`, g.bots, g.urls);
   }
   g = group((r) => r.outcome === "rate_limited" && !r.general);
   if (g.rs.length)
-    add("rate_limited", "warning", `${g.bots.length} AI botu hız sınırına (429) takılıyor`,
-      "Düşük hacimli tek isteklerde bile 429 dönüyor; AI botları için rate-limit muafiyeti tanımlayın.", g.bots, g.urls);
+    add("rate_limited", "warning", t("botsim.finding.rateLimited.title", { count: g.bots.length }),
+      t("botsim.finding.rateLimited.detail"), g.bots, g.urls);
   g = group((r) => r.general && BLOCKING.has(r.outcome));
   if (g.rs.length) {
     const walls = pages.filter((p) => g.urls.includes(p.url)).map((p) => p.baseline.protection as Protection | null).filter((w): w is Protection => !!w);
     const wall = walls.find((w) => w.kind === "challenge" || w.kind === "captcha");
-    add("general_block", "critical", "Bot koruması tüm otomatik istekleri durduruyor",
-      wall ? `${wall.name} tüm otomatik istemcilere (tarayıcı simülasyonu dahil) gösteriliyor. Gerçek tarayıcılar JavaScript çalıştırıp geçebilir, AI botları geçemez.`
-        : "Tarayıcı isteği de engellendi: genel bot duvarı, IP/ülke engeli veya site kapalı. AI botları da içeriğe ulaşamıyor.", g.bots, g.urls);
+    add("general_block", "critical", t("botsim.finding.generalBlock.title"),
+      wall ? t("botsim.finding.generalBlock.wall", { name: wall.name }) : t("botsim.finding.generalBlock.noWall"), g.bots, g.urls);
   }
   g = group((r) => r.outcome === "degraded");
   if (g.rs.length)
-    add("content_parity", "warning", `${g.bots.length} AI botu tarayıcıdan daha az içerik alıyor`,
+    add("content_parity", "warning", t("botsim.finding.contentParity.title", { count: g.bots.length }),
       g.rs.slice(0, 3).map((r) => `${r.token}: ${r.reason}`).join("; "), g.bots, g.urls);
   g = group((r) => r.robots_allowed === false);
   if (g.rs.length)
-    add("robots_disallow", "warning", `${g.bots.length} AI botu robots.txt ile engelli`,
-      "Bu botlar robots.txt'ye uyar ve canlı erişim açık olsa bile sayfayı almaz.", g.bots, g.urls);
+    add("robots_disallow", "warning", t("botsim.finding.robotsDisallow.title", { count: g.bots.length }),
+      t("botsim.finding.robotsDisallow.detail"), g.bots, g.urls);
   g = group((r) => r.accessible && (r.ttfb_ms ?? 0) > 3000);
   if (g.rs.length)
-    add("slow_response", "warning", "AI botlarına ilk bayt 3 saniyeden geç geliyor",
-      `En yavaş: ${Math.max(...g.rs.map((r) => r.ttfb_ms ?? 0))} ms. Kullanıcı tetiklemeli AI getiricileri kısa zaman aşımıyla çalışır.`, g.bots, g.urls);
+    add("slow_response", "warning", t("botsim.finding.slowResponse.title"),
+      t("botsim.finding.slowResponse.detail", { ms: Math.max(...g.rs.map((r) => r.ttfb_ms ?? 0)) }), g.bots, g.urls);
 
   const views = pages.filter((p): p is Page & { ai_view: AiView } => !!p.ai_view);
   const csr = views.filter((p) => p.ai_view.render.mode === "csr_shell");
   if (csr.length)
-    add("csr_shell", "critical", `${csr.length} sayfa AI botlarına boş JS kabuğu döndürüyor`,
-      `${csr[0].ai_view.render.reason}. AI tarayıcıları JavaScript çalıştırmaz; SSR/SSG veya prerender gerekli.`, [], csr.map((p) => p.url));
+    add("csr_shell", "critical", t("botsim.finding.csrShell.title", { count: csr.length }),
+      t("botsim.finding.csrShell.detail", { reason: csr[0].ai_view.render.reason }), [], csr.map((p) => p.url));
   const weak = views.filter((p) => ["thin", "heavy_js"].includes(p.ai_view.render.mode));
-  if (weak.length) add("thin_html", "warning", `${weak.length} sayfanın sunucu HTML'i zayıf`, weak[0].ai_view.render.reason, [], weak.map((p) => p.url));
+  if (weak.length)
+    add("thin_html", "warning", t("botsim.finding.thinHtml.title", { count: weak.length }), weak[0].ai_view.render.reason, [], weak.map((p) => p.url));
   const bloated = views.filter((p) => p.ai_view.bloat.issues.length);
   if (bloated.length)
-    add("token_bloat", "warning", `${bloated.length} sayfada şişkin DOM / gömülü veri`, bloated[0].ai_view.bloat.issues.join("; "), [], bloated.map((p) => p.url));
+    add("token_bloat", "warning", t("botsim.finding.tokenBloat.title", { count: bloated.length }),
+      bloated[0].ai_view.bloat.issues.join("; "), [], bloated.map((p) => p.url));
   const low = views.filter((p) => p.ai_view.tokens.signal_ratio < 0.03 && p.ai_view.tokens.html_tokens > 5000);
   if (low.length) {
-    const t = low[0].ai_view.tokens;
-    add("low_signal", "info", "HTML token yükünün çok küçük kısmı okunabilir içerik",
-      `${t.html_tokens} HTML token'ının yalnızca ${t.text_tokens}'i metin (%${Math.round(t.signal_ratio * 1000) / 10}).`, [], low.map((p) => p.url));
+    const tokens = low[0].ai_view.tokens;
+    add("low_signal", "info", t("botsim.finding.lowSignal.title"),
+      t("botsim.finding.lowSignal.detail", {
+        htmlTokens: tokens.html_tokens, textTokens: tokens.text_tokens, pct: Math.round(tokens.signal_ratio * 1000) / 10,
+      }), [], low.map((p) => p.url));
   }
   const raw = views.filter((p) => !p.ai_view.tokens.compressed && p.ai_view.tokens.html_kb > 20);
   if (raw.length)
-    add("no_compression", "info", "HTML yanıtı sıkıştırılmadan gönderiliyor",
-      "gzip/brotli açın; büyük sayfalar AI getiricilerinde zaman aşımına uğrayabilir.", [], raw.map((p) => p.url));
+    add("no_compression", "info", t("botsim.finding.noCompression.title"), t("botsim.finding.noCompression.detail"), [], raw.map((p) => p.url));
   const large = views.filter((p) => p.ai_view.tokens.html_kb > 1024);
   if (large.length)
-    add("large_html", "warning", "HTML yanıtı 1 MB'tan büyük", "Büyük yanıtlar AI getiricilerinde kesilebilir veya bütçeyi tüketir.", [], large.map((p) => p.url));
+    add("large_html", "warning", t("botsim.finding.largeHtml.title"), t("botsim.finding.largeHtml.detail"), [], large.map((p) => p.url));
   const order = { critical: 0, warning: 1, info: 2 };
   return out.sort((a, b) => order[a.severity] - order[b.severity]);
 }
@@ -915,6 +948,8 @@ export type SimulateOptions = {
   /** Milliseconds between requests of one identity (keeps the simulation itself under rate limits). */
   delayMs?: number;
   now?: () => Date;
+  /** Language of the generated text (reasons, findings, fixes, caveats); default English. */
+  locale?: Locale;
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -928,17 +963,19 @@ function normalizeTarget(url: string): string {
 
 /** Fetches every URL as each AI bot (and once as a browser) and diagnoses the responses. */
 export async function simulateBots(urls: string[], opts: SimulateOptions = {}): Promise<BotSimulationReport> {
+  const locale = opts.locale ?? DEFAULT_LOCALE;
+  const t = serverT(locale);
   const targets = [...new Set(urls.map(normalizeTarget))];
   if (!targets.length) throw new HttpError(400, "At least one URL is required");
   const tokens = [...new Set(opts.bots?.length ? opts.bots : DEFAULT_BOTS)];
-  const unknown = tokens.filter((t) => !BOT_PROFILES[t]);
+  const unknown = tokens.filter((token) => !BOT_PROFILES[token]);
   if (unknown.length) throw new HttpError(400, `Unknown bot: ${unknown.join(", ")}`);
-  const profiles = tokens.map((t) => BOT_PROFILES[t]);
+  const profiles = tokens.map((token) => BOT_PROFILES[token]);
   const fetchImpl = opts.fetchImpl ?? ((u, init) => fetch(u, init));
   const timeoutMs = opts.timeoutMs ?? 15_000;
   const delay = opts.delayMs ?? 250;
   const get = async (url: string, headers: Record<string, string>) => {
-    const r = await fetchAs(fetchImpl, url, headers, timeoutMs);
+    const r = await fetchAs(fetchImpl, url, headers, timeoutMs, t);
     if (delay) await sleep(delay);
     return r;
   };
@@ -955,7 +992,7 @@ export async function simulateBots(urls: string[], opts: SimulateOptions = {}): 
   const pages: Page[] = [];
   for (const url of targets) {
     const base = await get(url, BROWSER_HEADERS);
-    const [baseOutcome, baseProt] = outcomeOf(base);
+    const [baseOutcome, baseProt] = outcomeOf(base, locale);
     const baseWords = base.body ? visibleWords(base.body) : 0;
     const baseline = {
       status: base.status, outcome: baseOutcome, final_url: base.finalUrl, words: baseWords, protection: baseProt,
@@ -964,7 +1001,7 @@ export async function simulateBots(urls: string[], opts: SimulateOptions = {}): 
     const fetched = await Promise.all(profiles.map((p) => get(url, botHeaders(p))));
     const results: BotResult[] = profiles.map((p, i) => {
       const res = fetched[i];
-      const [first, prot] = outcomeOf(res);
+      const [first, prot] = outcomeOf(res, locale);
       let outcome = first;
       const words = res.body ? visibleWords(res.body) : 0;
       const ref = baseOutcome === "ok" ? baseWords : 0;
@@ -977,12 +1014,13 @@ export async function simulateBots(urls: string[], opts: SimulateOptions = {}): 
         outcome, status: res.status, final_url: res.finalUrl, protection: prot, robots_allowed: robotsAllowed,
         silent_block: !!robotsAllowed && BLOCKING.has(outcome), general: !(baseOutcome in ACCESS_CREDIT) && !accessible,
         words, parity, ttfb_ms: res.ttfbMs, total_ms: res.totalMs, html_bytes: res.htmlBytes, wire_bytes: res.wireBytes,
-        content_encoding: res.contentEncoding, error: res.error, note: p.note ?? "",
+        content_encoding: res.contentEncoding, error: res.error,
+        note: p.robotsOnly ? t("botsim.note.robotsOnly", { token: p.token, vendor: p.vendor, crawler: p.crawler }) : "",
       };
-      return { ...r, accessible, reason: botReason(r), label: OUTCOME_LABELS[outcome] };
+      return { ...r, accessible, reason: botReason(r, t), label: t(`botsim.outcome.${outcome}`) };
     });
     const i = results.findIndex((r, k) => r.accessible && fetched[k].body);
-    const ai_view = i >= 0 ? analyzeView(fetched[i], results[i].token) : baseOutcome === "ok" && base.body ? analyzeView(base, "browser") : null;
+    const ai_view = i >= 0 ? analyzeView(fetched[i], results[i].token, locale) : baseOutcome === "ok" && base.body ? analyzeView(base, "browser", locale) : null;
     const access = results.length ? (100 * results.reduce((n, r) => n + (ACCESS_CREDIT[r.outcome] ?? 0), 0)) / results.length : 0;
     pages.push({ url, access_score: Math.round(access), baseline, results, ai_view });
   }
@@ -991,17 +1029,15 @@ export async function simulateBots(urls: string[], opts: SimulateOptions = {}): 
   const renderScore = mean(pages.flatMap((p) => (p.ai_view ? [p.ai_view.render.score] : [])));
   const tokenScore = mean(pages.flatMap((p) => (p.ai_view ? [p.ai_view.tokens.score] : [])));
   const score = Math.round(0.6 * accessScore + ((0.25 * (renderScore ?? 0) + 0.15 * (tokenScore ?? 0)) * accessScore) / 100);
-  const findings = findingsOf(pages);
+  const findings = findingsOf(pages, t);
   const blocked = blockedBots({ bots: tokens, pages });
   const vendors = vendorsOf(pages);
   const caveats: string[] = [];
-  if (blocked.length)
-    caveats.push("Simülasyon AI sağlayıcılarının IP aralıklarından değil, bu sunucudan yapıldı. WAF botları IP ile doğruluyorsa (örn. Cloudflare verified bots) gerçek botların sonucu farklı olabilir; WAF olay kayıtlarında (Security Events) doğrulayın.");
-  if (tokens.some((t) => t === "Google-Extended" || t === "Applebot-Extended"))
-    caveats.push("Google-Extended ve Applebot-Extended yalnızca robots.txt jetonudur; canlı istek Googlebot/Applebot kimliğiyle yapıldı.");
+  if (blocked.length) caveats.push(t("botsim.caveat.serverIp"));
+  if (tokens.some((token) => token === "Google-Extended" || token === "Applebot-Extended")) caveats.push(t("botsim.caveat.robotsOnly"));
   const fixes = buildFixes(
-    (blocked.length ? blocked : tokens).map((t) => BOT_PROFILES[t]), vendors,
-    findings.find((f) => f.code === "csr_shell")?.urls ?? [], findings.some((f) => f.code === "token_bloat"), !blocked.length,
+    (blocked.length ? blocked : tokens).map((token) => BOT_PROFILES[token]), vendors,
+    findings.find((f) => f.code === "csr_shell")?.urls ?? [], findings.some((f) => f.code === "token_bloat"), !blocked.length, locale,
   );
   const origin = new URL(targets[0]).origin;
   return botSimulationReportSchema.parse({

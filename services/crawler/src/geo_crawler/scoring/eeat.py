@@ -23,6 +23,9 @@ AUTHORITY_HOSTS = (
 SOCIAL_HOSTS = ("facebook.com", "instagram.com", "twitter.com", "x.com", "linkedin.com", "youtube.com",
                 "tiktok.com", "pinterest.com", "t.me", "wa.me", "whatsapp.com")
 
+# Deliberately bilingual (Turkish + English): these patterns *recognise* policy pages on Turkish web sites
+# (gizlilik/KVKK = privacy, kullanım koşulları = terms, iade/cayma = returns, kargo/teslimat = shipping).
+# Removing the Turkish alternatives would make Turkish sites look like they lack the pages.
 POLICY_PATTERNS: dict[str, re.Pattern[str]] = {
     "privacy": re.compile(r"gizlilik|kvkk|kişisel veri|kisisel-veri|aydınlatma|aydinlatma|privacy|çerez|cerez|cookie", re.I),
     "terms": re.compile(r"kullanım koşul|kullanim-kosul|kullanim-sartlari|kullanım şart|üyelik sözleşme|uyelik-sozlesme|"
@@ -30,6 +33,7 @@ POLICY_PATTERNS: dict[str, re.Pattern[str]] = {
     "returns": re.compile(r"iade|cayma|değişim|degisim|return|refund", re.I),
     "shipping": re.compile(r"kargo|teslimat|gönderim|gonderim|shipping|delivery", re.I),
 }
+# Turkish URL segments (yazar = author, ekip = team, uzman = expert) are kept next to the English ones.
 AUTHOR_URL_RE = re.compile(r"/(author|authors|yazar|yazarlar|ekip|ekibimiz|team|uzman|uzmanlar|people|profile)(/|$)", re.I)
 
 
@@ -132,7 +136,8 @@ def _price_conflicts(ctx: AuditContext) -> list[dict[str, Any]]:
 
 
 def analyze_eeat(ctx: AuditContext) -> Pillar:
-    pillar = Pillar("eeat", "Bilgi Güvenilirliği (E-E-A-T & Olgusal Tutarlılık)", 0.25)
+    t = ctx.t
+    pillar = Pillar("eeat", t("eeat.pillar.label"), 0.25)
     pages = ctx.pages
     kg = ctx.graph
     articles = ctx.pages_of(PageType.ARTICLE)
@@ -154,18 +159,19 @@ def analyze_eeat(ctx: AuditContext) -> Pillar:
     author_pages = sorted({u for u, _ in links if AUTHOR_URL_RE.search(urlsplit(u).path)})
     exp_pages = [p.url for p in pages if tx.count_phrases(p.text, tx.EXPERIENCE_MARKERS)]
     about = [p.url for p in ctx.pages_of(PageType.ABOUT)]
+    has = lambda flag: t("misc.word.present" if flag else "misc.word.absent")  # noqa: E731
     if articles:
         exp_s = (45 * ratio_score(len(with_author), len(articles)) / 100
                  + 25 * ratio_score(len(rich_authors), len(person_ids), 0) / 100
                  + 15 * bool(author_pages) + 15 * min(1.0, len(exp_pages) / max(1, len(articles) * 0.3)))
-        detail = (f"{len(with_author)}/{len(articles)} makalede yazar belirtilmiş; {len(rich_authors)}/{len(person_ids)} "
-                  f"yazarın unvan/profil/sameAs bilgisi var; yazar/ekip sayfası {'var' if author_pages else 'yok'}; "
-                  f"{len(exp_pages)} sayfada birinci el deneyim ifadesi")
+        detail = t("eeat.check.experience_expertise.detail_articles", with_author=len(with_author),
+                   articles=len(articles), rich=len(rich_authors), persons=len(person_ids),
+                   author_page=has(author_pages), count=len(exp_pages))
     else:
         exp_s = 40 * bool(about) + 30 * bool(author_pages) + 30 * min(1.0, len(exp_pages) / 2)
-        detail = (f"Makale yok — yayıncı kimliği değerlendirildi: hakkımızda sayfası {'var' if about else 'yok'}, "
-                  f"ekip/uzman sayfası {'var' if author_pages else 'yok'}, {len(exp_pages)} sayfada deneyim ifadesi")
-    pillar.add(Check("experience_expertise", "Deneyim & Uzmanlık", exp_s, 25, detail,
+        detail = t("eeat.check.experience_expertise.detail_no_articles", about=has(about),
+                   team=has(author_pages), count=len(exp_pages))
+    pillar.add(Check("experience_expertise", t("eeat.check.experience_expertise.label"), exp_s, 25, detail,
                      urls=sorted(u for u, a in authored.items() if not a)))
 
     # ---- 2) Authoritativeness
@@ -181,18 +187,18 @@ def analyze_eeat(ctx: AuditContext) -> Pillar:
     auth_s = (25 * min(1.0, len(same_as) / 2) + 10 * has_logo + 15 * bool(about) + 15 * bool(orgs)
               + 20 * min(1.0, len(auth_cite_pages) / max(1, len(content_pages) * 0.2))
               + 15 * (ratio_score(len(rated), len(products)) / 100 if products else min(1.0, len(cited_domains) / 5)))
-    detail = (f"Organization şeması {'var' if orgs else 'yok'} (sameAs: {len(same_as)}, logo: {'var' if has_logo else 'yok'}); "
-              f"hakkımızda {'var' if about else 'yok'}; {len(auth_cite_pages)}/{len(content_pages)} içerik sayfası otoriter "
-              f"kaynağa (.gov/.edu/Wikipedia/DOI...) atıf yapıyor; {len(cited_domains)} farklı dış alan adına bağlantı")
+    detail = t("eeat.check.authoritativeness.detail", org=has(orgs), same_as=len(same_as), logo=has(has_logo),
+               about=has(about), cited=len(auth_cite_pages), content=len(content_pages), count=len(cited_domains))
     if products:
-        detail += f"; {len(rated)}/{len(products)} üründe puan/yorum verisi"
-    pillar.add(Check("authoritativeness", "Otoriterlik", auth_s, 20, detail))
+        detail += t("eeat.check.authoritativeness.detail_products", rated=len(rated), products=len(products))
+    pillar.add(Check("authoritativeness", t("eeat.check.authoritativeness.label"), auth_s, 20, detail))
 
     # ---- 3) Trust
     sig = ctx.signals
     https = sig.https if sig else ctx.origin.startswith("https://")
     hsts = sig.hsts if sig else any("strict-transport-security" in p.headers for p in pages)
     contact = _contact(ctx, orgs)
+    # "iletisim" / "bize-ulasin" are the Turkish URL slugs for "contact" / "reach us" (Turkish sites)
     contact_page = [p.url for p in ctx.pages_of(PageType.CONTACT)] or \
         [u for u, a in links if re.search(r"iletisim|contact|bize-ulasin", u, re.I)][:1]
     policies = _find_policies(ctx)
@@ -205,15 +211,13 @@ def analyze_eeat(ctx: AuditContext) -> Pillar:
     trust_s = (20 * https + 5 * hsts + 10 * bool(contact_page) + 25 * contact_kinds / 3
                + 30 * ratio_score(len(needed) - len(missing_policies), len(needed)) / 100
                + 10 * (ratio_score(len(dated), len(articles)) / 100 if articles else 1))
-    names = {"privacy": "gizlilik/KVKK", "terms": "kullanım koşulları/mesafeli satış", "returns": "iade/cayma",
-             "shipping": "kargo/teslimat"}
-    detail = (f"SSL/HTTPS {'aktif' if https else 'YOK'}{' + HSTS' if hsts else ''}; iletişim sayfası "
-              f"{'var' if contact_page else 'yok'}; doğrulanabilir iletişim: {len(contact['phones'])} telefon, "
-              f"{len(contact['emails'])} e-posta, {len(contact['addresses'])} adres; politikalar: "
-              + ", ".join(f"{names[k]} {'✓' if policies[k] else '✗'}" for k in needed))
+    detail = t("eeat.check.trust.detail", https=t("misc.word.active" if https else "misc.word.missing_caps"),
+               hsts=" + HSTS" if hsts else "", contact_page=has(contact_page), phones=len(contact["phones"]),
+               emails=len(contact["emails"]), addresses=len(contact["addresses"]),
+               policies=", ".join(f"{t(f'eeat.policy.{k}')} {'✓' if policies[k] else '✗'}" for k in needed))
     if articles:
-        detail += f"; {len(dated)}/{len(articles)} makalede yayın/güncelleme tarihi"
-    pillar.add(Check("trust", "Güven (SSL, iletişim, politikalar)", trust_s, 30, detail))
+        detail += t("eeat.check.trust.detail_dated", dated=len(dated), articles=len(articles))
+    pillar.add(Check("trust", t("eeat.check.trust.label"), trust_s, 30, detail))
 
     # ---- 4) Factual consistency
     claims_by_page = {p.url: tx.claim_sentences(p.text) for p in pages}
@@ -227,12 +231,14 @@ def analyze_eeat(ctx: AuditContext) -> Pillar:
         reasons = []
         hype = tx.count_phrases(p.text, tx.HYPE_PHRASES)
         if sum(hype.values()) * 100 / n > 0.5 and sum(hype.values()) >= 3:
-            reasons.append("abartılı/pazarlama ifadeleri: " + ", ".join(f"'{k}'×{v}" for k, v in hype.most_common(3)))
+            reasons.append(t("eeat.check.factual_consistency.reason_hype",
+                             phrases=", ".join(f"'{k}'×{v}" for k, v in hype.most_common(3))))
         stuffed = tx.keyword_stuffing(toks, brand)
         if stuffed:
-            reasons.append(f"anahtar kelime doldurma: '{stuffed[0]}' metnin %{stuffed[1] * 100:.1f}'i")
+            reasons.append(t("eeat.check.factual_consistency.reason_stuffing", word=stuffed[0],
+                             pct=f"{stuffed[1] * 100:.1f}"))
         if p.text.count("!") * 100 / n > 1.5 and p.text.count("!") >= 8:
-            reasons.append(f"{p.text.count('!')} ünlem işareti")
+            reasons.append(t("eeat.check.factual_consistency.reason_exclamations", count=p.text.count("!")))
         if reasons:
             spam[p.url] = reasons
     conflicts = _price_conflicts(ctx)
@@ -241,17 +247,18 @@ def analyze_eeat(ctx: AuditContext) -> Pillar:
     fact_s = (50 * ratio_score(len(claim_pages) - len(unsourced), len(claim_pages)) / 100
               + 30 * ratio_score(len(pages) - len(spam), len(pages)) / 100
               + 20 * clamp(100 - 34 * inconsistent) / 100)
-    detail = (f"{sum(len(v) for v in claims_by_page.values())} doğrulanabilir iddia ({len(claim_pages)} sayfa); "
-              f"{len(unsourced)} sayfada iddialar kaynaksız; {len(spam)} sayfada spam/spekülatif sinyal")
+    fc = "eeat.check.factual_consistency"
+    detail = t(f"{fc}.detail", count=sum(len(v) for v in claims_by_page.values()), claim_pages=len(claim_pages),
+               unsourced=len(unsourced), spam=len(spam))
     if conflicts:
         c = conflicts[0]
-        detail += f"; çelişkili veri: '{c['product']}' farklı fiyatlarla ({', '.join(sorted(set(c['prices'].values())))})"
+        detail += t(f"{fc}.conflict", product=c["product"], prices=", ".join(sorted(set(c["prices"].values()))))
     if len(distinct_org_names) > 2:
-        detail += f"; {len(distinct_org_names)} farklı kurum adı kullanılıyor"
+        detail += t(f"{fc}.org_names", count=len(distinct_org_names))
     if spam:
         u = next(iter(spam))
-        detail += f" — örn. {u}: {spam[u][0]}"
-    pillar.add(Check("factual_consistency", "Olgusal tutarlılık (kaynak, spam, çelişki)", fact_s, 25, detail,
+        detail += t(f"{fc}.example", url=u, reason=spam[u][0])
+    pillar.add(Check("factual_consistency", t(f"{fc}.label"), fact_s, 25, detail,
                      urls=sorted(set(unsourced) | set(spam))))
 
     pillar.facts = {

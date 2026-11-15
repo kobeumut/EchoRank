@@ -11,7 +11,7 @@ Research basis
 
 Six page metrics (0-100 each)
 -----------------------------
-``statistics``         concrete figures per 100 words, minus vague quantity claims ("birçok", "most", ...)
+``statistics``         concrete figures per 100 words, minus vague quantity claims ("many", "most", ...)
 ``quotations``         attributed expert quotations (blockquote + inline "..." with a speaker)
 ``citations``          claim coverage by source references + authority of the linked domains (.gov/.edu/DOI)
 ``answer_capsules``    first passage under each H2/H3 is a self-contained 40-60 word direct answer
@@ -23,6 +23,12 @@ and sources are never invented: the rewrites insert explicit ``[PLACEHOLDER]`` t
 
     report = analyze_html(html, url="https://example.com/blog/x", page_type="article")
     report.score, report.metrics["statistics"].score, report.improvements[0].diff_markdown
+
+Two different languages are involved. ``lang`` ("en" | "tr", default "en") is the language of the *report*: metric
+labels, detail lines, improvement titles/rationales and the text CLI output (``geo_crawler.i18n`` catalogs).
+The *content* language (``content_lang`` hint, otherwise detected from the page text) selects the lexicons and the
+bracketed placeholders (``[NUMBER]`` / ``[SAYI]``...) that are written into the suggested rewrites, because those
+are inserted into the page itself and must match its language.
 """
 from __future__ import annotations
 
@@ -37,6 +43,7 @@ from typing import Any, Iterable
 from urllib.parse import urlsplit
 
 from ..blocks import ContentBlock, blocks_from_html, blocks_from_markdown
+from ..i18n import DEFAULT_LANG, Translator, get_translator, normalize_lang
 from ..keywords import STOPWORDS
 from ..models import PageData, PageType
 from . import text as tx
@@ -45,14 +52,15 @@ from .base import clamp
 AUTOGEO_VERSION = "1.0"
 METRIC_KEYS = ("statistics", "quotations", "citations", "answer_capsules", "authority_fluency", "keyword_stuffing")
 
-# label, published visibility gain (%) of fully applying the strategy, ActionItem category, effort
+# published visibility gain (%) of fully applying the strategy, ActionItem category, effort
+# (the display label of each metric is the catalog message ``autogeo.metric.<key>.label``)
 METRIC_INFO: dict[str, dict[str, Any]] = {
-    "statistics": {"label": "İstatistik ve sayısal veri", "gain": 37.0, "category": "content", "effort": "medium"},
-    "quotations": {"label": "Uzman alıntısı", "gain": 41.0, "category": "authority", "effort": "medium"},
-    "citations": {"label": "Yetkili kaynak gösterimi", "gain": 35.0, "category": "authority", "effort": "medium"},
-    "answer_capsules": {"label": "Yanıt kapsülü (40-60 kelime)", "gain": 20.0, "category": "content", "effort": "low"},
-    "authority_fluency": {"label": "Otoriter ton ve akıcılık", "gain": 25.0, "category": "content", "effort": "low"},
-    "keyword_stuffing": {"label": "Anahtar kelime doldurma", "gain": 25.0, "category": "content", "effort": "low"},
+    "statistics": {"gain": 37.0, "category": "content", "effort": "medium"},
+    "quotations": {"gain": 41.0, "category": "authority", "effort": "medium"},
+    "citations": {"gain": 35.0, "category": "authority", "effort": "medium"},
+    "answer_capsules": {"gain": 20.0, "category": "content", "effort": "low"},
+    "authority_fluency": {"gain": 25.0, "category": "content", "effort": "low"},
+    "keyword_stuffing": {"gain": 25.0, "category": "content", "effort": "low"},
 }
 LOW_RANK_CITATION_GAIN = 115.1  # Cite Sources gain for pages ranked 5th or lower
 
@@ -72,6 +80,9 @@ _PROFILE = {"article": "article", "blog": "article", "faq": "article", "product"
 MAX_IMPROVEMENTS_PER_METRIC = 3
 
 # ---------------------------------------------------------------- lexicons
+# Content-language data (NOT report text): these lexicons recognise weak wording in the analysed page and the
+# placeholders are written into the suggested rewrites, so they exist per content language. The Turkish ("tr")
+# entries are deliberately kept in Turkish — they let the analyzer work on Turkish web pages.
 
 VAGUE_TERMS: dict[str, dict[str, str]] = {
     # vague phrase -> measurable placeholder
@@ -108,6 +119,8 @@ HEDGES: dict[str, dict[str, str]] = {
 HYPE_REPLACEMENT = {"tr": "[ölçülebilir üstünlük: ör. %XX daha hızlı]", "en": "[measurable advantage: e.g. XX% faster]"}
 _HYPE_REWRITE = ("en iyi", "rakipsiz", "mucize", "mucizevi", "inanılmaz", "tartışmasız", "efsane", "best ever",
                  "number one", "miracle", "unbelievable", "world-class", "best-in-class", "game-changer")
+# Attribution verbs, expert titles, citation patterns and question words in Turkish *and* English (content-language data:
+# they recognise quotes / citations / question headings on Turkish pages; "göre" = "according to").
 QUOTE_VERBS = re.compile(
     r"(?<!\w)(diyor|dedi|diyerek|belirtiyor|belirtti|açıkladı|açıklıyor|ifade etti|ifade ediyor|vurguluyor|vurguladı|"
     r"aktarıyor|söylüyor|söyledi|göre|said|says|according to|notes|noted|explains|explained|stated|states|"
@@ -258,6 +271,7 @@ class AutoGeoSiteReport:
 
 # ---------------------------------------------------------------- helpers
 
+# sentence boundary: the next sentence starts with an upper-case letter (incl. the Turkish Ç Ğ İ Ö Ş Ü), digit or quote
 _SPLIT = re.compile(r"(?<=[.!?…])\s+(?=[\"“(\[]?[A-ZÇĞİÖŞÜ0-9])")
 
 
@@ -266,6 +280,10 @@ def split_sentences(text: str) -> list[str]:
 
 
 def detect_language(text: str, hint: str = "") -> str:
+    """Content language of a page: "tr" or "en" (the ``<html lang>`` hint wins, else a stop-word/letter heuristic).
+
+    The Turkish branch counts Turkish-only letters and the most frequent Turkish function words — this is
+    deliberate language data, it makes the analyzer work on Turkish pages."""
     if hint[:2].lower() in ("tr", "en"):
         return hint[:2].lower()
     low = f" {text.lower()[:20000]} "
@@ -308,6 +326,7 @@ def authority_tier(url: str) -> int:
 
 
 def _capitalize(s: str, lang: str = "en") -> str:
+    """Upper-case the first letter; ``lang`` is the *content* language (Turkish "i" becomes dotted "İ")."""
     s = s.lstrip()
     if not s:
         return s
@@ -367,14 +386,16 @@ def is_cited(sentence: str) -> bool:
 
 class _Page:
     def __init__(self, blocks: list[ContentBlock], url: str, page_type: str, lang_hint: str, title: str,
-                 serp_rank: int | None, brand_terms: Iterable[str]):
+                 serp_rank: int | None, brand_terms: Iterable[str], lang: str = DEFAULT_LANG):
+        self.lang = normalize_lang(lang)  # report language (labels, details, titles, rationales)
+        self.t: Translator = get_translator(self.lang)
         self.blocks = blocks
         self.url = url
         self.page_type = page_type
         self.title = title
         self.serp_rank = serp_rank
         self.text = " ".join(b.text for b in blocks if b.kind != "code")
-        self.lang = detect_language(self.text, lang_hint)
+        self.content_lang = detect_language(self.text, lang_hint)  # language of the page itself
         self.tokens = tx.words(self.text)
         self.n = len(self.tokens)
         self.sentences = [s for b in blocks if b.kind in ("paragraph", "blockquote", "list")
@@ -387,7 +408,9 @@ class _Page:
         self.cur: dict[int, str] = {}
         self.rewrites: dict[int, Improvement] = {}
         h1 = next((b.text for b in blocks if b.kind == "heading" and b.level == 1), "")
-        self.topic = h1 or title or next((b.text for b in blocks if b.kind == "heading"), "") or "konu"
+        # "konu" = Turkish for "topic": the fallback is written into the suggested rewrites (content language)
+        self.topic = h1 or title or next((b.text for b in blocks if b.kind == "heading"), "") \
+            or ("konu" if self.content_lang == "tr" else "topic")
 
     # -- improvement plumbing
     def text_of(self, idx: int) -> str:
@@ -408,8 +431,8 @@ class _Page:
         if b.kind == "list":
             nb = ContentBlock("paragraph", new_text)
         before_md, before_html = b.to_markdown(), b.to_html()
-        after_md = _render_tokens(nb.to_markdown(), self.lang, False)
-        after_html = _render_tokens(nb.to_html(), self.lang, True)
+        after_md = _render_tokens(nb.to_markdown(), self.content_lang, False)
+        after_html = _render_tokens(nb.to_html(), self.content_lang, True)
         diff_md = _udiff(before_md, after_md, self.path)
         diff_html = _udiff(before_html, after_html, self.path.replace(".md", ".html"))
         imp = self.rewrites.get(idx)
@@ -466,7 +489,7 @@ class _Page:
     def statistics(self) -> tuple[float, str, dict[str, Any]]:
         facts = numeric_facts(self.text)
         per100 = len(facts) * 100 / max(self.n, 1)
-        vague_terms = VAGUE_TERMS[self.lang]
+        vague_terms = VAGUE_TERMS[self.content_lang]
         vague = [s for s in self.sentences if any(_has(s, t) for t in vague_terms) and not numeric_facts(s)]
         vague_share = len(vague) / max(len(self.sentences), 1)
         tables = sum(1 for b in self.blocks if b.kind == "table")
@@ -474,8 +497,8 @@ class _Page:
         score = clamp(0.75 * density + 0.25 * (100 - min(100, vague_share * 400)) + (8 if tables else 0))
         if self.n < 40:
             score = min(score, 50.0)
-        detail = (f"{len(facts)} sayısal veri ({per100:.2f}/100 kelime, hedef ≥1.5); {len(vague)} muğlak nicelik "
-                  f"ifadesi; {tables} tablo.")
+        detail = self.t("autogeo.metric.statistics.detail", facts=len(facts), per100=f"{per100:.2f}",
+                        vague=len(vague), tables=tables)
         return score, detail, {"numeric_facts": len(facts), "per_100_words": round(per100, 2),
                                "vague_sentences": vague[:5], "vague_count": len(vague), "tables": tables}
 
@@ -483,7 +506,7 @@ class _Page:
         if score >= 85:
             return
         g = self.gain("statistics", score)
-        terms = sorted(VAGUE_TERMS[self.lang].items(), key=lambda kv: -len(kv[0]))
+        terms = sorted(VAGUE_TERMS[self.content_lang].items(), key=lambda kv: -len(kv[0]))
         made = 0
         for i, b in self.paragraphs():
             if made >= MAX_IMPROVEMENTS_PER_METRIC:
@@ -495,7 +518,7 @@ class _Page:
                     for term, repl in terms:
                         pat = _phrase_re(term)
                         if pat.search(new):
-                            new = pat.sub(lambda m, r=repl: r if not m.group(0)[0].isupper() else _capitalize(r, self.lang),
+                            new = pat.sub(lambda m, r=repl: r if not m.group(0)[0].isupper() else _capitalize(r, self.content_lang),
                                           new, count=1)
                     if new != s and not is_cited(new):
                         new = _append_cite(new)
@@ -503,28 +526,25 @@ class _Page:
                 out.append(new)
             if changed:
                 self.rewrite("statistics", i, " ".join(out),
-                             "Muğlak nicelikleri somut veriye çevirin" if self.lang == "tr"
-                             else "Replace vague quantities with concrete figures",
-                             "GEO (KDD 2024): Statistics Addition görünürlüğü ~%37 artırır. Köşeli parantezli "
-                             "alanları doğrulanmış rakam ve kaynakla doldurun.", g / max(1, facts["vague_count"]))
+                             self.t("autogeo.improve.statistics.title"),
+                             self.t("autogeo.improve.statistics.rationale"), g / max(1, facts["vague_count"]))
                 made += 1
         if facts["per_100_words"] < 1.0 and self.n >= 80:
             idx = self.intro_index()
             topic = self.topic
-            if self.lang == "tr":
+            # the table is inserted into the page, so its text follows the content language
+            if self.content_lang == "tr":
                 rows = [["Metrik", "Değer", "Kaynak"], [f"{topic} — temel ölçüt", "[SAYI / %ORAN]", "[Kaynak, Yıl]"],
                         ["Karşılaştırma / sektör ortalaması", "[SAYI / %ORAN]", "[Kaynak, Yıl]"],
                         ["Zaman içindeki değişim", "[YIL]-[YIL]: %[ORAN]", "[Kaynak, Yıl]"]]
-                title = "Sayfaya 'Temel rakamlar' tablosu ekleyin"
             else:
                 rows = [["Metric", "Value", "Source"], [f"{topic} — key metric", "[NUMBER / X%]", "[Source, Year]"],
                         ["Benchmark / industry average", "[NUMBER / X%]", "[Source, Year]"],
                         ["Change over time", "[YEAR]-[YEAR]: [X]%", "[Source, Year]"]]
-                title = "Add a 'Key figures' table"
             tbl = ContentBlock("table", "", rows=rows)
-            self.insert("statistics", idx, tbl.to_markdown(), tbl.to_html(), title,
-                        "Sayfada 100 kelimede 1'den az somut veri var; LLM'ler sayısal, doğrulanabilir pasajları "
-                        "daha sık alıntılar.", g * 0.6)
+            self.insert("statistics", idx, tbl.to_markdown(), tbl.to_html(),
+                        self.t("autogeo.improve.statistics.table.title"),
+                        self.t("autogeo.improve.statistics.table.rationale"), g * 0.6)
 
     # -- 2. quotations -------------------------------------------------
     def quotations(self) -> tuple[float, str, dict[str, Any]]:
@@ -546,8 +566,8 @@ class _Page:
         target = max(1.0, self.n / 600)
         credit = attributed + 0.4 * unattributed
         score = clamp(100 * credit / target)
-        detail = (f"{attributed} kaynaklı uzman alıntısı, {unattributed} kaynaksız alıntı "
-                  f"(hedef ≥{target:.1f}, ~600 kelimede 1).")
+        detail = self.t("autogeo.metric.quotations.detail", attributed=attributed, unattributed=unattributed,
+                        target=f"{target:.1f}")
         return score, detail, {"attributed": attributed, "unattributed": unattributed, "target": round(target, 1),
                                "unattributed_blocks": unattr_idx}
 
@@ -555,14 +575,12 @@ class _Page:
         if score >= 80:
             return
         g = self.gain("quotations", score)
-        ph = PLACEHOLDER[self.lang]
+        ph = PLACEHOLDER[self.content_lang]
         for i in facts["unattributed_blocks"][:MAX_IMPROVEMENTS_PER_METRIC]:
             b = self.blocks[i]
-            self.rewrite("quotations", i, b.text, cite=ph["speaker"], title=
-                         ("Alıntıya konuşmacı ve unvan ekleyin" if self.lang == "tr"
-                                                                      else "Attribute the quotation"),
-                         rationale="Kaynaksız alıntı LLM'ler için doğrulanamaz; ad, unvan ve kurum alıntıyı otorite sinyaline "
-                         "çevirir.", gain=g * 0.5)
+            self.rewrite("quotations", i, b.text, cite=ph["speaker"],
+                         title=self.t("autogeo.improve.quotations.attribute.title"),
+                         rationale=self.t("autogeo.improve.quotations.attribute.rationale"), gain=g * 0.5)
         if facts["attributed"] + facts["unattributed"] < facts["target"]:
             # after the first H2 section's first paragraph (or the intro)
             idx = self.intro_index()
@@ -572,15 +590,14 @@ class _Page:
                     if nxt is not None and self.blocks[nxt].kind == "paragraph":
                         idx = nxt
                     break
+            # placeholder quotation text is written into the page, so it follows the content language
             quote = (f"{ph['quote']} — {self.topic} konusunda somut bir deneyim, veri ya da öneri."
-                     if self.lang == "tr" else f"{ph['quote']} — a concrete insight, figure or recommendation "
+                     if self.content_lang == "tr" else f"{ph['quote']} — a concrete insight, figure or recommendation "
                      f"about {self.topic}.")
             nb = ContentBlock("blockquote", quote, cite=ph["speaker"])
             self.insert("quotations", idx, nb.to_markdown(), nb.to_html(),
-                        "Unvanlı bir uzmandan doğrudan alıntı ekleyin" if self.lang == "tr"
-                        else "Add a direct quotation from a credentialed expert",
-                        "GEO (KDD 2024): Quotation Addition en yüksek kazanımı (~%41) sağlayan stratejidir. "
-                        "Gerçek bir kişiden, izinli ve doğrulanabilir alıntı kullanın.", g)
+                        self.t("autogeo.improve.quotations.insert.title"),
+                        self.t("autogeo.improve.quotations.insert.rationale"), g)
 
     # -- 3. citations --------------------------------------------------
     def citations(self) -> tuple[float, str, dict[str, Any]]:
@@ -614,8 +631,8 @@ class _Page:
         score = clamp(0.55 * coverage + 0.45 * authority)
         if claims == 0 and not ext_links:
             score = min(score, 45.0)
-        detail = (f"{claims} doğrulanabilir iddianın {cited} tanesi kaynaklı; {len(ext_links)} dış kaynak "
-                  f"(akademik/resmi {tiers[1]}, sektör {tiers[2]}, diğer {tiers[3]}).")
+        detail = self.t("autogeo.metric.citations.detail", claims=claims, cited=cited, external=len(ext_links),
+                        tier1=tiers[1], tier2=tiers[2], tier3=tiers[3])
         return score, detail, {"claims": claims, "cited_claims": cited, "external_links": len(ext_links),
                                "tier1": tiers[1], "tier2": tiers[2], "tier3": tiers[3],
                                "references_section": refs_section, "uncited": uncited[:10]}
@@ -632,17 +649,16 @@ class _Page:
             out = [_append_cite(s) if is_claim(s) and not is_cited(s) else s
                    for s in split_sentences(self.text_of(i))]
             self.rewrite("citations", i, " ".join(out),
-                         "İddialara yetkili kaynak bağlantısı ekleyin" if self.lang == "tr"
-                         else "Cite authoritative sources for claims",
-                         "GEO (KDD 2024): Cite Sources ~%30-40 kazanım; SERP'te 5. sıra ve altındaki sayfalarda "
-                         "+%115.1. Tercihen .gov/.edu, DOI veya sektör raporu bağlayın.", g / max(1, len(blocks)))
+                         self.t("autogeo.improve.citations.title"),
+                         self.t("autogeo.improve.citations.rationale"), g / max(1, len(blocks)))
             made += 1
         if facts["external_links"] == 0 and self.n >= 150:
-            ph = PLACEHOLDER[self.lang]
-            heading = "Kaynaklar" if self.lang == "tr" else "Sources"
+            ph = PLACEHOLDER[self.content_lang]
+            # the "Sources" section is inserted into the page, so it follows the content language
+            heading = "Kaynaklar" if self.content_lang == "tr" else "Sources"
             items = [f"[{ph['cite']} — resmi istatistik/düzenleyici kurum]({ph['cite_url']})",
                      f"[{ph['cite']} — hakemli akademik çalışma (DOI)]({ph['cite_url']})",
-                     f"[{ph['cite']} — sektör raporu]({ph['cite_url']})"] if self.lang == "tr" else [
+                     f"[{ph['cite']} — sektör raporu]({ph['cite_url']})"] if self.content_lang == "tr" else [
                      f"[{ph['cite']} — official statistics / regulator]({ph['cite_url']})",
                      f"[{ph['cite']} — peer-reviewed study (DOI)]({ph['cite_url']})",
                      f"[{ph['cite']} — industry report]({ph['cite_url']})"]
@@ -650,8 +666,8 @@ class _Page:
             labels = [re.sub(r"^\[|\]\(.*$", "", it) for it in items]
             html_items = "\n".join(f'  <li><a href="{ph["cite_url"]}">{lb}</a></li>' for lb in labels)
             self.insert("citations", len(self.blocks) - 1, md, f"<h2>{heading}</h2>\n<ol>\n{html_items}\n</ol>",
-                        "Sayfa sonuna 'Kaynaklar' bölümü ekleyin" if self.lang == "tr"
-                        else "Add a 'Sources' section", "Sayfada hiç dış kaynak bağlantısı yok.", g * 0.5)
+                        self.t("autogeo.improve.citations.sources.title"),
+                        self.t("autogeo.improve.citations.sources.rationale"), g * 0.5)
 
     # -- 4. answer capsules --------------------------------------------
     def sections(self) -> list[tuple[int, ContentBlock, list[int]]]:
@@ -669,23 +685,25 @@ class _Page:
         return out
 
     def capsule_quality(self, heading: str, block: ContentBlock | None) -> tuple[float, str]:
+        t = self.t
         if block is None:
-            return 0.0, "başlığın altında metin yok"
+            return 0.0, t("autogeo.capsule.no_text")
         if block.kind == "list":
-            return 0.3, "başlığın hemen altında paragraf yerine liste var"
+            return 0.3, t("autogeo.capsule.list_instead_of_paragraph")
         if block.kind not in ("paragraph", "blockquote"):
-            return 0.1, f"başlığın altında {block.kind} var"
+            return 0.1, t("autogeo.capsule.other_block", kind=block.kind)
         w = block.word_count
         q = 1.0 if 40 <= w <= 60 else 0.6 if 30 <= w <= 80 else 0.3 if 20 <= w <= 120 else 0.1
-        why = f"{w} kelime" + ("" if q == 1.0 else " (hedef 40-60)")
-        if block.text.lower().startswith(DANGLING_START[self.lang]):
+        why = t("autogeo.capsule.words", count=w) + ("" if q == 1.0 else t("autogeo.capsule.target_suffix"))
+        # DANGLING_START holds the content language's context-dependent sentence openers (Turkish: "bu ", "ayrıca"...)
+        if block.text.lower().startswith(DANGLING_START[self.content_lang]):
             q *= 0.7
-            why += ", bağlama muhtaç açılış"
+            why += t("autogeo.capsule.dangling_opening")
         if _QUESTION_RE.search(heading.lower()):
-            keys = {t for t in tx.words(_subject(heading)) if t not in STOPWORDS and len(t) > 2}
+            keys = {tok for tok in tx.words(_subject(heading)) if tok not in STOPWORDS and len(tok) > 2}
             if keys and not keys & set(tx.words(block.text)):
                 q *= 0.8
-                why += ", soru başlığının terimini tekrar etmiyor"
+                why += t("autogeo.capsule.no_question_term")
         return q, why
 
     def answer_capsules(self) -> tuple[float, str, dict[str, Any]]:
@@ -698,7 +716,7 @@ class _Page:
         if rows:
             score = 100 * sum(r["quality"] for r in rows) / len(rows)
             good = sum(1 for r in rows if r["quality"] >= 0.99)
-            detail = f"{len(rows)} H2/H3 bölümünün {good} tanesi 40-60 kelimelik doğrudan yanıtla açılıyor."
+            detail = self.t("autogeo.metric.answer_capsules.detail", count=len(rows), good=good)
         else:
             idx = self.intro_index()
             first = self.blocks[idx] if 0 <= idx < len(self.blocks) and self.blocks[idx].kind == "paragraph" else None
@@ -706,7 +724,7 @@ class _Page:
             score = 100 * q
             if self.n > 300:
                 score = min(score, 50.0)
-            detail = f"H2/H3 alt başlığı yok; giriş paragrafı: {why}."
+            detail = self.t("autogeo.metric.answer_capsules.detail_intro", why=why)
             rows.append({"heading": self.topic, "block_index": idx, "quality": round(q, 2), "reason": why,
                          "intro": True})
         return clamp(score), detail, {"sections": rows, "section_count": len(secs)}
@@ -730,10 +748,11 @@ class _Page:
                 continue
             if not re.search(r"[.!?…]$", s):
                 s += "."
-            if not out and s.lower().startswith(DANGLING_START[self.lang]):
+            if not out and s.lower().startswith(DANGLING_START[self.content_lang]):
                 first, rest = s.split(" ", 1) if " " in s else (s, "")
-                s = (f"{_capitalize(subject, self.lang)} {rest}" if first.lower() in ("bu", "this", "it", "o", "şu", "that")
-                     else f"{_capitalize(subject, self.lang)}: {s}")
+                # "bu" / "o" / "şu" are the Turkish demonstratives (this / it / that), kept for Turkish content
+                s = (f"{_capitalize(subject, self.content_lang)} {rest}" if first.lower() in ("bu", "this", "it", "o", "şu", "that")
+                     else f"{_capitalize(subject, self.content_lang)}: {s}")
             n_out = sum(len(x.split()) for x in out)
             if n_out + len(s.split()) <= 60:
                 out.append(s)
@@ -747,7 +766,7 @@ class _Page:
                 break
         capsule = " ".join(out)
         if len(capsule.split()) < 40:
-            fill = PLACEHOLDER[self.lang]["fill"]
+            fill = PLACEHOLDER[self.content_lang]["fill"]
             capsule = (capsule + " " if capsule else f"{subject}: ") + fill
         return _tidy(capsule)
 
@@ -771,10 +790,8 @@ class _Page:
             capsule = self.build_capsule(r["heading"], body)
             nb = ContentBlock("paragraph", capsule)
             first = self.blocks[body[0]] if body else None
-            title = (f"'{r['heading'][:60]}' için yanıt kapsülü" if self.lang == "tr"
-                     else f"Answer capsule for '{r['heading'][:60]}'")
-            why = (f"{r['reason']}. AutoGEO (ICLR 2026): başlığın hemen altında kendi başına anlamlı 40-60 kelimelik "
-                   f"doğrudan yanıt, LLM özetleyicilerinin pasajı alıntılama olasılığını artırır.")
+            title = self.t("autogeo.improve.capsule.title", heading=r["heading"][:60])
+            why = self.t("autogeo.improve.capsule.rationale", reason=r["reason"])
             if first is not None and first.kind == "paragraph" and first.word_count < 40 and not r.get("intro"):
                 self.rewrite("answer_capsules", body[0], capsule, title, why, g / len(weak))
             elif r.get("intro") and first is not None and first.kind == "paragraph" and i == body[0]:
@@ -785,37 +802,38 @@ class _Page:
 
     # -- 5. authority & fluency ----------------------------------------
     def authority_fluency(self) -> tuple[float, str, dict[str, Any]]:
-        hedges = HEDGES[self.lang]
+        hedges = HEDGES[self.content_lang]
         sents = self.sentences or [self.text]
         hedge_s = [s for s in sents if any(_has(s, h) for h in hedges)]
-        passive = [s for s in sents if _EN_PASSIVE.search(s)] if self.lang == "en" else \
+        # passive voice: English auxiliaries + participle, or the Turkish "-mektedir / -maktadır" formal passive
+        passive = [s for s in sents if _EN_PASSIVE.search(s)] if self.content_lang == "en" else \
             [s for s in sents if re.search(r"\w+(?:ıl|il|ul|ül|ın|in|un|ün)(?:abil|ebil)?(?:mektedir|maktadır)\b", s)]
         long_s = [s for s in sents if len(s.split()) > 35]
         filler = sum(tx.count_phrases(self.text, tx.FILLER_PHRASES).values())
         hype = sum(tx.count_phrases(self.text, tx.HYPE_PHRASES).values())
         n = max(len(sents), 1)
         hedge_pen = min(35.0, len(hedge_s) / n * 150)
-        passive_pen = min(20.0, max(0.0, len(passive) / n - (0.25 if self.lang == "tr" else 0.15)) * 100)
+        passive_pen = min(20.0, max(0.0, len(passive) / n - (0.25 if self.content_lang == "tr" else 0.15)) * 100)
         filler_pen = min(20.0, filler * 100 / max(self.n, 1) * 40)
         hype_pen = min(15.0, hype * 5.0)
         long_pen = min(15.0, max(0.0, len(long_s) / n - 0.1) * 75)
         score = clamp(100 - hedge_pen - passive_pen - filler_pen - hype_pen - long_pen)
-        detail = (f"{len(hedge_s)} çekingen/kaçamak cümle, {filler} dolgu ifadesi, {hype} abartı ifadesi, "
-                  f"{len(passive)} edilgen ve {len(long_s)} uzun (>35 kelime) cümle.")
+        detail = self.t("autogeo.metric.authority_fluency.detail", hedged=len(hedge_s), filler=filler, hype=hype,
+                        passive=len(passive), long=len(long_s))
         return score, detail, {"hedged": len(hedge_s), "filler": filler, "hype": hype, "passive": len(passive),
                                "long_sentences": len(long_s), "examples": (hedge_s + long_s)[:5]}
 
     def _strengthen(self, s: str) -> str:
         new = s
-        for h, repl in sorted(HEDGES[self.lang].items(), key=lambda kv: -len(kv[0])):
+        for h, repl in sorted(HEDGES[self.content_lang].items(), key=lambda kv: -len(kv[0])):
             new = _phrase_re(h).sub(repl, new)
         for h in _HYPE_REWRITE:  # before filler removal: "game-changer" is both, and must not leave a hole
-            new = _phrase_re(h).sub(HYPE_REPLACEMENT[self.lang], new)
+            new = _phrase_re(h).sub(HYPE_REPLACEMENT[self.content_lang], new)
         for f in sorted(tx.FILLER_PHRASES, key=len, reverse=True):
             new = re.sub(rf"(?<!\w){re.escape(f)}(?!\w)\s*,?", "", new, flags=re.I)
         new = _tidy(new)
         if new != s.strip():
-            new = _capitalize(new, self.lang)
+            new = _capitalize(new, self.content_lang)
         return new
 
     def improve_authority_fluency(self, score: float, facts: dict[str, Any]) -> None:
@@ -831,20 +849,18 @@ class _Page:
             long_s = [s for s in split_sentences(new) if len(s.split()) > 35]
             if new.strip() == cur.strip():
                 continue
-            note = " Uzun cümleleri ikiye bölün." if long_s else ""
+            note = self.t("autogeo.improve.authority_fluency.split_note") if long_s else ""
             self.rewrite("authority_fluency", i, new,
-                         "Çekingen ve dolgu ifadeleri kaldırın" if self.lang == "tr"
-                         else "Remove hedges and filler",
-                         "GEO (KDD 2024): Authoritative/Fluency optimizasyonu ~%25 kazanım. Net, nesnel ve ölçülebilir "
-                         "anlatım kullanın." + note, g / MAX_IMPROVEMENTS_PER_METRIC)
+                         self.t("autogeo.improve.authority_fluency.title"),
+                         self.t("autogeo.improve.authority_fluency.rationale") + note, g / MAX_IMPROVEMENTS_PER_METRIC)
             made += 1
 
     # -- 6. keyword stuffing -------------------------------------------
     def keyword_stuffing(self) -> tuple[float, str, dict[str, Any]]:
         content = [t for t in self.tokens if t not in STOPWORDS and len(t) > 2 and t not in self.brand]
         if self.n < 60 or not content:
-            return 100.0, "Ölçüm için yeterli metin yok (≥60 kelime).", {"top_term": None, "share": 0.0,
-                                                                          "risk": "none"}
+            return 100.0, self.t("autogeo.metric.keyword_stuffing.detail_short"), {"top_term": None, "share": 0.0,
+                                                                                    "risk": "none"}
         word, cnt = Counter(content).most_common(1)[0]
         share = cnt / self.n
         bigrams = Counter(f"{a} {b}" for a, b in zip(self.tokens, self.tokens[1:])
@@ -860,8 +876,8 @@ class _Page:
         risk = "none" if score >= 70 else "-10%" if score >= 40 else "-25%"
         # the repeated phrase is the real culprit when it carries the top word and is nearly as excessive
         term = top_bi if top_bi and (s_bi < s_uni or (word in top_bi.split() and s_bi <= s_uni + 15)) else word
-        detail = (f"En sık terim '{word}' metnin %{share * 100:.1f}'i (eşik %4); en sık ifade '{top_bi}' "
-                  f"{bi_cnt} kez. Görünürlük kaybı riski: {risk}.")
+        detail = self.t("autogeo.metric.keyword_stuffing.detail", word=word, pct=f"{share * 100:.1f}", phrase=top_bi,
+                        count=bi_cnt, risk=self.t("autogeo.risk.none") if risk == "none" else risk)
         return score, detail, {"top_term": term, "top_word": word, "share": round(share, 4), "top_phrase": top_bi,
                                "phrase_count": bi_cnt, "risk": risk}
 
@@ -883,16 +899,15 @@ class _Page:
             def repl(m: re.Match[str]) -> str:
                 nonlocal seen
                 seen += 1
-                return m.group(0) if seen == 1 else PLACEHOLDER[self.lang]["synonym"]
+                return m.group(0) if seen == 1 else PLACEHOLDER[self.content_lang]["synonym"]
 
             new = pat.sub(repl, cur)
-            syn = re.escape(PLACEHOLDER[self.lang]["synonym"])
-            new = re.sub(rf"{syn}(?:\s+{syn})+", PLACEHOLDER[self.lang]["synonym"], new)
+            syn = re.escape(PLACEHOLDER[self.content_lang]["synonym"])
+            new = re.sub(rf"{syn}(?:\s+{syn})+", PLACEHOLDER[self.content_lang]["synonym"], new)
             self.rewrite("keyword_stuffing", i, new,
-                         f"'{term}' tekrarını azaltın" if self.lang == "tr" else f"Reduce repetition of '{term}'",
-                         f"'{term}' bu paragrafta {hits} kez geçiyor. LLM semantik filtreleri aşırı tekrarı spam olarak "
-                         f"değerlendirir (GEO: Keyword Stuffing -%10..-%25 risk). İlk kullanımı koruyun, diğerlerini eş "
-                         f"anlamlı ya da zamirle değiştirin.", g / MAX_IMPROVEMENTS_PER_METRIC)
+                         self.t("autogeo.improve.keyword_stuffing.title", term=term),
+                         self.t("autogeo.improve.keyword_stuffing.rationale", term=term, count=hits),
+                         g / MAX_IMPROVEMENTS_PER_METRIC)
             made += 1
 
     # -- page-level suggestions ----------------------------------------
@@ -910,7 +925,7 @@ class _Page:
         heads = [b.text for b in self.blocks if b.kind == "heading" and b.level in (2, 3)][:6]
         items = next((b.items for b in self.blocks if b.kind == "list" and len(b.items) >= 3), [])[:6]
         criteria = heads if len(heads) >= 2 else [i.split(":")[0][:60] for i in items]
-        tr = self.lang == "tr"
+        tr = self.content_lang == "tr"  # the table is inserted into the page: headers/cells follow the content language
         if self.page_type in ("product", "category"):
             header = ["Özellik", self.topic[:60], "Alternatif A", "Alternatif B"] if tr else \
                 ["Feature", self.topic[:60], "Alternative A", "Alternative B"]
@@ -941,17 +956,21 @@ def _page_type_str(pt: PageType | str | None) -> str:
 
 
 def analyze_blocks(blocks: list[ContentBlock | dict[str, Any]], url: str = "", page_type: PageType | str | None = None,
-                   lang: str = "", title: str = "", serp_rank: int | None = None,
-                   brand_terms: Iterable[str] = ()) -> AutoGeoReport:
-    """Score a page's content blocks on the six AutoGEO metrics and generate block-level improvements."""
+                   content_lang: str = "", title: str = "", serp_rank: int | None = None,
+                   brand_terms: Iterable[str] = (), *, lang: str = DEFAULT_LANG) -> AutoGeoReport:
+    """Score a page's content blocks on the six AutoGEO metrics and generate block-level improvements.
+
+    ``content_lang``: language hint of the page itself ("tr" | "en"; detected from the text when empty).
+    ``lang``: language of the report text (metric labels/details, improvement titles and rationales)."""
     bl = [b if isinstance(b, ContentBlock) else ContentBlock.from_dict(b) for b in blocks]
     pt = _page_type_str(page_type)
-    page = _Page(bl, url, pt, lang, title, serp_rank, brand_terms)
+    page = _Page(bl, url, pt, content_lang, title, serp_rank, brand_terms, lang)
+    t = page.t
     weights = WEIGHTS[_PROFILE.get(pt, "default")]
     metrics: dict[str, AutoGeoMetric] = {}
     for key in METRIC_KEYS:
         score, detail, facts = getattr(page, key)()
-        m = AutoGeoMetric(key=key, label=METRIC_INFO[key]["label"], score=round(score, 1), weight=weights[key],
+        m = AutoGeoMetric(key=key, label=t(f"autogeo.metric.{key}.label"), score=round(score, 1), weight=weights[key],
                           detail=detail, facts=facts)
         m.potential_gain_pct = (METRIC_INFO[key]["gain"] * (100 - score) / 100 if key == "keyword_stuffing"
                                 else page.gain(key, score))
@@ -963,39 +982,44 @@ def analyze_blocks(blocks: list[ContentBlock | dict[str, Any]], url: str = "", p
         m.facts.pop("unattributed_blocks", None)
         if "uncited" in m.facts:
             m.facts["uncited"] = [s for _, s in m.facts["uncited"]][:5]
-    report = AutoGeoReport(url=url, page_type=pt, language=page.lang, word_count=page.n, metrics=metrics,
+    report = AutoGeoReport(url=url, page_type=pt, language=page.content_lang, word_count=page.n, metrics=metrics,
                            improvements=page.improvements, answer_capsule=page.page_capsule() if bl else None,
                            comparison_table=page.comparison_table())
     if metrics["keyword_stuffing"].score < 40:
-        report.caps.append("aşırı anahtar kelime tekrarı (üst sınır 60)")
+        report.caps.append(t("autogeo.cap.keyword_stuffing"))
     if report.comparison_table and pt in ("product", "category", "service", "article", "faq"):
         idx = next((i for i, b in enumerate(bl) if b.kind == "heading" and b.level in (2, 3)), page.intro_index())
         page.insert("statistics", idx, report.comparison_table["markdown"], report.comparison_table["html"],
-                    "Karşılaştırma tablosu ekleyin" if page.lang == "tr" else "Add a comparison table",
-                    "Tablolar LLM'lerin en kolay ayrıştırıp alıntıladığı yapılardır; somut değerlerle doldurun.",
+                    t("autogeo.improve.comparison_table.title"),
+                    t("autogeo.improve.comparison_table.rationale"),
                     page.gain("statistics", metrics["statistics"].score) * 0.4, rule_id="autogeo.comparison_table")
     return report
 
 
-def analyze_html(html: str | bytes, url: str = "", page_type: PageType | str | None = None, lang: str = "",
-                 title: str = "", serp_rank: int | None = None, brand_terms: Iterable[str] = ()) -> AutoGeoReport:
+def analyze_html(html: str | bytes, url: str = "", page_type: PageType | str | None = None, content_lang: str = "",
+                 title: str = "", serp_rank: int | None = None, brand_terms: Iterable[str] = (), *,
+                 lang: str = DEFAULT_LANG) -> AutoGeoReport:
     if isinstance(html, bytes):
         html = html.decode("utf-8", errors="replace")
-    if not lang:
+    if not content_lang:
         m_lang = re.search(r"<html[^>]*\blang=[\"']?([\w-]+)", html, re.I)
-        lang = m_lang.group(1) if m_lang else ""
+        content_lang = m_lang.group(1) if m_lang else ""
     if not title:
         m_title = re.search(r"<title[^>]*>(.*?)</title>", html, re.I | re.S)
         title = re.sub(r"\s+", " ", m_title.group(1)).strip() if m_title else ""
-    return analyze_blocks(blocks_from_html(html, url), url, page_type, lang, title, serp_rank, brand_terms)
+    return analyze_blocks(blocks_from_html(html, url), url, page_type, content_lang, title, serp_rank, brand_terms,
+                          lang=lang)
 
 
-def analyze_markdown(md: str, url: str = "", page_type: PageType | str | None = None, lang: str = "",
-                     title: str = "", serp_rank: int | None = None, brand_terms: Iterable[str] = ()) -> AutoGeoReport:
-    return analyze_blocks(blocks_from_markdown(md), url, page_type, lang, title, serp_rank, brand_terms)
+def analyze_markdown(md: str, url: str = "", page_type: PageType | str | None = None, content_lang: str = "",
+                     title: str = "", serp_rank: int | None = None, brand_terms: Iterable[str] = (), *,
+                     lang: str = DEFAULT_LANG) -> AutoGeoReport:
+    return analyze_blocks(blocks_from_markdown(md), url, page_type, content_lang, title, serp_rank, brand_terms,
+                          lang=lang)
 
 
-def analyze_page(page: PageData, serp_rank: int | None = None, brand_terms: Iterable[str] = ()) -> AutoGeoReport:
+def analyze_page(page: PageData, serp_rank: int | None = None, brand_terms: Iterable[str] = (), *,
+                 lang: str = DEFAULT_LANG) -> AutoGeoReport:
     """Uses the parser's content blocks; falls back to headings + flattened text for pages parsed elsewhere."""
     blocks: list[ContentBlock | dict[str, Any]] = list(page.content_blocks)
     if not blocks:
@@ -1003,7 +1027,7 @@ def analyze_page(page: PageData, serp_rank: int | None = None, brand_terms: Iter
             blocks.append(ContentBlock("heading", h, level=1))
         if page.text:
             blocks.append(ContentBlock("paragraph", page.text))
-    return analyze_blocks(blocks, page.url, page.page_type, page.lang, page.title, serp_rank, brand_terms)
+    return analyze_blocks(blocks, page.url, page.page_type, page.lang, page.title, serp_rank, brand_terms, lang=lang)
 
 
 _SITE_TYPES = (PageType.ARTICLE, PageType.PRODUCT, PageType.SERVICE, PageType.FAQ, PageType.CATEGORY, PageType.HOME,
@@ -1011,26 +1035,28 @@ _SITE_TYPES = (PageType.ARTICLE, PageType.PRODUCT, PageType.SERVICE, PageType.FA
 
 
 def analyze_pages(pages: Iterable[PageData], max_pages: int = 25, min_words: int = 80,
-                  brand_terms: Iterable[str] = ()) -> AutoGeoSiteReport:
+                  brand_terms: Iterable[str] = (), *, lang: str = DEFAULT_LANG) -> AutoGeoSiteReport:
     """AutoGEO over the content pages of a crawl (content-rich, citable page types first)."""
     order = {t: i for i, t in enumerate(_SITE_TYPES)}
     cands = [p for p in pages if p.page_type in order and p.word_count >= min_words and p.error is None]
     cands.sort(key=lambda p: (order[p.page_type], p.depth, -p.word_count))
     brand = tuple(brand_terms)
-    return AutoGeoSiteReport(pages=[analyze_page(p, brand_terms=brand) for p in cands[:max_pages]])
+    return AutoGeoSiteReport(pages=[analyze_page(p, brand_terms=brand, lang=lang) for p in cands[:max_pages]])
 
 
 # ---------------------------------------------------------------- CLI
 
-def render_text(r: AutoGeoReport, show_diffs: bool = True) -> str:
-    out = [f"AutoGEO {r.score}/100 ({r.grade}) — {r.url or 'içerik'} [{r.page_type}, {r.language}, "
-           f"{r.word_count} kelime]"]
+def render_text(r: AutoGeoReport, show_diffs: bool = True, *, lang: str = DEFAULT_LANG) -> str:
+    t = get_translator(lang)
+    out = [t("autogeo.text.header", score=r.score, grade=r.grade, url=r.url or t("autogeo.text.content"),
+             page_type=r.page_type, language=r.language, count=r.word_count)]
     out += [f"  {m.label:<34} {round(m.score):>3}  {m.detail}" for m in r.metrics.values()]
     if r.caps:
-        out.append("  Sınır: " + "; ".join(r.caps))
-    out.append(f"\n{len(r.improvements)} iyileştirme:")
+        out.append(t("autogeo.text.cap") + "; ".join(r.caps))
+    out.append("\n" + t("autogeo.text.improvements", count=len(r.improvements)))
     for imp in r.improvements:
-        out.append(f"\n• [{imp.metric}] {imp.title} (+~%{imp.expected_gain_pct})\n  {imp.rationale}")
+        out.append(f"\n• [{imp.metric}] {imp.title} {t('autogeo.text.gain', gain=imp.expected_gain_pct)}"
+                   f"\n  {imp.rationale}")
         if show_diffs:
             out.append(imp.diff_markdown)
     return "\n".join(out)
@@ -1044,6 +1070,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--rank", type=int, default=None, help="current SERP position (citation gain model)")
     ap.add_argument("--markdown", action="store_true", help="treat input as Markdown")
     ap.add_argument("--json", action="store_true", help="print the JSON report instead of text")
+    ap.add_argument("--lang", default=DEFAULT_LANG, type=normalize_lang, metavar="{en,tr}",
+                    help="language of the report text (metric labels, details, improvement titles); default: en")
     args = ap.parse_args(argv)
 
     src, url = args.source, args.url
@@ -1058,8 +1086,9 @@ def main(argv: list[str] | None = None) -> int:
             content = fh.read()
     md = args.markdown or src.lower().endswith((".md", ".markdown"))
     fn = analyze_markdown if md else analyze_html
-    report = fn(content, url=url, page_type=args.type, serp_rank=args.rank)
-    print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2) if args.json else render_text(report))
+    report = fn(content, url=url, page_type=args.type, serp_rank=args.rank, lang=args.lang)
+    print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2) if args.json
+          else render_text(report, lang=args.lang))
     return 0
 
 

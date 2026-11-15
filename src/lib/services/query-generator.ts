@@ -89,12 +89,19 @@ type Ctx = {
   /** Rounded price ceiling for "best X under Y" prompts (category only). */
   budget?: { amount: number; currency: string };
 };
+/**
+ * One prompt template per language. The `tr` variants are deliberately Turkish: they are functional language
+ * data (the prompts a Turkish-speaking user sends to an AI assistant, with Turkish case suffixes via `gen`/`abl`
+ * and question particles via `q`), not UI text. They are generated only when the site targets Turkish (`lang: "tr"`).
+ */
 type Template = { id: string; intent: QueryIntent; kinds: EntityKind[]; tr?: (c: Ctx) => string | null; en?: (c: Ctx) => string | null };
 
+// Turkish morphology helpers used by the `tr` templates: ablative ("-den"), genitive ("-in") and the question particle ("mi").
 const abl = (s: string) => inflect(s, "ablative");
 const gen = (s: string) => inflect(s, "genitive");
 const q = (s: string) => questionParticle(s);
 const fmtMoney = (b: { amount: number; currency: string }, lang: QueryLanguage) => {
+  // Part of the generated prompt text (Turkish prompts write "15.000 TL", English ones "$15,000"), not UI formatting.
   const n = b.amount.toLocaleString(lang === "tr" ? "tr-TR" : "en-US");
   if (lang === "tr") return b.currency === "TRY" ? `${n} TL` : `${n} ${b.currency}`;
   return ({ USD: `$${n}`, EUR: `€${n}`, GBP: `£${n}` } as Record<string, string>)[b.currency] ?? `${n} ${b.currency}`;
@@ -166,7 +173,11 @@ export const TEMPLATES: Template[] = [
     tr: ({ e }) => `${gen(e.name)} kronik sorunları nelerdir?`, en: ({ e }) => `What are the common problems with ${e.name}?` },
 ];
 
-/** Conversational wrappers applied to template seeds (Query Expansion). `{q}` keeps the casing, `{lq}` lower-cases the first letter. */
+/**
+ * Conversational wrappers applied to template seeds (Query Expansion). `{q}` keeps the casing, `{lq}` lower-cases the first letter.
+ * The `tr` wrappers are Turkish language data (e.g. "Türkiye'de …" = "In Turkey, …", "Bütçem sınırlı." = "My budget is
+ * limited."), applied only to Turkish seeds; the `en` list is their English counterpart.
+ */
 const EXPANSIONS: Record<QueryLanguage, { id: string; intents: QueryIntent[]; kinds?: EntityKind[]; pattern: (year: number) => string }[]> = {
   tr: [
     { id: "exp.tr.market", intents: ["comparative", "transactional"], pattern: () => "Türkiye'de {lq}" },
@@ -187,6 +198,11 @@ const EXPANSIONS: Record<QueryLanguage, { id: string; intents: QueryIntent[]; ki
 // Entity hygiene
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * Page/navigation labels that are not real entities and must never become query targets. English labels plus their
+ * Turkish equivalents (anasayfa, ürünler, kategori, mağaza, iletişim, hakkımızda, sepet, giriş, indirim, sss …):
+ * this set recognises generic headings crawled from Turkish storefronts, so it stays Turkish data.
+ */
 const GENERIC_NAMES = new Set([
   "home", "homepage", "anasayfa", "ana sayfa", "products", "product", "ürünler", "ürün", "category", "categories", "kategori",
   "kategoriler", "shop", "mağaza", "store", "blog", "contact", "iletişim", "about", "hakkımızda", "search", "arama", "cart", "sepet",
@@ -226,6 +242,7 @@ const INTENT_BASE: Record<QueryIntent, { difficulty: number; volume: number }> =
   reputation: { difficulty: 35, volume: 35 },
 };
 const SPECIFICITY: Record<EntityKind, number> = { category: 15, concept: 10, topic: 0, faq: -5, brand: -5, competitor: -5, product: -15, site: -25 };
+// "head" (broad, high-competition) terms in English and Turkish ("en iyi" = "best", "alternatif" = "alternative").
 const HEAD_TERMS = /(?<!\p{L})(en iyi|best|top|alternatif|alternatives?|vs)(?!\p{L})/iu;
 
 /**
@@ -246,7 +263,10 @@ export function scoreQuery(text: string, intent: QueryIntent, kinds: EntityKind[
   return { difficulty: { score: difficulty, level: level(difficulty) }, volume: { score: volume, level: level(volume) } };
 }
 
-/** Idiomatic Turkish doublings ("adım adım", "yavaş yavaş") are not stutters. */
+/**
+ * Idiomatic Turkish doublings ("adım adım" = "step by step", "yavaş yavaş" = "slowly") are not stutters.
+ * Folded (ASCII) forms, matched against `foldTurkish` output.
+ */
 const REDUPLICATION = new Set(["adim", "yavas", "teker", "tek", "gun", "sik", "ara", "kat", "parca", "yer", "cesit", "bol", "tane", "sira"]);
 
 /** 0–1 heuristic quality: rejects malformed prompts, penalises awkward ones. */
@@ -270,9 +290,9 @@ export function queryQuality(text: string, targets: string[] = []): number {
 // ---------------------------------------------------------------------------------------------
 
 const STOP = new Set([
-  // tr
+  // tr — Turkish stop words (functional language data: the fingerprint must ignore them in Turkish prompts)
   "ve", "ile", "bir", "için", "icin", "mi", "mı", "mu", "mü", "ne", "neler", "nedir", "nelerdir", "hangi", "hangisi", "hangileri", "bu", "de", "da", "çok", "cok", "daha", "nasıl", "nasil",
-  // en
+  // en — English stop words
   "the", "a", "an", "of", "for", "to", "is", "are", "and", "what", "which", "how", "in", "on", "with", "do", "does", "can", "i", "my", "me", "it", "its",
 ]);
 
@@ -355,7 +375,7 @@ export function asCommonNoun(name: string, properNames: string[] = []): string {
   const words = name.split(" ");
   if (!words.every((w) => /^\p{Lu}[\p{Ll}'’-]*$/u.test(w) || !/\p{Lu}/u.test(w))) return name; // "iPhone Kılıfları", "USB Kablolar"
   const proper = new Set(properNames.flatMap((n) => n.split(/\s+/)));
-  const tr = /[çğışöüÇĞİŞÖÜ]/.test(name);
+  const tr = /[çğışöüÇĞİŞÖÜ]/.test(name); // Turkish letters => lower-case with Turkish rules (İ→i, I→ı)
   return words.map((w) => (proper.has(foldTurkish(w)) ? w : tr ? trLower(w) : w.toLowerCase())).join(" ");
 }
 
@@ -370,6 +390,7 @@ function lowerFirst(text: string, keepNames: string[]) {
   const first = text.split(/\s+/)[0] ?? "";
   if (keepNames.some((n) => text.startsWith(n))) return text;
   if (/^\p{Lu}{2,}/u.test(first)) return text; // acronym
+  // Turkish letters => Turkish case rules (İ→i, I→ı); `"tr-TR"` here is text processing, not UI formatting.
   return text.charAt(0).toLocaleLowerCase(/[çğıöşüİ]/.test(text) ? "tr-TR" : "en-US") + text.slice(1);
 }
 
@@ -390,7 +411,12 @@ function finalize(
 
 const KIND_CAPS: Partial<Record<EntityKind, number>> = { product: 15, category: 10, brand: 8, concept: 8, faq: 20, topic: 8, competitor: 5 };
 
-/** Infers an intent for free text (FAQ questions, manual keywords, LLM output). */
+/**
+ * Infers an intent for free text (FAQ questions, manual keywords, LLM output). The text is Turkish-folded to ASCII first,
+ * so the patterns list the folded Turkish keywords next to their English equivalents (guvenilir = reliable, sikayet =
+ * complaint, yorum = review, satin al = buy, fiyat = price, indirim = discount, kargo = shipping, iade = return,
+ * en iyi = best, alternatif = alternative, karsilastir = compare, oneri/tavsiye = recommendation …).
+ */
 export function classifyIntent(text: string): QueryIntent {
   const t = foldTurkish(text);
   const has = (re: RegExp) => re.test(t);
@@ -565,6 +591,9 @@ export async function expandWithLlm(seeds: GeneratedQuery[], complete: Completio
   const variants = Math.min(5, Math.max(1, opts.variants ?? 3));
   const out: GeneratedQuery[] = [];
   for (const seed of seeds) {
+    // The seed's language selects the instruction, so the model rewrites in that same language: the Turkish
+    // prompt asks for natural Turkish questions, the English one for natural English questions. Replies in
+    // another language are discarded below (`detectLanguage`).
     const prompt = seed.language === "tr"
       ? `Aşağıdaki arama sorusunu, bir kullanıcının yapay zeka asistanına yazacağı gibi ${variants} farklı doğal Türkçe soruya dönüştür. Anlamı ve niyeti koru, yeni marka ekleme. Her satıra bir soru yaz, numara kullanma.\n\nSoru: ${seed.text}`
       : `Rewrite the search question below as ${variants} different natural questions a user would type into an AI assistant. Keep the meaning and intent, do not add new brands. One question per line, no numbering.\n\nQuestion: ${seed.text}`;

@@ -8,9 +8,9 @@ const BASE = "https://shop.example.com";
 const claim = (v: string) => ({ rank: "normal", mainsnak: { datavalue: { value: /^Q\d+$/.test(v) ? { id: v } : v } } });
 const ITEMS: Record<string, object> = {
   Q1001: {
-    id: "Q1001", labels: { tr: { value: "Kahve Dükkanı" } }, descriptions: {}, aliases: {},
-    claims: { P31: [claim("Q4830453")], P856: [claim(BASE)], P4264: [claim("kahve-dukkani")] },
-    sitelinks: { trwiki: { title: "Kahve_Dükkanı", url: "https://tr.wikipedia.org/wiki/Kahve_Dükkanı" } },
+    id: "Q1001", labels: { en: { value: "Coffee Corner" } }, descriptions: {}, aliases: {},
+    claims: { P31: [claim("Q4830453")], P856: [claim(BASE)], P4264: [claim("coffee-corner")] },
+    sitelinks: { enwiki: { title: "Coffee_Corner", url: "https://en.wikipedia.org/wiki/Coffee_Corner" } },
   },
 };
 
@@ -27,17 +27,17 @@ afterEach(() => vi.unstubAllGlobals());
 afterAll(() => prisma.$disconnect());
 
 async function seed() {
-  const site = await prisma.site.create({ data: { url: BASE, title: "Kahve Dükkanı", settings: { locale: "tr" } } });
+  const site = await prisma.site.create({ data: { url: BASE, title: "Coffee Corner", settings: { locale: "en" } } });
   const mk = (key: string, entityType: string, name: string, properties: object) =>
     prisma.graphEntity.create({ data: { siteId: site.id, key, entityType, name, properties } });
-  const org = await mk("organization:kahve", "Organization", "Kahve Dükkanı A.Ş.", { url: BASE, same_as: ["https://instagram.com/kahve"] });
+  const org = await mk("organization:coffee", "Organization", "Coffee Corner Inc.", { url: BASE, same_as: ["https://instagram.com/coffeecorner"] });
   const concept = await mk("concept:espresso", "Concept", "espresso", {
-    wikidataId: "Q180289", wikipediaUrl: "https://tr.wikipedia.org/wiki/Espresso", sameAs: ["https://www.wikidata.org/wiki/Q180289"],
+    wikidataId: "Q180289", wikipediaUrl: "https://en.wikipedia.org/wiki/Espresso", sameAs: ["https://www.wikidata.org/wiki/Q180289"],
     confidence: 0.92, reconciliation: { status: "matched", method: "wikidata_search" },
   });
-  const person = await mk("person:ayse", "Person", "Ayşe Yılmaz", { confidence: 0.7, reconciliation: { status: "review", candidates: [{ qid: "Q3002" }] } });
+  const person = await mk("person:jane", "Person", "Jane Smith", { confidence: 0.7, reconciliation: { status: "review", candidates: [{ qid: "Q3002" }] } });
   await mk("brand:brevio", "Brand", "Brevio", {});
-  await mk("page:/", "Page", "Anasayfa", {}); // not reconcilable
+  await mk("page:/", "Page", "Home", {}); // not reconcilable
   return { site, org, concept, person };
 }
 const get = async (siteId: string, qs = "") => {
@@ -72,7 +72,7 @@ describe("GET/POST /api/sites/[id]/entities/reconcile", () => {
     expect(body.items[0]).toMatchObject({ entityKey: "concept:espresso", isVerified: true, matchConfidence: 0.92, wikidataId: "Q180289" });
     expect(body.sameAs).toEqual([
       { entityKey: "concept:espresso", entityName: "espresso", entityType: "Concept", wikidataId: "Q180289",
-        sameAsLinks: ["https://www.wikidata.org/wiki/Q180289", "https://tr.wikipedia.org/wiki/Espresso"] },
+        sameAsLinks: ["https://www.wikidata.org/wiki/Q180289", "https://en.wikipedia.org/wiki/Espresso"] },
     ]);
     expect(body.sync).toMatchObject({ entities: 4, changed: 4, removed: 0 });
     expect((await get(site.id)).body.sync.changed).toBe(0); // idempotent
@@ -87,16 +87,16 @@ describe("GET/POST /api/sites/[id]/entities/reconcile", () => {
     const verified = await post(site.id, { action: "verify", entityId: org.id, qid: "Q1001" });
     expect(verified.status).toBe(200);
     expect(verified.body.entity).toMatchObject({ status: "verified", wikidataId: "Q1001" });
-    expect(verified.body.enrichment).toMatchObject({ entityKey: "organization:kahve", isVerified: true, matchConfidence: 1, wikidataId: "Q1001" });
+    expect(verified.body.enrichment).toMatchObject({ entityKey: "organization:coffee", isVerified: true, matchConfidence: 1, wikidataId: "Q1001" });
     expect(verified.body.enrichment.sameAsLinks).toEqual(expect.arrayContaining([
-      "https://www.wikidata.org/wiki/Q1001", "https://www.linkedin.com/company/kahve-dukkani", "https://instagram.com/kahve",
+      "https://www.wikidata.org/wiki/Q1001", "https://www.linkedin.com/company/coffee-corner", "https://instagram.com/coffeecorner",
     ]));
     // the knowledge graph got its same_as edge too
     expect(await prisma.graphRelation.count({ where: { siteId: site.id, sourceId: org.id, relationType: "same_as" } })).toBe(1);
 
     const rejected = await post(site.id, { action: "reject", entityId: concept.id });
     expect(rejected.body.enrichment).toMatchObject({ status: "rejected", isVerified: false, wikidataId: null });
-    expect((await get(site.id)).body.sameAs.map((s: { entityKey: string }) => s.entityKey)).toEqual(["organization:kahve"]);
+    expect((await get(site.id)).body.sameAs.map((s: { entityKey: string }) => s.entityKey)).toEqual(["organization:coffee"]);
 
     await prisma.graphEntity.delete({ where: { id: concept.id } });
     const synced = await post(site.id);

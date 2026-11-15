@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import { handle, json, parseBody } from "@/lib/http";
+import { localeFromRequest } from "@/lib/i18n/request";
 import { executeAudit, getAuditRunner, listAudits, startAudit } from "@/lib/services/audit";
 import { startAuditSchema } from "@/lib/validation";
 
@@ -11,10 +12,13 @@ export const GET = handle<Ctx>(async (_req, { params }) => {
   return json({ items: await listAudits(id) });
 });
 
-/** Queues a new crawl + audit. 202 Accepted; poll GET for progress. */
+/**
+ * Queues a new crawl + audit. 202 Accepted; poll GET for progress. The scoring engine writes its text in the
+ * language of this request (`?lang=` / `locale` cookie / `Accept-Language`, default English).
+ */
 export const POST = handle<Ctx>(async (request, { params }) => {
   const { id } = await params;
-  const job = await startAudit(id, await parseBody(request, startAuditSchema));
+  const job = await startAudit(id, await parseBody(request, startAuditSchema), undefined, localeFromRequest(request));
   const hasRunner = !!getAuditRunner();
   if (hasRunner) after(() => executeAudit(job));
   return json(

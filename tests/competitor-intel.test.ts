@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  brandRows, citeMagnetTip, dominantSentiment, filterGaps, gapDomains, gapsCsv, siteRank, siteTrendDelta, somCsv, toCsv, trendSeries,
+  brandRows, citeMagnetTip, dominantSentiment, filterGaps, gapDomains, gapsCsv, intentLabel, sentimentLabel, siteRank, siteTrendDelta, somCsv, toCsv, trendSeries,
 } from "@/lib/dashboard/competitor-intel";
 import type { CitationGap, CompetitorReport, CompetitorSnapshot } from "@/components/dashboard/types";
+import { getMessages } from "@/lib/i18n/messages";
+import { createTranslator } from "@/lib/i18n/translate";
+
+const tEn = createTranslator(getMessages("en"), "en");
+const tTr = createTranslator(getMessages("tr"), "tr", getMessages("en"));
 
 const snap = (domain: string, share: number, extra: Partial<CompetitorSnapshot> = {}): CompetitorSnapshot => ({
   competitorDomain: domain, competitorName: domain.split(".")[0], shareOfModel: share, mentionShare: null, citedQueriesCount: 0,
@@ -47,20 +52,33 @@ describe("competitor intel helpers", () => {
 
   it("filters gaps by intent, model, competitor and text; orders matrix columns by wins", () => {
     const gaps = [
-      gap("En iyi kahve makinesi", "comparative", "chatgpt", ["rival.test", "other.test"]),
-      gap("kahve makinesi fiyat", "transactional", "gemini", ["rival.test"]),
-      gap("Shop güvenilir mi", "reputation", "chatgpt", ["other.test"]),
+      gap("Best coffee machine", "comparative", "chatgpt", ["rival.test", "other.test"]),
+      gap("coffee machine price", "transactional", "gemini", ["rival.test"]),
+      gap("Is Shop reliable", "reputation", "chatgpt", ["other.test"]),
     ];
-    expect(filterGaps(gaps, { intent: "comparative" }).map((g) => g.query)).toEqual(["En iyi kahve makinesi"]);
+    expect(filterGaps(gaps, { intent: "comparative" }).map((g) => g.query)).toEqual(["Best coffee machine"]);
     expect(filterGaps(gaps, { model: "chatgpt", competitor: "other.test" })).toHaveLength(2);
-    expect(filterGaps(gaps, { search: "İYİ" })).toHaveLength(1); // Turkish case folding
+    expect(filterGaps(gaps, { search: "BEST" })).toHaveLength(1);
+    expect(filterGaps(gaps, { search: "is shop" })).toHaveLength(1); // dotted capital I must still fold to i
     expect(filterGaps(gaps, { intent: "all", model: "all", competitor: "all", search: "" })).toHaveLength(3);
     expect(gapDomains(gaps)).toEqual([{ domain: "other.test", count: 2 }, { domain: "rival.test", count: 2 }]);
   });
 
+  it("folds Turkish dotted/dotless i when searching (deliberately Turkish sample queries)", () => {
+    const gaps = [gap("En iyi kahve makinesi", "comparative", "chatgpt", ["rival.test"]), gap("Işıklı tabela fiyatı", "transactional", "gemini", ["rival.test"])];
+    expect(filterGaps(gaps, { search: "İYİ" }).map((g) => g.query)).toEqual(["En iyi kahve makinesi"]);
+    expect(filterGaps(gaps, { search: "ışıklı" })).toHaveLength(1);
+    expect(filterGaps(gaps, { search: "IŞIKLI" })).toHaveLength(1);
+  });
+
   it("maps Cite-Magnet factors and picks the dominant tone", () => {
-    expect(citeMagnetTip("no_data_tables").label).toBe("Veri tablosu");
-    expect(citeMagnetTip("custom").label).toBe("custom");
+    expect(citeMagnetTip("no_data_tables", tEn).label).toBe("Data table");
+    expect(citeMagnetTip("no_data_tables", tTr).label).toBe("Veri tablosu");
+    expect(citeMagnetTip("custom", tEn)).toEqual({ label: "custom", tip: "A standout feature of the competitor page for this query." });
+    expect(intentLabel(tEn, "reputation")).toBe("Brand");
+    expect(intentLabel(tTr, "transactional")).toBe("İşlemsel");
+    expect(sentimentLabel(tEn, "negative")).toBe("Negative / Risky");
+    expect(sentimentLabel(tTr, "unknown")).toBe("Belirsiz");
     expect(dominantSentiment({ positive: 2, neutral: 3, negative: 3, unknown: 9 })).toBe("negative");
     expect(dominantSentiment({ positive: 0, neutral: 0, negative: 0, unknown: 4 })).toBe("unknown");
   });

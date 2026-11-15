@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "../db";
 import { HttpError } from "../http";
+import { DEFAULT_LOCALE, type Locale } from "../i18n/config";
 import { analyzeAnswer, analyzeBrandSentiment, auditBrandClaims, visibilityAnalysisSettings, VISIBILITY_MODELS, type VisibilityModel } from "../visibility-analysis";
 import { askSearchProvider, providerConfig, ProviderError } from "../visibility-providers";
 import { getSiteOrThrow } from "./sites";
@@ -39,13 +40,13 @@ export async function suggestQueries(siteId: string) {
   return (await suggestQueryDetails(siteId)).map((g) => g.text);
 }
 
-export async function listVisibility(siteId: string, options: z.infer<typeof visibilityQuery>) {
+export async function listVisibility(siteId: string, options: z.infer<typeof visibilityQuery>, locale: Locale = DEFAULT_LOCALE) {
   await getSiteOrThrow(siteId);
   const [items, total, queries, analysis] = await Promise.all([
     prisma.llmVisibilityRecord.findMany({ where: { siteId }, orderBy: [{ checkedAt: "desc" }, { id: "desc" }], take: options.limit, skip: options.offset }),
     prisma.llmVisibilityRecord.count({ where: { siteId } }),
     suggestQueryDetails(siteId, { limit: 40 }),
-    getSomAnalysis(siteId, options.days),
+    getSomAnalysis(siteId, options.days, locale),
   ]);
   return { items, total, queries: queries.slice(0, MAX_AUTO_QUERIES).map((g) => g.text), querySuggestions: queries, analysis };
 }

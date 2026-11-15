@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import type { Tone } from "@/lib/dashboard/format";
+import { useT } from "@/lib/i18n/provider";
 import { errorMessage } from "./api";
 
 export function cx(...parts: (string | false | null | undefined)[]) {
@@ -89,8 +90,9 @@ export function Skeleton({ className }: { className?: string }) {
 }
 
 export function SkeletonCard({ lines = 3, className }: { lines?: number; className?: string }) {
+  const t = useT();
   return (
-    <div role="status" aria-label="Yükleniyor" className={cx("rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900", className)}>
+    <div role="status" aria-label={t("shared.loading")} className={cx("rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900", className)}>
       <Skeleton className="mb-4 h-4 w-1/3" />
       {Array.from({ length: lines }, (_, i) => (
         <Skeleton key={i} className={cx("mb-2 h-3", i % 2 ? "w-2/3" : "w-full")} />
@@ -113,15 +115,16 @@ export function EmptyState({ icon = "◎", title, children, action, className }:
 }
 
 export function ErrorState({ error, onRetry, className }: { error: unknown; onRetry?: () => void; className?: string }) {
+  const t = useT();
   return (
     <div role="alert" className={cx("flex flex-col items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200 sm:flex-row sm:items-center", className)}>
       <span aria-hidden className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white">
         !
       </span>
-      <span className="min-w-0 flex-1 break-words">{errorMessage(error)}</span>
+      <span className="min-w-0 flex-1 break-words">{errorMessage(error, t)}</span>
       {onRetry && (
         <Button size="sm" variant="danger" onClick={onRetry}>
-          Tekrar dene
+          {t("shared.retry")}
         </Button>
       )}
     </div>
@@ -146,7 +149,8 @@ export async function copyText(text: string): Promise<boolean> {
   }
 }
 
-export function CopyButton({ text, label = "Kopyala", size = "sm" }: { text: string; label?: string; size?: "sm" | "md" }) {
+export function CopyButton({ text, label, size = "sm" }: { text: string; label?: string; size?: "sm" | "md" }) {
+  const t = useT();
   const [state, setState] = useState<"idle" | "ok" | "fail">("idle");
   return (
     <Button
@@ -157,7 +161,7 @@ export function CopyButton({ text, label = "Kopyala", size = "sm" }: { text: str
       }}
       aria-live="polite"
     >
-      {state === "ok" ? "✓ Kopyalandı" : state === "fail" ? "Kopyalanamadı" : label}
+      {state === "ok" ? t("shared.copied") : state === "fail" ? t("shared.copyFailed") : (label ?? t("shared.copy"))}
     </Button>
   );
 }
@@ -174,6 +178,7 @@ export function downloadText(text: string, filename: string, type = "text/plain;
 }
 
 export function CodeBlock({ code, language, filename, maxHeight = "20rem" }: { code: string; language?: string; filename?: string; maxHeight?: string }) {
+  const t = useT();
   return (
     <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800">
       <div className="flex items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50 px-3 py-1.5 dark:border-zinc-800 dark:bg-zinc-950">
@@ -184,7 +189,7 @@ export function CodeBlock({ code, language, filename, maxHeight = "20rem" }: { c
         <div className="flex gap-1.5">
           {filename && (
             <Button size="sm" variant="ghost" onClick={() => downloadText(code, filename)}>
-              İndir
+              {t("shared.download")}
             </Button>
           )}
           <CopyButton text={code} />
@@ -217,6 +222,22 @@ export function Segmented<T extends string>({ value, options, onChange, label }:
         </button>
       ))}
     </div>
+  );
+}
+
+/**
+ * Renders a translated message that still contains `{name}` slots (the translator leaves placeholders it
+ * received no value for untouched) and fills them with React nodes, e.g. `<code>` elements:
+ *   <RichText message={t("sites.shell.queuedHint", { date })} slots={{ bin: <code>GEO_AUDIT_BIN</code> }} />
+ */
+export function RichText({ message, slots }: { message: string; slots: Record<string, ReactNode> }) {
+  return (
+    <>
+      {message.split(/\{(\w+)\}/).map((part, i) => {
+        if (i % 2 === 0) return part; // plain text between slots
+        return part in slots ? <Fragment key={i}>{slots[part]}</Fragment> : `{${part}}`;
+      })}
+    </>
   );
 }
 
@@ -255,6 +276,7 @@ export function Modal({
   footer?: ReactNode;
   size?: "md" | "lg";
 }) {
+  const t = useT();
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const d = ref.current;
@@ -285,7 +307,7 @@ export function Modal({
               <h2 className="text-base font-semibold">{title}</h2>
               {subtitle && <p className="mt-0.5 text-xs text-zinc-500">{subtitle}</p>}
             </div>
-            <button type="button" onClick={onClose} aria-label="Kapat" className="rounded-md px-2 py-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
+            <button type="button" onClick={onClose} aria-label={t("shared.close")} className="rounded-md px-2 py-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
               ✕
             </button>
           </header>

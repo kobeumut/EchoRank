@@ -4,6 +4,7 @@
 import { z } from "zod";
 import { QUERY_INTENTS, type QueryIntent } from "../constants";
 import { prisma } from "../db";
+import { DEFAULT_LOCALE, type Locale } from "../i18n/config";
 import { analyzeAnswer, analyzeBrandSentiment, host, visibilityAnalysisSettings, VISIBILITY_MODELS, type VisibilityModel } from "../visibility-analysis";
 import { queryBool } from "../validation";
 import { classifyIntent } from "./query-generator";
@@ -116,11 +117,11 @@ async function gapIntents(siteId: string, queries: string[]) {
   };
 }
 
-async function recompute(siteId: string, days: number) {
+async function recompute(siteId: string, days: number, locale: Locale) {
   const site = await getSiteOrThrow(siteId);
   const parsed = visibilityAnalysisSettings.safeParse(object(site.settings).visibilityAnalysis ?? {});
   const configured = parsed.success ? parsed.data.competitors : [];
-  const som = await getSomAnalysis(siteId, days);
+  const som = await getSomAnalysis(siteId, days, locale);
   const since = new Date(Date.now() - days * 86_400_000);
   // Same window and cap as getSomAnalysis.
   const records = await prisma.llmVisibilityRecord.findMany({
@@ -167,8 +168,8 @@ async function recompute(siteId: string, days: number) {
 }
 
 /** Site vs competitors: SoM, citation gaps (queries a rival wins) and per-model citation shares. */
-export async function getCompetitorReport(siteId: string, q: z.infer<typeof competitorQuerySchema>) {
-  const fresh = q.refresh ? await recompute(siteId, q.days) : (await getSiteOrThrow(siteId), null);
+export async function getCompetitorReport(siteId: string, q: z.infer<typeof competitorQuerySchema>, locale: Locale = DEFAULT_LOCALE) {
+  const fresh = q.refresh ? await recompute(siteId, q.days, locale) : (await getSiteOrThrow(siteId), null);
   const competitors = await prisma.competitorAnalysis.findMany({
     where: { siteId },
     orderBy: [{ shareOfModel: "desc" }, { competitorDomain: "asc" }],

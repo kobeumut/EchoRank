@@ -9,10 +9,10 @@ Configure `API_TOKEN` plus the key and model environment variables for each prov
 ```sh
 curl -X POST "http://localhost:3000/api/sites/$SITE_ID/visibility" \
   -H "Authorization: Bearer $API_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"queries":["En iyi doğal zeytinyağı markaları"],"models":["chatgpt","gemini","claude","perplexity"]}'
+  -d '{"queries":["What are the best natural olive oil brands?"],"models":["chatgpt","gemini","claude","perplexity"]}'
 ```
 
-- Empty body / `{}`: generated queries and all four providers. With generated queries, `intents` (subset of the four) and `languages` (`tr`, `en`) narrow the selection; each record's `responseMeta` then carries `queryIntent`, `queryLanguage`, `queryBranded` and `querySource` (explicit queries get a heuristic `queryIntent` only). `queries`: 1–10 strings, each 1–500 characters. `models`: subset of the four names. Duplicate queries/models collapse. `refresh: true` bypasses cache.
+- Empty body / `{}`: generated queries and all four providers. With generated queries, `intents` (subset of the four) and `languages` (`tr`, `en`: the language of the generated test prompts) narrow the selection; each record's `responseMeta` then carries `queryIntent`, `queryLanguage`, `queryBranded` and `querySource` (explicit queries get a heuristic `queryIntent` only). `queries`: 1–10 strings, each 1–500 characters. `models`: subset of the four names. Duplicate queries/models collapse. `refresh: true` bypasses cache.
 - Paid POST requires `API_TOKEN` even when the existing optional proxy guard is disabled (503 if unconfigured, 401 for invalid credentials). This is a shared-token, single-tenant API, not per-user authorization.
 - A response contains `items`, `attempted`, `successful`, `failed`, overall `citationRate`, and `perModel`. Each item has either `{ record, cached }` or a sanitized `error`: `not_configured`, `rate_limited`, `timeout`, `provider_error`, `invalid_response`.
 - Partial or total upstream failure returns HTTP 200 with explicit counts/errors. Validation/not-found/conflict errors use 400/404/409. Database failures remain HTTP 500, not successful provider outcomes.

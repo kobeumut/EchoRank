@@ -33,7 +33,7 @@ beforeEach(async () => {
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); registerAuditRunner(null); });
 afterAll(() => prisma.$disconnect());
-const site = () => prisma.site.create({ data: { url: "https://example.com", title: "Örnek <script>alert(1)</script>", targetKeywords: ["q"] } });
+const site = () => prisma.site.create({ data: { url: "https://example.com", title: "Sample <script>alert(1)</script>", targetKeywords: ["q"] } });
 async function schedule(frequency = "daily") {
   const s = await site();
   return prisma.scheduledReport.create({ data: { siteId: s.id, frequency, recipients: ["a@example.com"], nextRunAt: new Date(Date.now() - day) } });
@@ -65,6 +65,9 @@ describe("immutable report evidence", () => {
     expect(snapshot.history).toHaveLength(1);
     expect(snapshot.alerts).toHaveLength(4);
     expect(snapshot.actions).toMatchObject({ openCount: 1, resolvedCount: 1 });
+    expect(snapshot.locale).toBe("en");
+    expect(snapshot.summary).toBe("AI citation visibility decreased by 100 percentage points (100% to 0%) on 5 matched model/query pairs.");
+    expect(snapshot.alerts).toContain("GEO score dropped 25 points since the pre-period audit.");
     const html = renderReportHtml(snapshot);
     expect(html).toContain("&lt;script&gt;");
     expect(html).not.toContain("<script>");
@@ -92,7 +95,34 @@ describe("immutable report evidence", () => {
     expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
     expect(pdf.length).toBeGreaterThan(10000);
     const html = renderReportHtml(sampleReport);
-    for (const text of ["Executive summary", "20 percentage points", "Örnek", "Daily trend", "Resolved critical actions", "DEMO"]) expect(html).toContain(text);
+    for (const text of ["Executive summary", "20 percentage points", "Sample Store", "Daily trend", "Resolved critical actions", "DEMO"]) expect(html).toContain(text);
+    expect(html).toContain('<html lang="en">');
+  });
+  it("writes the snapshot, HTML and PDF in the requested Turkish locale (text is stored in the language it was generated in)", async () => {
+    const s = await prisma.site.create({ data: { url: "https://example.com", title: "Örnek Mağaza", targetKeywords: ["q"] } });
+    await prisma.geoAudit.createMany({ data: [
+      { siteId: s.id, status: "completed", geoScore: 80, eeatScore: 70, createdAt: new Date(now.getTime() - 8 * day) },
+      { siteId: s.id, status: "completed", geoScore: 55, eeatScore: 45, createdAt: new Date(now.getTime() - day) },
+    ] });
+    const snapshot = await buildSnapshot(s.id, 7, now, [], "tr");
+    expect(snapshot.locale).toBe("tr");
+    expect(snapshot.alerts).toContain("GEO skoru, dönem öncesi denetime göre 25 puan düştü.");
+    expect(snapshot.summary).toBe("Yapay zeka görünürlüğündeki değişimi hesaplamak için karşılaştırılabilir gözlem yetersiz.");
+    expect(snapshot.caveats).toContain("kural tabanlı bir güven vekilidir");
+    // The stored snapshot's own language wins; an explicit locale overrides it.
+    const html = renderReportHtml(snapshot);
+    expect(html).toContain('<html lang="tr">');
+    for (const text of ["Yönetici özeti", "Skorlar ve kanıtlar", "Bekleyen kritik aksiyonlar (0)", "HAFTALIK ÖZET", "Örnek Mağaza"]) expect(html).toContain(text);
+    expect(html).not.toContain("Executive summary");
+    expect(renderReportHtml(snapshot, "en")).toContain("Executive summary");
+    const pdf = await renderReportPdf(snapshot);
+    expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(renderReportHtml(sampleReport, "tr")).toContain("Yönetici özeti");
+  });
+  it("renders snapshots stored before localization (no `locale` field) in English", () => {
+    const legacy: Partial<typeof sampleReport> = { ...sampleReport };
+    delete legacy.locale;
+    expect(renderReportHtml(legacy as typeof sampleReport)).toContain("Executive summary");
   });
 });
 
@@ -115,6 +145,28 @@ describe("durable scheduler", () => {
     const saved = await prisma.scheduledReport.findUniqueOrThrow({ where: { id: s.id } });
     expect(saved.claimId).toBeNull();
     expect(saved.nextRunAt!.getUTCHours()).toBe(6);
+  });
+  it("writes a scheduled report in the site's configured locale (settings.locale), e-mail subject included", async () => {
+    const s = await schedule();
+    await prisma.site.update({ where: { id: s.siteId }, data: { settings: { locale: "tr-TR" } } });
+    const run = await runSchedule(s.id);
+    expect(run?.snapshot).toMatchObject({ locale: "tr" });
+    expect(run?.steps).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "llm-visibility", status: "ok", detail: "4/4 yeni kontrol başarılı oldu (önbellek atlandı)" }),
+      expect.objectContaining({ name: "indexnow", status: "skipped", detail: "Geçerli bir IndexNow anahtarı yapılandırılmamış" }),
+    ]));
+    const email = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(email.subject).toMatch(/^Yapay zeka görünürlüğü: /);
+    expect(email.html).toContain("Yönetici özeti");
+    // Operator-facing delivery diagnostics stay English.
+    expect(run?.deliveries).toEqual([{ channel: "email", status: "sent", detail: "Resend HTTP 200" }]);
+  });
+  it("defaults to English for sites without a supported locale", async () => {
+    const s = await schedule();
+    await prisma.site.update({ where: { id: s.siteId }, data: { settings: { locale: "de" } } });
+    const run = await runSchedule(s.id);
+    expect(run?.snapshot).toMatchObject({ locale: "en" });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).subject).toMatch(/^AI visibility: /);
   });
   it("flushes only enabled IndexNow queues and marks deferred submissions partial", async () => {
     vi.stubEnv("ALLOW_PRIVATE_NETWORK_TARGETS", "true");

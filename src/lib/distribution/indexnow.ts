@@ -20,7 +20,7 @@ export function generateIndexNowKey() {
   return randomBytes(16).toString("hex");
 }
 
-/** Per-site key, falling back to the INDEXNOW_KEY env var (single-site deployments). */
+/** Per-site key; single-site deployments can set the INDEXNOW_KEY environment variable instead. */
 export function getIndexNowKey(site: Site): string | undefined {
   const key = getIntegration(site, INTEGRATION_KEYS.indexnowKey) ?? (process.env.INDEXNOW_KEY || undefined);
   return key && isValidIndexNowKey(key) ? key : undefined;

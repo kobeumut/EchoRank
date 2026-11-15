@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from ..i18n import DEFAULT_LANG, get_translator
 from ..urls import normalize_url
 from .robots import PROBE_USER_AGENTS
 
@@ -55,34 +56,38 @@ class SiteSignals:
 _LINK_RE = re.compile(r"^\s*[-*]\s*\[[^\]]+\]\([^)]+\)", re.M)
 
 
-def validate_llms_txt(text: str) -> tuple[bool, list[str], int, int]:
-    """Checks the llmstxt.org shape: H1 title, optional ``>`` summary, ``##`` sections of markdown link lists."""
+def validate_llms_txt(text: str, *, lang: str = DEFAULT_LANG) -> tuple[bool, list[str], int, int]:
+    """Checks the llmstxt.org shape: H1 title, optional ``>`` summary, ``##`` sections of markdown link lists.
+
+    Returns ``(valid, issues, links, sections)``; the issue texts are written in ``lang``."""
+    t = get_translator(lang)
     issues: list[str] = []
     lines = [ln for ln in text.splitlines() if ln.strip()]
     if not lines:
-        return False, ["dosya boş"], 0, 0
+        return False, [t("signals.llms.empty")], 0, 0
     if lines[0].lstrip().startswith("<"):
-        return False, ["HTML döndürüyor (muhtemelen 404 sayfası veya SPA fallback)"], 0, 0
+        return False, [t("signals.llms.html_response")], 0, 0
     if not lines[0].startswith("# "):
-        issues.append("ilk satır '# Site Adı' başlığı değil")
+        issues.append(t("signals.llms.no_h1"))
     if not any(ln.startswith(">") for ln in lines[:5]):
-        issues.append("'>' ile başlayan kısa site özeti yok")
+        issues.append(t("signals.llms.no_summary"))
     sections = sum(1 for ln in lines if ln.startswith("## "))
     links = len(_LINK_RE.findall(text))
     if sections == 0:
-        issues.append("'## Bölüm' başlıkları yok")
+        issues.append(t("signals.llms.no_sections"))
     if links == 0:
-        issues.append("'- [Başlık](url): açıklama' biçiminde bağlantı yok")
+        issues.append(t("signals.llms.no_links"))
     valid = lines[0].startswith("# ") and links > 0
     return valid, issues, links, sections
 
 
-async def _fetch_context_file(client: httpx.AsyncClient, origin: str, path: str) -> ContextFile:
+async def _fetch_context_file(client: httpx.AsyncClient, origin: str, path: str, lang: str) -> ContextFile:
+    t = get_translator(lang)
     cf = ContextFile(path=path)
     try:
         resp = await client.get(normalize_url(path, origin) or origin + path)
     except httpx.HTTPError as exc:
-        cf.issues.append(f"erişilemedi: {type(exc).__name__}")
+        cf.issues.append(t("signals.llms.unreachable", error=type(exc).__name__))
         return cf
     cf.status = resp.status_code
     cf.content_type = resp.headers.get("content-type", "").split(";")[0].strip().lower()
@@ -90,8 +95,8 @@ async def _fetch_context_file(client: httpx.AsyncClient, origin: str, path: str)
         return cf
     cf.text = resp.text[:200_000]
     if cf.content_type == "text/html":
-        cf.issues.append("text/plain yerine text/html döndürüyor")
-    cf.valid, issues, cf.links, cf.sections = validate_llms_txt(cf.text)
+        cf.issues.append(t("signals.llms.wrong_content_type"))
+    cf.valid, issues, cf.links, cf.sections = validate_llms_txt(cf.text, lang=lang)
     cf.issues.extend(issues)
     if cf.content_type == "text/html":
         cf.valid = False
@@ -112,7 +117,10 @@ async def collect_site_signals(
     probe_user_agents: bool = True,
     fetch_robots: bool = False,
     timeout: float = 10.0,
+    *,
+    lang: str = DEFAULT_LANG,
 ) -> SiteSignals:
+    """Fetch llms.txt, HTTPS/HSTS and AI user-agent probes; the llms.txt issue texts are written in ``lang``."""
     root = normalize_url(origin) or origin
     parts = httpx.URL(root)
     sig = SiteSignals(origin=root, https=parts.scheme == "https")
@@ -138,7 +146,8 @@ async def collect_site_signals(
                 sig.http_redirects_to_https = None
 
         sig.llms_txt, sig.llms_full_txt = await asyncio.gather(
-            _fetch_context_file(client, root, "/llms.txt"), _fetch_context_file(client, root, "/llms-full.txt"))
+            _fetch_context_file(client, root, "/llms.txt", lang),
+            _fetch_context_file(client, root, "/llms-full.txt", lang))
 
         if fetch_robots:
             try:

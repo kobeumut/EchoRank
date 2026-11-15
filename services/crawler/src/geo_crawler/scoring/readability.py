@@ -62,7 +62,8 @@ def density_profile(p: PageData) -> dict[str, Any]:
 
 
 def analyze_readability(ctx: AuditContext) -> Pillar:
-    pillar = Pillar("llm_readability", "LLM Okunabilirlik ve Semantik Yapı (GEO)", 0.35)
+    t = ctx.t
+    pillar = Pillar("llm_readability", t("readability.pillar.label"), 0.35)
     pages = ctx.pages
     key = ctx.key_pages
 
@@ -78,13 +79,13 @@ def analyze_readability(ctx: AuditContext) -> Pillar:
     qa_s = (50 * min(1.0, coverage / 0.3) + 30 * ratio_score(len(concise), len(all_pairs), 0) / 100
             + 20 * ratio_score(len(good_leads), len(lead_pages), 50) / 100)
     if all_pairs:
-        detail = (f"{len(all_pairs)} soru-cevap çifti, {len(qa_key)}/{len(key)} önemli sayfada doğrudan cevap bloğu var; "
-                  f"hap bilgi uzunluğundaki (3-90 kelime) cevap oranı %{round(100 * len(concise) / len(all_pairs))}")
+        detail = t("readability.check.direct_answers.detail", count=len(all_pairs), qa_key=len(qa_key), key_pages=len(key),
+                   pct=round(100 * len(concise) / len(all_pairs)))
     else:
-        detail = "Sitede hiç soru-cevap / doğrudan cevap bloğu bulunamadı (FAQ şeması veya 'Soru?' başlıkları yok)"
+        detail = t("readability.check.direct_answers.detail_none")
     if lead_pages:
-        detail += f"; {len(good_leads)}/{len(lead_pages)} içerik sayfası özet bir giriş paragrafıyla başlıyor"
-    pillar.add(Check("direct_answers", "SSS / Doğrudan cevap blokları", qa_s, 25, detail,
+        detail += t("readability.check.direct_answers.detail_leads", good=len(good_leads), total=len(lead_pages))
+    pillar.add(Check("direct_answers", t("readability.check.direct_answers.label"), qa_s, 25, detail,
                      urls=sorted(p.url for p in key if not qa_by_page.get(p.url))))
 
     # 2) information density
@@ -96,12 +97,13 @@ def analyze_readability(ctx: AuditContext) -> Pillar:
     low = sorted(u for u, v in profiles.items() if v["score"] < 50)
     if profiles:
         avg = lambda k: sum(v[k] for v in profiles.values()) / len(profiles)  # noqa: E731
-        detail = (f"Ortalama: 300 kelimede {avg('structure_per_300w'):.1f} liste/tablo, 100 kelimede "
-                  f"{avg('numbers_per_100w'):.1f} somut veri, paragraf {avg('avg_paragraph_words'):.0f} kelime, "
-                  f"dolgu ifadesi {avg('filler_per_100w'):.2f}/100 kelime; {len(low)} sayfa düşük yoğunlukta")
+        detail = t("readability.check.information_density.detail", structure=f"{avg('structure_per_300w'):.1f}",
+                   numbers=f"{avg('numbers_per_100w'):.1f}", paragraph=f"{avg('avg_paragraph_words'):.0f}",
+                   filler=f"{avg('filler_per_100w'):.2f}", count=len(low))
     else:
-        detail = "Analiz edilecek içerik sayfası yok (sunucu HTML'inde metin bulunamadı)"
-    pillar.add(Check("information_density", "Bilgi yoğunluğu", dens, 25, detail, urls=low, applicable=bool(profiles)))
+        detail = t("readability.check.information_density.detail_none")
+    pillar.add(Check("information_density", t("readability.check.information_density.label"), dens, 25, detail,
+                     urls=low, applicable=bool(profiles)))
 
     # 3) schema coverage
     fams = {p.url: page_families(p) for p in pages}
@@ -119,49 +121,53 @@ def analyze_readability(ctx: AuditContext) -> Pillar:
            + 40 * ratio_score(len(expected) - len(exp_missing), len(expected)) / 100
            + 20 * ratio_score(len(faq_needed) - len(faq_missing), len(faq_needed)) / 100
            + 20 * ratio_score(len(crumb_needed) - len(crumb_missing), len(crumb_needed)) / 100)
-    parts = [f"Organization şeması {'var' if has_org else 'YOK'}",
-             f"{len(expected) - len(exp_missing)}/{len(expected)} sayfa türüne uygun şemaya sahip",
-             f"soru-cevap içeren sayfalarda FAQPage eksik: {len(faq_missing)}/{len(faq_needed)}",
-             f"BreadcrumbList eksik alt sayfa: {len(crumb_missing)}/{len(crumb_needed)}"]
-    pillar.add(Check("schema_coverage", "Schema.org kapsamı (Product/Organization/FAQPage/Article/Breadcrumb)", cov, 20,
-                     "; ".join(parts), urls=sorted(set(exp_missing) | set(faq_missing))))
+    sc = "readability.check.schema_coverage"
+    parts = [t(f"{sc}.organization", state=t("misc.word.present" if has_org else "misc.word.missing_caps")),
+             t(f"{sc}.expected", ok=len(expected) - len(exp_missing), total=len(expected)),
+             t(f"{sc}.faq_missing", missing=len(faq_missing), total=len(faq_needed)),
+             t(f"{sc}.breadcrumb_missing", missing=len(crumb_missing), total=len(crumb_needed))]
+    pillar.add(Check("schema_coverage", t(f"{sc}.label"), cov, 20, "; ".join(parts),
+                     urls=sorted(set(exp_missing) | set(faq_missing))))
 
     # 4) schema validity / completeness
-    validations = [v for p in pages for v in validate_page(p)]
+    validations = [v for p in pages for v in validate_page(p, lang=ctx.lang)]
     val_s = sum(v.score for v in validations) / len(validations) if validations else 0.0
     broken = [v for v in validations if v.missing_required or v.errors]
+    sv = "readability.check.schema_validity"
     if validations:
         by_family: dict[str, list[float]] = {}
         for v in validations:
             by_family.setdefault(v.family, []).append(v.score)
-        fam_txt = ", ".join(f"{f} %{round(sum(s) / len(s))}" for f, s in sorted(by_family.items()))
-        detail = f"{len(validations)} şema bloğu doğrulandı ({fam_txt}); {len(broken)} blokta zorunlu alan/hata var"
+        fam_txt = ", ".join(t(f"{sv}.family_score", family=f, pct=round(sum(s) / len(s)))
+                            for f, s in sorted(by_family.items()))
+        detail = t(f"{sv}.detail", count=len(validations), families=fam_txt, broken=len(broken))
         if broken:
             b = broken[0]
-            detail += f" — örn. {b.type}: {', '.join(b.missing_required + b.errors)[:160]}"
+            detail += t(f"{sv}.example", type=b.type, fields=", ".join(b.missing_required + b.errors)[:160])
     else:
-        detail = "Doğrulanacak desteklenen şema bloğu yok"
-    pillar.add(Check("schema_validity", "Şema eksiksizliği ve geçerliliği", val_s, 15, detail,
+        detail = t(f"{sv}.detail_none")
+    pillar.add(Check("schema_validity", t(f"{sv}.label"), val_s, 15, detail,
                      urls=sorted({v.url for v in broken})))
 
     # 5) llms.txt
     sig = ctx.signals
     lt = sig.llms_txt if sig else None
     full = sig.llms_full_txt if sig else None
+    lx = "readability.check.llms_txt"
     if lt is None:
-        pillar.add(Check("llms_txt", "llms.txt bağlam dosyası", 0, 15, "llms.txt kontrol edilmedi", applicable=False))
+        pillar.add(Check("llms_txt", t(f"{lx}.label"), 0, 15, t(f"{lx}.not_checked"), applicable=False))
     else:
         if lt.valid:
-            s, d = 100.0, f"/llms.txt geçerli ({lt.sections} bölüm, {lt.links} bağlantı)"
+            s, d = 100.0, t(f"{lx}.valid", sections=lt.sections, links=lt.links)
             if lt.issues:
-                s, d = 85.0, d + f"; iyileştirme: {'; '.join(lt.issues)}"
+                s, d = 85.0, d + t(f"{lx}.improvements", issues="; ".join(lt.issues))
         elif lt.status == 200:
-            s, d = 40.0, f"/llms.txt var ama geçersiz: {'; '.join(lt.issues)}"
+            s, d = 40.0, t(f"{lx}.invalid", issues="; ".join(lt.issues))
         else:
-            s, d = 0.0, f"/llms.txt bulunamadı (HTTP {lt.status or 'hata'})"
+            s, d = 0.0, t(f"{lx}.not_found", status=lt.status or t(f"{lx}.status_error"))
         if full and full.status == 200 and full.content_type != "text/html":
-            s, d = min(100.0, s + 10), d + "; /llms-full.txt mevcut"
-        pillar.add(Check("llms_txt", "llms.txt bağlam dosyası", s, 15, d))
+            s, d = min(100.0, s + 10), d + t(f"{lx}.full_present")
+        pillar.add(Check("llms_txt", t(f"{lx}.label"), s, 15, d))
 
     pillar.facts = {
         "qa_by_page": {u: v for u, v in qa_by_page.items() if v},

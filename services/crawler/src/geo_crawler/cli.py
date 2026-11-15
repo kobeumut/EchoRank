@@ -43,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[{done}/{total}] {page.status_code} {page.page_type.value:<8} {page.url}", file=sys.stderr)
 
     result = asyncio.run(index_site(args.url, cfg, args.keywords, on_page=progress))
-    reconciliation = asyncio.run(reconcile(result.graph, lang=args.lang, max_concepts=args.max_concepts)) if args.reconcile else None
+    reconciliation = asyncio.run(reconcile(result.graph, lang=args.wikidata_lang, max_concepts=args.max_concepts)) if args.reconcile else None
     data = result.export_graph_json(None if args.output == "-" else args.output)
     if args.output == "-":
         print(data)

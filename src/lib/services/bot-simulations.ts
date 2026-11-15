@@ -4,12 +4,17 @@
 //
 // Every request targets the tracked site (same host or subdomain), every hop is checked against private networks,
 // bodies are capped at 2 MB and each request times out after 15 s.
+//
+// Diagnostic `reasons` are machine codes (`blocked_by_cloudflare`, `empty_mount_#root`, ...); only the request-level error
+// text (time-out / failure) is human-readable and is written in the caller's `locale` (default English).
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../db";
 import { assertPublicHttpUrl, OUTBOUND_TIMEOUT_MS } from "../distribution/net";
 import { HttpError } from "../http";
+import { DEFAULT_LOCALE, type Locale } from "../i18n/config";
+import { serverT } from "../i18n/request";
 import { queryBool } from "../validation";
 import { getSiteOrThrow } from "./sites";
 
@@ -150,7 +155,8 @@ async function readCapped(res: Response): Promise<{ text: string; bytes: number 
   return { text: new TextDecoder().decode(Buffer.concat(chunks).subarray(0, MAX_BYTES)), bytes };
 }
 
-export async function probe(url: string, botName: BotName): Promise<ProbeResult> {
+export async function probe(url: string, botName: BotName, locale: Locale = DEFAULT_LOCALE): Promise<ProbeResult> {
+  const t = serverT(locale);
   const started = performance.now();
   const headers = new Headers();
   let status: number | null = null;
@@ -178,7 +184,9 @@ export async function probe(url: string, botName: BotName): Promise<ProbeResult>
       break;
     }
   } catch (err) {
-    error = err instanceof HttpError ? err.message : (err as Error).name === "TimeoutError" ? "Timed out" : `Request failed: ${(err as Error).message}`.slice(0, 300);
+    error = err instanceof HttpError ? err.message
+      : (err as Error).name === "TimeoutError" ? t("botsim.error.timeout")
+      : t("botsim.error.requestFailed", { message: (err as Error).message }).slice(0, 300);
   }
   const analysis = analyzeResponse(status, headers, body);
   if (error) analysis.diagnostics.reasons.push(error);
@@ -272,7 +280,7 @@ export function summarizeRun(rows: Row[]) {
 // ponytail: one simulation per site per Node process; use a shared lock before multi-replica deployment.
 const running = new Set<string>();
 
-export async function runBotSimulation(siteId: string, input: z.infer<typeof botSimulationInputSchema>) {
+export async function runBotSimulation(siteId: string, input: z.infer<typeof botSimulationInputSchema>, locale: Locale = DEFAULT_LOCALE) {
   const site = await getSiteOrThrow(siteId);
   let urls = input.urls;
   if (!urls) {
@@ -291,7 +299,7 @@ export async function runBotSimulation(siteId: string, input: z.infer<typeof bot
   try {
     const runId = randomUUID();
     const tasks = targets.flatMap((url) => bots.map((botName) => ({ url, botName })));
-    const results = await pool(tasks, CONCURRENCY, (t) => probe(t.url, t.botName));
+    const results = await pool(tasks, CONCURRENCY, (task) => probe(task.url, task.botName, locale));
     const checkedAt = new Date();
     await prisma.botSimulationRecord.createMany({
       data: results.map((r) => ({

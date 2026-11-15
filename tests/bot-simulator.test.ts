@@ -25,7 +25,9 @@ import {
 import * as route from "@/app/api/sites/[id]/bot-simulator/route";
 import { ctx, req, resetDb } from "./helpers";
 
-// Python <-> TS contract: real output of services/crawler `geo_crawler.scoring.bot_simulator` (+ its HTML fixtures).
+// Python <-> TS contract: real output of services/crawler `geo_crawler.scoring.bot_simulator` (+ its HTML fixtures),
+// generated in the default locale (English). The sample pages are Turkish web content on purpose: they are the input
+// that exercises the Turkish tokenizer / render paths of both implementations.
 const fixture = (name: string) => JSON.parse(readFileSync(path.resolve(__dirname, "fixtures", name), "utf8"));
 const PY_REPORT = fixture("bot-simulation-report.json");
 const PY_SUMMARY = fixture("bot-simulation-summary.json");
@@ -63,8 +65,10 @@ describe("contract with the Python simulator", () => {
       expect(estimateTokens(p.html), name).toBe(p.estimate_tokens);
       expect(visibleWords(p.html), name).toBe(p.visible_words);
     }
+    // Turkish sample text on purpose: exercises the non-ASCII branch of the estimator (same value as the Python port).
     expect(estimateTokens("Merhaba dünya, bu bir deneme metnidir.")).toBe(11);
     expect(estimateTokens("The quick brown fox jumps over the lazy dog 2026.")).toBe(13);
+    // Turkish sample text on purpose (non-ASCII branch).
     expect(estimateTokens(`<div class="x" id="root"></div>\n<p>Şirketimiz İstanbul'da kuruldu.</p>`)).toBe(31);
     expect(estimateTokens("")).toBe(0);
   });
@@ -98,6 +102,16 @@ describe("detectProtection", () => {
     expect(detectProtection(403, { server: "nginx" }, "<h1>403 Forbidden</h1>")).toMatchObject({ vendor: "unknown", kind: "block" });
   });
 
+  it("names protections and evidence in the requested locale (English by default)", () => {
+    const body = html("CF_BLOCK_1020");
+    expect(detectProtection(403, { server: "cloudflare" }, body)).toMatchObject({ name: "Cloudflare WAF block", evidence: [expect.stringMatching(/^body: '/)] });
+    expect(detectProtection(403, { server: "cloudflare" }, body, "tr")).toMatchObject({ name: "Cloudflare WAF engeli", evidence: [expect.stringMatching(/^gövde: '/)] });
+    expect(detectProtection(403, { server: "nginx" }, "<h1>403 Forbidden</h1>")?.name).toBe("Server/WAF HTTP 403 block");
+    expect(detectProtection(403, { server: "nginx" }, "<h1>403 Forbidden</h1>", "tr")?.name).toBe("Sunucu/WAF HTTP 403 engeli");
+    expect(detectProtection(429, {}, "slow down")?.name).toBe("HTTP 429 rate limit");
+    expect(detectProtection(429, {}, "slow down", "tr")?.name).toBe("HTTP 429 hız sınırı");
+  });
+
   it("does not flag normal pages", () => {
     expect(detectProtection(200, { server: "cloudflare", "cf-ray": "x" }, html("SSR_PAGE"))).toBeNull();
     expect(detectProtection(200, {}, html("CONTACT_PAGE_WITH_RECAPTCHA"))).toBeNull(); // contact-form CAPTCHA
@@ -111,13 +125,16 @@ describe("render, tokens and bloat", () => {
   it("classifies CSR shells, SSR pages and hydrated frameworks", () => {
     const csr = analyzeRender(html("CSR_SHELL"));
     expect(csr).toMatchObject({ mode: "csr_shell", score: 0, spa_root: { id: "root", empty: true }, noscript_requires_js: true });
-    expect(csr.reason).toContain("#root kökü boş");
+    expect(csr.reason).toBe("The #root mount point is empty and the server HTML has only 0 words; content is loaded with JavaScript");
+    expect(analyzeRender(html("CSR_SHELL"), "tr").reason).toContain("#root kökü boş, sunucu HTML'inde yalnızca 0 kelime var");
     const ssr = analyzeRender(html("SSR_PAGE"));
-    expect(ssr).toMatchObject({ mode: "static", score: 100, h1: "Barista Pro X Espresso Makinesi" });
+    expect(ssr).toMatchObject({ mode: "static", score: 100, h1: "Barista Pro X Espresso Makinesi", reason: "Content is present in the first HTML response" });
     expect(ssr.word_count).toBeGreaterThan(400);
     const next = analyzeRender(html("SSR_PAGE").replace("</body>", '<script id="__NEXT_DATA__" type="application/json">{}</script></body>'));
     expect(next).toMatchObject({ mode: "ssr_hydrated", frameworks: ["nextjs"] });
-    expect(analyzeRender("<html><body><p>Kısa.</p></body></html>").mode).toBe("thin");
+    const thin = analyzeRender("<html><body><p>Short.</p></body></html>");
+    expect(thin).toMatchObject({ mode: "thin", reason: "The server HTML has only 1 word" });
+    expect(analyzeRender("<html><body><p>Short.</p></body></html>", "tr").reason).toBe("sunucu HTML'inde yalnızca 1 kelime var");
   });
 
   it("measures DOM size and embedded JSON state", () => {
@@ -127,10 +144,16 @@ describe("render, tokens and bloat", () => {
       .replace("</body>", `<script id="__NEXT_DATA__" type="application/json">${state}</script><script>self.__next_f.push([1,"a"])</script></body>`));
     expect(b.dom_nodes).toBeGreaterThan(2700);
     expect(b.dom_depth).toBeLessThan(10);
-    expect(b.json_state.map((s) => s.kind)).toEqual(["__NEXT_DATA__", "Next.js RSC yükü"]);
+    expect(b.json_state.map((s) => s.kind)).toEqual(["__NEXT_DATA__", "Next.js RSC payload"]);
     expect(b.ld_json_bytes).toBeGreaterThan(0);
-    expect(b.issues.join(" ")).toMatch(/DOM \d+ düğüm.*gömülü JSON durum verisi 1\d\d KB/);
+    expect(b.issues.join(" ")).toMatch(/DOM has \d+ nodes.*Embedded JSON state data is 1\d\d KB/);
     expect(analyzeBloat(html("SSR_PAGE")).issues).toEqual([]);
+    // the same page in Turkish (labels and issues follow the locale; sizes do not)
+    const tr = analyzeBloat(html("SSR_PAGE").replace("</main>", `</main>${divs}`)
+      .replace("</body>", `<script id="__NEXT_DATA__" type="application/json">${state}</script><script>self.__next_f.push([1,"a"])</script></body>`), "tr");
+    expect(tr.json_state.map((s) => s.kind)).toEqual(["__NEXT_DATA__", "Next.js RSC yükü"]);
+    expect(tr.issues.join(" ")).toMatch(/DOM \d+ düğüm.*gömülü JSON durum verisi 1\d\d KB/);
+    expect(tr.dom_nodes).toBe(b.dom_nodes);
   });
 
   it("scores token efficiency", () => {
@@ -146,7 +169,7 @@ describe("render, tokens and bloat", () => {
     expect(robotsAllows(g, "PerplexityBot", `${ORIGIN}/private/x`)).toBe(true);
     expect(robotsAllows(g, "ClaudeBot", `${ORIGIN}/private/x`)).toBe(false);
     expect(robotsAllows(g, "ClaudeBot", `${ORIGIN}/private/ok`)).toBe(true);
-    expect(robotsAllows(parseRobots("User-agent: *\nDisallow: /*?\nAllow: /blog/$"), "x", "/urun?renk=1")).toBe(false);
+    expect(robotsAllows(parseRobots("User-agent: *\nDisallow: /*?\nAllow: /blog/$"), "x", "/product?color=1")).toBe(false);
   });
 });
 
@@ -178,13 +201,15 @@ describe("simulateBots", () => {
     const report = await simulateBots([`${ORIGIN}/`], { fetchImpl: impl, delayMs: 0 });
     const r = Object.fromEntries(report.pages[0].results.map((x) => [x.token, x]));
     expect(r.GPTBot).toMatchObject({ outcome: "challenge", silent_block: true, protection: { vendor: "cloudflare", name: "Cloudflare Managed Challenge" } });
-    expect(r.PerplexityBot).toMatchObject({ outcome: "blocked", silent_block: true, reason: "Cloudflare WAF engeli (HTTP 403)" });
+    expect(r.PerplexityBot).toMatchObject({ outcome: "blocked", silent_block: true, reason: "Cloudflare WAF block (HTTP 403)", label: "blocked" });
     expect(r["Google-Extended"]).toMatchObject({ outcome: "ok", general: false });
     expect(report.blocked_bots).toEqual(["GPTBot", "ClaudeBot", "PerplexityBot"]);
     expect(report.vendors).toEqual(["cloudflare"]);
     expect(report.scores.access).toBe(40);
     expect(report.findings.map((f) => f.code).slice(0, 2)).toEqual(["waf_challenge", "waf_block"]);
-    expect(report.findings[1].detail).toContain("sessiz engel");
+    expect(report.findings[0].title).toBe("2 AI bots are stuck on a challenge/CAPTCHA page");
+    expect(report.findings[1].title).toBe("1 AI bot is rejected by the server/WAF");
+    expect(report.findings[1].detail).toBe("Cloudflare WAF block (HTTP 403). robots.txt allows PerplexityBot, yet the request is rejected (silent block).");
 
     const cf = report.fixes.find((f) => f.id === "cloudflare_waf_skip")!;
     expect(cf).toMatchObject({ recommended: true, preventive: false });
@@ -194,7 +219,8 @@ describe("simulateBots", () => {
     expect(api).toMatchObject({ action: "skip", action_parameters: { ruleset: "current" } });
     expect(report.fixes.find((f) => f.id === "nginx_allow")!.code).toContain('"~*(GPTBot|ClaudeBot|PerplexityBot)" 1;');
     expect(report.fixes.find((f) => f.id === "apache_allow")!.code).toContain('SetEnvIfNoCase User-Agent "(GPTBot|ClaudeBot|PerplexityBot)" ai_bot');
-    expect(report.caveats[0]).toContain("IP aralıklarından");
+    expect(report.caveats[0]).toContain("not from the AI providers' IP ranges");
+    expect(r["Google-Extended"].note).toBe("Google-Extended is a robots.txt token only; Google fetches content with Googlebot.");
     // same verdicts as the Python simulator on the same responses
     const py = PY_REPORT.pages[0].results.map((x: { token: string; outcome: string }) => [x.token, x.outcome]);
     expect(report.pages[0].results.filter((x) => x.token !== "Applebot-Extended").map((x) => [x.token, x.outcome]))
@@ -204,7 +230,7 @@ describe("simulateBots", () => {
   it("flags CSR shells, dropped connections, thin bot content and robots.txt disallows", async () => {
     const { impl } = fakeFetch((ua, url) => {
       if (url.pathname === "/app") return page(html("CSR_SHELL"));
-      if (ua.includes("ClaudeBot")) return page("<html><body><main><p>Kısa içerik.</p></main></body></html>");
+      if (ua.includes("ClaudeBot")) return page("<html><body><main><p>Too little content.</p></main></body></html>");
       if (ua.includes("PerplexityBot")) throw new TypeError("fetch failed", { cause: { code: "ECONNRESET", message: "socket hang up" } });
       return page(html("SSR_PAGE"));
     }, "User-agent: GPTBot\nDisallow: /\n\nUser-agent: *\nAllow: /\n");
@@ -213,7 +239,8 @@ describe("simulateBots", () => {
     const home = Object.fromEntries(report.pages[0].results.map((x) => [x.token, x]));
     expect(home.ClaudeBot.outcome).toBe("degraded");
     expect(home.PerplexityBot).toMatchObject({ outcome: "error", silent_block: true, error: "ECONNRESET: socket hang up" });
-    expect(home.PerplexityBot.reason).toContain("bağlantısı düşürülüyor");
+    expect(home.PerplexityBot.reason).toBe("ECONNRESET: socket hang up (the browser request succeeded → the connection is being dropped for the AI user agent)");
+    expect(home.ClaudeBot.reason).toMatch(/^Returned \d+% of the browser's content \(3 words\)$/);
     expect(home.GPTBot).toMatchObject({ robots_allowed: false, accessible: true, silent_block: false });
     const codes = report.findings.map((f) => f.code);
     expect(codes[0]).toBe("waf_block");
@@ -227,7 +254,7 @@ describe("simulateBots", () => {
       fetchImpl: fakeFetch(() => page(html("CF_MANAGED_CHALLENGE"), 403, { ...CF, "cf-mitigated": "challenge" })).impl, delayMs: 0,
     });
     expect(wall.findings[0]).toMatchObject({ code: "general_block" });
-    expect(wall.findings[0].detail).toContain("Cloudflare Managed Challenge tüm otomatik istemcilere");
+    expect(wall.findings[0].detail).toContain("Cloudflare Managed Challenge is shown to all automated clients");
     expect(wall.score).toBe(0);
     expect(wall.pages[0].ai_view).toBeNull();
 
@@ -255,6 +282,37 @@ describe("simulateBots", () => {
     expect(t.text_tokens).toBeGreaterThan(1000);
   });
 
+  it("writes reasons, findings, caveats and fix comments in Turkish with locale tr (field names and ids stay)", async () => {
+    const { impl } = fakeFetch((ua, url) => {
+      if (ua.includes("GPTBot")) return page(html("CF_MANAGED_CHALLENGE"), 403, { ...CF, "cf-mitigated": "challenge" });
+      if (ua.includes("PerplexityBot")) return page(html("CF_BLOCK_1020"), 403, CF);
+      return page(url.pathname === "/app" ? html("CSR_SHELL") : html("SSR_PAGE"), 200, CF);
+    }, "User-agent: Applebot-Extended\nDisallow: /\n");
+    const report = await simulateBots([`${ORIGIN}/`, `${ORIGIN}/app`], { fetchImpl: impl, delayMs: 0, locale: "tr" });
+    const r = Object.fromEntries(report.pages[0].results.map((x) => [x.token, x]));
+    expect(r.GPTBot).toMatchObject({ outcome: "challenge", label: "challenge/CAPTCHA", reason: "Cloudflare Managed Challenge (HTTP 403)" });
+    expect(r.PerplexityBot).toMatchObject({ outcome: "blocked", label: "engellendi", reason: "Cloudflare WAF engeli (HTTP 403)", protection: { evidence: [expect.stringMatching(/^gövde: /)] } });
+    expect(r["Google-Extended"]).toMatchObject({ label: "erişilebilir", reason: "HTTP 200, 544 kelime", note: "Google-Extended yalnızca robots.txt jetonudur; Google içeriği Googlebot ile alır." });
+    expect(report.findings.map((f) => f.code)).toEqual(expect.arrayContaining(["waf_challenge", "waf_block", "csr_shell", "robots_disallow"]));
+    const byCode = Object.fromEntries(report.findings.map((f) => [f.code, f]));
+    expect(byCode.waf_challenge.title).toBe("1 AI botu challenge/CAPTCHA sayfasına takılıyor");
+    expect(byCode.waf_block.detail).toContain("robots.txt PerplexityBot için izin verdiği hâlde (sessiz engel).");
+    expect(byCode.csr_shell.detail).toBe("#root kökü boş, sunucu HTML'inde yalnızca 0 kelime var; içerik JavaScript ile yükleniyor. AI tarayıcıları JavaScript çalıştırmaz; SSR/SSG veya prerender gerekli.");
+    expect(report.caveats[0]).toContain("IP aralıklarından değil");
+    const fixes = Object.fromEntries(report.fixes.map((f) => [f.id, f]));
+    expect(fixes.cloudflare_waf_skip.title).toBe("Cloudflare WAF: AI botları için Skip kuralı");
+    expect(fixes.cloudflare_waf_skip.code).toContain("(listenin EN ÜSTÜNE taşıyın)");
+    expect(fixes.nginx_allow.code).toContain("# server { } bloğu — mevcut UA engelinizi AI botları dışında bırakın:");
+    expect(fixes.apache_allow.instructions).toBe("Değişiklikten sonra `apachectl configtest && apachectl graceful` çalıştırın.");
+    expect(fixes.ssr_render.code).toContain("// AI botları JavaScript çalıştırmaz; https://botsim.example.com/app ilk HTML'de içerik döndürmeli.");
+    // the configuration itself is language-independent
+    const en = await simulateBots([`${ORIGIN}/`, `${ORIGIN}/app`], { fetchImpl: impl, delayMs: 0 });
+    expect(report.findings.map((f) => [f.code, f.severity])).toEqual(en.findings.map((f) => [f.code, f.severity]));
+    expect(report.fixes.map((f) => [f.id, f.platform, f.language])).toEqual(en.fixes.map((f) => [f.id, f.platform, f.language]));
+    expect(JSON.parse(fixes.cloudflare_waf_skip.code.split("rules[0]):\n")[1])).toEqual(JSON.parse(en.fixes.find((f) => f.id === "cloudflare_waf_skip")!.code.split("rules[0]):\n")[1]));
+    expect(botSimulationReportSchema.parse(report)).toBeTruthy();
+  });
+
   it("validates input", async () => {
     await expect(simulateBots([])).rejects.toThrow("At least one URL");
     await expect(simulateBots([ORIGIN], { bots: ["NopeBot"] })).rejects.toThrow("Unknown bot");
@@ -272,6 +330,30 @@ describe("buildFixes", () => {
     expect(aws.Rules[0].Statement.RegexMatchStatement.RegexString).toBe("(?i)(GPTBot|Googlebot)");
     expect(buildFixes([BOT_PROFILES.GPTBot]).map((f) => f.id)).not.toContain("aws_waf_allow");
     expect(buildFixes([], [])).toEqual([]);
+  });
+
+  it("writes the comments inside the generated snippets in the requested locale", () => {
+    const en = buildFixes([BOT_PROFILES.GPTBot], ["akamai"], ["https://x.test/"], true);
+    const tr = buildFixes([BOT_PROFILES.GPTBot], ["akamai"], ["https://x.test/"], true, false, "tr");
+    expect(tr.map((f) => f.id)).toEqual(en.map((f) => f.id));
+    const code = (fixes: typeof en, id: string) => fixes.find((f) => f.id === id)!.code;
+    expect(code(en, "nginx_allow")).toContain("# rate-limit key: an empty key for AI bots = the limit is not applied");
+    expect(code(tr, "nginx_allow")).toContain("# rate limit anahtarı: AI botları için boş anahtar = limit uygulanmaz");
+    expect(code(en, "apache_allow")).toContain("# 3) Exempt them from ModSecurity / OWASP CRS scanner detection:");
+    expect(code(tr, "apache_allow")).toContain("# 3) ModSecurity / OWASP CRS tarayıcı tespitinden muaf tutun:");
+    expect(code(en, "token_diet")).toContain("# Embedded state data (__NEXT_DATA__ / RSC / __NUXT__):");
+    expect(code(tr, "token_diet")).toContain("# Gömülü durum verisi (__NEXT_DATA__ / RSC / __NUXT__):");
+    expect(code(en, "ssr_render")).toContain("// fetch the data on the server (NOT useEffect + fetch)");
+    expect(code(tr, "ssr_render")).toContain("// sunucuda veri çek (useEffect + fetch DEĞİL)");
+    expect(code(en, "akamai_console")).toContain("set the action of the 'AI Crawlers'");
+    expect(code(tr, "akamai_console")).toContain("aksiyonunu Allow (veya Monitor) yapın");
+    expect(en.find((f) => f.id === "akamai_console")!.instructions).toBe("Apply it in the admin console and run the simulation again.");
+    expect(tr.find((f) => f.id === "akamai_console")!.instructions).toBe("Yönetim panelinden uygulayın ve simülasyonu tekrar çalıştırın.");
+    // the configuration lines are identical in every language
+    const strip = (c: string) =>
+      c.split("\n").filter((l) => !l.trimStart().startsWith("#") && !l.trimStart().startsWith("//")).map((l) => l.replace(/\s+# .*$/, ""));
+    expect(strip(code(tr, "nginx_allow"))).toEqual(strip(code(en, "nginx_allow")));
+    expect(tr.find((f) => f.id === "nginx_allow")!.instructions).toContain("`nginx -t && nginx -s reload`");
   });
 
   it("produces the same recipes as the Python simulator", () => {
@@ -304,6 +386,22 @@ describe("site API", () => {
     expect(botSimulationReportSchema.parse(body).blocked_bots).toEqual(["ClaudeBot"]);
     expect(body.pages[0].url).toBe(`${ORIGIN}/`);
     expect(seen.map((s) => s.url)).toEqual([`${ORIGIN}/robots.txt`, `${ORIGIN}/`, `${ORIGIN}/`, `${ORIGIN}/`]);
+  });
+
+  it("POST generates the report text in the request's language (?lang= / cookie / Accept-Language; English by default)", async () => {
+    const { impl } = fakeFetch((ua) => (ua.includes("GPTBot") ? page(html("CF_BLOCK_1020"), 403, CF) : page(html("SSR_PAGE"), 200, CF)));
+    vi.stubGlobal("fetch", impl);
+    const run = async (path: string, headers: Record<string, string> = {}) => {
+      const request = req(path, { method: "POST", body: { bots: ["GPTBot"] } });
+      for (const [k, v] of Object.entries(headers)) request.headers.set(k, v);
+      return (await (await route.POST(request, ctx(siteId))).json()) as { findings: { code: string; title: string }[] };
+    };
+    const base = `/api/sites/${siteId}/bot-simulator`;
+    expect((await run(base)).findings[0].title).toBe("1 AI bot is rejected by the server/WAF");
+    expect((await run(`${base}?lang=tr`)).findings[0].title).toBe("1 AI botu sunucu/WAF tarafından reddediliyor");
+    expect((await run(base, { cookie: "locale=tr" })).findings[0].title).toBe("1 AI botu sunucu/WAF tarafından reddediliyor");
+    expect((await run(base, { "accept-language": "tr-TR,tr;q=0.9,en;q=0.8" })).findings[0].title).toBe("1 AI botu sunucu/WAF tarafından reddediliyor");
+    expect((await run(`${base}?lang=en`, { cookie: "locale=tr" })).findings[0].title).toBe("1 AI bot is rejected by the server/WAF");
   });
 
   it("POST refuses URLs outside the site and invalid input", async () => {

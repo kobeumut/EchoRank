@@ -419,6 +419,7 @@ model SyntheticQuery {
   siteId      String
   query       String
   intent      String
+  /// Prompt language: tr | en. The column default "tr" is historical and kept for compatibility; the API always writes the language explicitly.
   language    String   @default("tr")
   entityKey   String?
   entityName  String?

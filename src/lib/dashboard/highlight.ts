@@ -6,7 +6,20 @@ function escape(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Regex source matching `term` case-insensitively, including Turkish İ/i/ı/I which /i does not fold. */
+/**
+ * Case/dotless-insensitive key for matching text in either language. Deliberately Turkish-aware: the "tr" locale maps
+ * `İ -> i` and `I -> ı` (plain `toLowerCase()` would turn `İ` into `i` + a combining dot), and the final replace folds the
+ * dotless `ı` back to `i` so that English "Index", Turkish "İndeks" and a typed "index" all compare equal.
+ */
+export function foldCase(text: string): string {
+  return text.toLocaleLowerCase("tr").replace(/ı/g, "i");
+}
+
+/**
+ * Regex source matching `term` case-insensitively, including the Turkish dotted/dotless i family (İ, i, ı, I),
+ * which the plain /i flag does not fold. The Turkish-locale variants and the "iıİI" set below are language data
+ * needed to highlight Turkish answers correctly; they are harmless for English text.
+ */
 function caseInsensitiveSource(term: string) {
   let out = "";
   for (const ch of term) {

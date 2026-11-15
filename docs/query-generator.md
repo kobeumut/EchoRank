@@ -7,26 +7,41 @@
 | Source | Used as |
 | --- | --- |
 | `Site.targetKeywords` | Manual prompts — always first, never quality-filtered |
-| `GraphEntity` Product (+ `has_brand`, `has_category`, `price`, `currency`, `rating`, `pagerank`) | Product prompts, "A vs B" between products of the same category, budget prompts ("15.000 TL altı en iyi …") from the category's median price |
+| `GraphEntity` Product (+ `has_brand`, `has_category`, `price`, `currency`, `rating`, `pagerank`) | Product prompts, "A vs B" between products of the same category, budget prompts ("What are the best … under $15,000?") from the category's median price |
 | Category / Brand / Concept entities | Category, brand and concept prompts |
 | FAQ entities, question-shaped article headings (`CrawledPage.h1`) | Kept verbatim — they are real user phrasings |
 | `settings.visibilityAnalysis.competitors` | "Site vs competitor" prompts |
 | `settings.locale` | Languages: `tr*` → Turkish, `en*` → English, otherwise both |
 
-Crawled names are cleaned (`"Barista Pro X | Shop"` → `Barista Pro X`); URLs, navigation labels ("Home", "Anasayfa"), sentences and over-long names are dropped. Category and concept names are lower-cased mid-sentence and never used in templates of the other language ("best Kahve Makineleri brands" is not generated).
+Crawled names are cleaned (`"Barista Pro X | Shop"` → `Barista Pro X`); URLs, navigation labels ("Home" and its Turkish equivalent), sentences and over-long names are dropped. Category and concept names are lower-cased mid-sentence and never used in templates of the other language (a Turkish category name such as "Kahve Makineleri", "coffee machines", is never put into an English template, so "best Kahve Makineleri brands" is not generated).
 
 ## Intents
 
-1. **informational** — "X nedir ve nasıl çalışır?", "What should I look for when buying X?"
-2. **comparative** — "En iyi X markaları hangileri?", "A mı B mi? Hangisi daha iyi?", "X alternatifleri", budget and value-for-money prompts
-3. **transactional** — "X nereden satın alınır?", discounts, stock/shipping, authorized retailers
-4. **reputation** — "[Site] güvenilir mi?", "[Product]'ın kronik sorunları", user reviews
+Each intent has an English and a Turkish template set (`TEMPLATES` in `src/lib/services/query-generator.ts`). Examples of the English output:
+
+1. **informational**: "What is X and how does it work?", "What should I look for when buying X?"
+2. **comparative**: "Which brands make the best X?", "A vs B: which one is better?", "What are the best alternatives to X?", budget and value-for-money prompts
+3. **transactional**: "Where can I buy X?", discounts, stock and shipping, authorized retailers
+4. **reputation**: "Is [Site] legit and trustworthy?", "What are the common problems with [Product]?", user reviews
+
+### Turkish templates
+
+<!-- The Turkish examples in this section are deliberate: they show the output of the Turkish template set, which is language data (not UI text). -->
+
+Turkish prompts are generated only when the `tr` language is selected: the `languages` option, which defaults to the site's `settings.locale` (`tr*` → Turkish, `en*` → English, otherwise both). This prompt language is independent of the dashboard / API locale. Examples:
+
+| Intent | Turkish prompt | Meaning |
+| --- | --- | --- |
+| informational | "X nedir ve nasıl çalışır?" | What is X and how does it work? |
+| comparative | "En iyi X markaları hangileri?", "A mı B mi? Hangisi daha iyi?" | Which are the best X brands? / A or B? Which is better? |
+| transactional | "X nereden satın alınır?" | Where can I buy X? |
+| reputation | "[Site] güvenilir mi?", "[Product]'ın kronik sorunları" | Is [Site] trustworthy? / Chronic problems of [Product] |
 
 Turkish grammar is handled by `src/lib/text/turkish.ts`: vowel harmony, consonant assimilation and apostrophes for proper nouns (`Kahvecim'den`, `Doğuş'tan`, `Samsung'un`), the pronominal *n* of possessive compounds (`Kahve Dünyası'ndan`), pronunciation of numbers and acronyms (`iPhone 15'in`, `S3'ten`, `BMW'nin`), and the separately written question particle (`Acme mi`, `Rival mı`). Foreign names follow spelling except the common consonant + "le" / "-lle" endings (`Apple'ın`, `Breville'in`).
 
 ## Expansion, scoring, filtering
 
-- **Template expansion** (default on): conversational variants of the strongest seeds — "Türkiye'de …", "2026 itibarıyla …", "Bu konuda yeniyim …", "… Please cite reliable sources." Each intent/language bucket keeps at least one.
+- **Template expansion** (default on): conversational variants of the strongest seeds, for example "As of 2026, …", "I'm new to this, so please keep it simple: …" and "… Please cite reliable sources." (each language has its own wrapper set; the Turkish ones are language data). Each intent/language bucket keeps at least one.
 - **LLM expansion** (opt-in): `expandWithLlm(seeds, complete)` takes any text-completion function, asks for rephrasings, and labels/filters them. Nothing in the app calls a paid model for generation implicitly.
 - **difficulty** (competition) and **volume** are 0–100 heuristics with `low / medium / high` levels: generic head terms ("best X brands") are hard and frequent, long, specific or self-branded prompts are easy and rare. They are relative estimates, not keyword-planner data.
 - **quality** (0–1) rejects malformed prompts (unfilled placeholders, URLs, too short/long) and penalises stutters and shouted names; minimum 0.6.

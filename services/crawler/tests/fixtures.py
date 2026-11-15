@@ -1,4 +1,9 @@
-"""A small fake Turkish e-commerce site served through respx."""
+"""A small fake Turkish e-commerce site served through respx.
+
+The page content (and the Turkish URL slugs such as /hakkimizda, /iletisim, /sss, /urun/...) is Turkish *on purpose*:
+it is sample web content that exercises the Turkish classification / extraction / scoring paths of the crawler.
+The expectations in the tests are written in English (the default report language).
+"""
 import json
 
 import httpx

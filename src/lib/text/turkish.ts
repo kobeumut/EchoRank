@@ -3,6 +3,10 @@
 //
 // Orthography decides harmony; foreign names that are pronounced differently from how they are
 // written ("Apple" → "epıl") are only handled for the common consonant+"le" ending.
+//
+// This module is deliberately Turkish: the letter names, numerals (sıfır, bir, iki …) and suffix tables below are
+// language data needed to generate grammatical Turkish prompts for Turkish-language sites. It is not UI text and is
+// not translated; the English counterparts of the query templates live in services/query-generator.ts.
 
 const BACK = new Set(["a", "ı", "o", "u", "â", "û"]);
 const VOWELS = new Set(["a", "e", "ı", "i", "o", "ö", "u", "ü", "â", "î", "û"]);

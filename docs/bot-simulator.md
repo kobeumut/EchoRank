@@ -7,7 +7,8 @@ reports it. The simulator requests live URLs using each crawler's published User
 the real crawlers, it sends no cookies, no client hints and runs no JavaScript. It also fetches each URL once as a
 browser for comparison, then reports what every bot actually received.
 
-There are two implementations with the same report format (snake_case JSON):
+There are two implementations with the same report format (snake_case JSON; the compact summary stored under
+`metrics.botSimulation` uses camelCase keys):
 
 | Where | Entry point | Used by |
 | --- | --- | --- |
@@ -112,10 +113,12 @@ detected CDN/WAF.
 
 `POST` accepts at most 5 URLs, and they must be on the site's host (with or without `www.`). The server never
 fetches third-party URLs. Results are returned to the caller and not stored. Audits store the summary.
+Findings, evidence and fix-recipe text are written in the request locale (`?lang=en|tr`, the `locale` cookie or
+`Accept-Language`; default English).
 
 ```bash
 curl -X POST localhost:3000/api/sites/$SITE/bot-simulator -H 'content-type: application/json' \
-  -d '{"urls":["https://example.com/","https://example.com/urun/x"]}'
+  -d '{"urls":["https://example.com/","https://example.com/product/x"]}'
 ```
 
 ## Audit integration
@@ -134,5 +137,11 @@ The GEO score formula does not change. Simulation failures are logged and never 
 ```bash
 cd services/crawler
 .venv/bin/geo-botsim https://example.com/ --code        # text report + recipes
-.venv/bin/geo-botsim https://example.com/ --json        # full JSON (exit 1 if any bot lacks access)
+.venv/bin/geo-botsim https://example.com/ --json        # full JSON report
+.venv/bin/geo-botsim https://example.com/ https://example.com/product/x --bots GPTBot,ChatGPT-User --timeout 10 --delay 0.5
 ```
+
+Other flags: `--bots` takes a comma-separated list of robots.txt tokens, `--timeout` (default 15 s), `--delay`
+(default 0.25 s between requests of one identity) and `--lang en|tr` (language of the report text: findings, fix recipes and
+labels; default `en`). Exit code: `0` when the access score is 100, `1` when at least one bot
+lacks full access, `2` for invalid arguments.

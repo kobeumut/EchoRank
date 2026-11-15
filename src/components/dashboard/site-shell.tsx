@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { formatDate, timeAgo } from "@/lib/dashboard/format";
+import { useT } from "@/lib/i18n/provider";
 import { apiFetch, ApiError, errorMessage, useApi } from "./api";
 import { useToast } from "./toast";
 import type { AuditRow, SiteSummary } from "./types";
-import { Badge, Button, cx, EmptyState, ErrorState, Skeleton, Spinner } from "./ui";
+import { Badge, Button, cx, EmptyState, ErrorState, RichText, Skeleton, Spinner } from "./ui";
+import { useFormat } from "./use-format";
 
 type SiteCtx = {
   siteId: string;
@@ -29,15 +30,16 @@ export function useSite() {
   return ctx;
 }
 
+/** Site sub-pages; `labelKey` is the catalog key of the tab title (also reused for in-page links to a tab). */
 const TABS = [
-  { href: "", label: "Genel Bakış" },
-  { href: "/actions", label: "Ne Yapılmalı?" },
-  { href: "/studio", label: "İçerik Stüdyosu" },
-  { href: "/graph", label: "Bilgi Grafı" },
-  { href: "/bots", label: "AI Bot Teşhis" },
-  { href: "/visibility", label: "LLM Görünürlük" },
-  { href: "/competitors", label: "Model Payı & Rakipler" },
-  { href: "/distribution", label: "AI Dağıtım" },
+  { href: "", labelKey: "sites.tabs.overview" },
+  { href: "/actions", labelKey: "sites.tabs.actions" },
+  { href: "/studio", labelKey: "sites.tabs.studio" },
+  { href: "/graph", labelKey: "sites.tabs.graph" },
+  { href: "/bots", labelKey: "sites.tabs.bots" },
+  { href: "/visibility", labelKey: "sites.tabs.visibility" },
+  { href: "/competitors", labelKey: "sites.tabs.competitors" },
+  { href: "/distribution", labelKey: "sites.tabs.distribution" },
 ];
 
 const ACTIVE_CRAWL = new Set(["queued", "running"]);
@@ -48,8 +50,9 @@ export function isAuditActive(a: AuditRow | null | undefined) {
 }
 
 export function SiteShellSkeleton() {
+  const t = useT();
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6" role="status" aria-label="Yükleniyor">
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6" role="status" aria-label={t("shared.loading")}>
       <Skeleton className="h-7 w-64" />
       <Skeleton className="mt-2 h-4 w-80" />
       <Skeleton className="mt-6 h-9 w-full max-w-2xl" />
@@ -63,26 +66,27 @@ export function SiteShellSkeleton() {
 }
 
 function AuditStatus({ audit }: { audit: AuditRow | null }) {
-  if (!audit) return <Badge>Henüz analiz yapılmadı</Badge>;
+  const { t, timeAgo } = useFormat();
+  if (!audit) return <Badge>{t("sites.shell.status.none")}</Badge>;
   const crawl = audit.crawlSession;
   if (isAuditActive(audit)) {
     const running = crawl?.status === "running" || audit.status === "running";
     return (
       <span className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
         <Spinner className="h-3 w-3" />
-        {running ? `Analiz sürüyor${crawl?.pagesCrawled ? ` · ${crawl.pagesCrawled} sayfa tarandı` : ""}` : "Analiz kuyrukta"}
+        {running ? (crawl?.pagesCrawled ? t("sites.shell.status.runningPages", { count: crawl.pagesCrawled }) : t("sites.shell.status.running")) : t("sites.shell.status.queued")}
       </span>
     );
   }
   if (audit.status === "failed")
     return (
       <Badge tone="critical" icon>
-        Son analiz başarısız · {timeAgo(audit.createdAt)}
+        {t("sites.shell.status.failed", { time: timeAgo(audit.createdAt) })}
       </Badge>
     );
   return (
     <Badge tone="good" icon>
-      Son analiz {timeAgo(audit.completedAt ?? audit.createdAt)}
+      {t("sites.shell.status.last", { time: timeAgo(audit.completedAt ?? audit.createdAt) })}
     </Badge>
   );
 }
@@ -92,6 +96,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const toast = useToast();
+  const { t, formatDate } = useFormat();
   const [version, setVersion] = useState(0);
   const [startingAudit, setStartingAudit] = useState(false);
 
@@ -108,8 +113,8 @@ export function SiteShell({ children }: { children: ReactNode }) {
       const before = prev?.items[0];
       const after = next.items[0];
       if (!before || !after || before.id !== after.id || !isAuditActive(before) || isAuditActive(after)) return;
-      if (after.status === "completed") toast.push("success", "Analiz tamamlandı. Skorlar ve aksiyonlar güncellendi.");
-      else if (after.status === "failed") toast.push("error", `Analiz başarısız: ${after.error ?? "bilinmeyen hata"}`);
+      if (after.status === "completed") toast.push("success", t("sites.shell.toast.completed"));
+      else if (after.status === "failed") toast.push("error", t("sites.shell.toast.failed", { error: after.error ?? t("shared.unknownError") }));
       setVersion((v) => v + 1);
     },
   });
@@ -123,15 +128,15 @@ export function SiteShell({ children }: { children: ReactNode }) {
       const res = await apiFetch<{ execution: string }>(`/api/sites/${id}/audit`, { method: "POST", json: { trigger: "manual" } });
       toast.push(
         res.execution === "started" ? "success" : "info",
-        res.execution === "started" ? "Analiz başlatıldı: tarama → bilgi grafı → skorlama." : "Analiz kuyruğa alındı. Harici worker sonucu gönderdiğinde panel otomatik güncellenir.",
+        res.execution === "started" ? t("sites.shell.toast.started") : t("sites.shell.toast.queued"),
       );
       await audits.reload();
     } catch (err) {
-      toast.push("error", err instanceof ApiError && err.status === 409 ? "Bu site için zaten devam eden bir analiz var." : errorMessage(err));
+      toast.push("error", err instanceof ApiError && err.status === 409 ? t("shared.audit.alreadyRunning") : errorMessage(err, t));
     } finally {
       setStartingAudit(false);
     }
-  }, [id, toast, audits]);
+  }, [id, toast, audits, t]);
 
   const ctx = useMemo<SiteCtx | null>(
     () =>
@@ -156,8 +161,8 @@ export function SiteShell({ children }: { children: ReactNode }) {
     return (
       <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
         {site.error instanceof ApiError && site.error.status === 404 ? (
-          <EmptyState icon="?" title="Site bulunamadı" action={<Link href="/" className="text-sm font-medium text-indigo-600">← Sitelere dön</Link>}>
-            Bu site silinmiş olabilir.
+          <EmptyState icon="?" title={t("sites.shell.notFound.title")} action={<Link href="/" className="text-sm font-medium text-indigo-600">{t("sites.shell.notFound.back")}</Link>}>
+            {t("sites.shell.notFound.hint")}
           </EmptyState>
         ) : (
           <ErrorState error={site.error} onRetry={() => void site.reload()} />
@@ -172,9 +177,9 @@ export function SiteShell({ children }: { children: ReactNode }) {
     <SiteContext.Provider value={ctx}>
       <div className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
         <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6">
-          <nav aria-label="Konum" className="mb-2 text-xs text-zinc-500">
+          <nav aria-label={t("sites.shell.breadcrumb")} className="mb-2 text-xs text-zinc-500">
             <Link href="/" className="hover:text-zinc-900 dark:hover:text-zinc-100">
-              Siteler
+              {t("common.nav.sites")}
             </Link>{" "}
             / <span className="text-zinc-700 dark:text-zinc-300">{ctx.site.title}</span>
           </nav>
@@ -193,36 +198,38 @@ export function SiteShell({ children }: { children: ReactNode }) {
                 variant="ghost"
                 size="sm"
                 onClick={async () => {
-                  if (!window.confirm(`"${ctx.site.title}" ve tüm analiz verileri silinsin mi? Bu işlem geri alınamaz.`)) return;
+                  if (!window.confirm(t("sites.shell.deleteConfirm", { title: ctx.site.title }))) return;
                   try {
                     await apiFetch(`/api/sites/${id}`, { method: "DELETE" });
-                    toast.push("success", "Site silindi.");
+                    toast.push("success", t("sites.shell.toast.deleted"));
                     router.push("/");
                   } catch (err) {
-                    toast.push("error", errorMessage(err));
+                    toast.push("error", errorMessage(err, t));
                   }
                 }}
               >
-                Sil
+                {t("sites.shell.delete")}
               </Button>
               <Button variant="primary" onClick={() => void startAudit()} loading={startingAudit} disabled={active}>
-                {active ? "Analiz sürüyor…" : "Analizi Başlat"}
+                {active ? t("sites.shell.auditRunning") : t("sites.shell.runAudit")}
               </Button>
             </div>
           </div>
           {active && latest?.crawlSession?.status === "queued" && (
             <p className="mt-3 rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-200">
-              Analiz kuyrukta ({formatDate(latest.createdAt)}). Sunucuda <code>GEO_AUDIT_BIN</code> tanımlıysa birazdan başlar; değilse harici worker sonucu{" "}
-              <code>/api/sites/:id/audit/:auditId/result</code> adresine gönderdiğinde panel kendiliğinden güncellenir.
+              <RichText
+                message={t("sites.shell.queuedHint", { date: formatDate(latest.createdAt) })}
+                slots={{ bin: <code>GEO_AUDIT_BIN</code>, path: <code>/api/sites/:id/audit/:auditId/result</code> }}
+              />
             </p>
           )}
-          <nav aria-label="Site sekmeleri" className="-mb-px mt-5 flex gap-1 overflow-x-auto">
-            {TABS.map((t) => {
-              const href = `${base}${t.href}`;
-              const current = t.href ? pathname.startsWith(href) : pathname === base;
+          <nav aria-label={t("sites.shell.tabs")} className="-mb-px mt-5 flex gap-1 overflow-x-auto">
+            {TABS.map((tab) => {
+              const href = `${base}${tab.href}`;
+              const current = tab.href ? pathname.startsWith(href) : pathname === base;
               return (
                 <Link
-                  key={t.href}
+                  key={tab.href}
                   href={href}
                   aria-current={current ? "page" : undefined}
                   className={cx(
@@ -230,7 +237,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
                     current ? "border-indigo-600 text-indigo-700 dark:border-indigo-400 dark:text-indigo-300" : "border-transparent text-zinc-500 hover:border-zinc-300 hover:text-zinc-800 dark:hover:text-zinc-200",
                   )}
                 >
-                  {t.label}
+                  {t(tab.labelKey)}
                 </Link>
               );
             })}

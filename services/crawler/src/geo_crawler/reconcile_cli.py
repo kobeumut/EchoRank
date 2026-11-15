@@ -26,8 +26,11 @@ async def reconcile(kg: KnowledgeGraph, *, lang: str | None = None, max_concepts
         return await reconcile_graph(kg, client, types=types or RECONCILABLE, max_concepts=max_concepts, lang=lang)
 
 
-def add_arguments(ap: argparse.ArgumentParser) -> None:
-    ap.add_argument("--lang", help="search language (default: dominant page language)")
+def add_arguments(ap: argparse.ArgumentParser, lang_flag: str = "--lang") -> None:
+    """Shared Wikidata-reconciliation options. ``lang_flag`` names the Wikidata search-language option (CLIs whose
+    ``--lang`` selects the report language, e.g. geo-audit, pass ``--wikidata-lang``)."""
+    ap.add_argument(lang_flag, dest="wikidata_lang",
+                    help="Wikidata/Wikipedia search language, e.g. tr (default: dominant page language)")
     ap.add_argument("--max-concepts", type=int, default=15, help="keyword concepts to reconcile (most-mentioned first)")
 
 
@@ -52,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
     data = json.load(open(args.graph, encoding="utf-8"))
     kg = KnowledgeGraph.from_dict(data)
     types = [EntityType(t.strip()) for t in args.types.split(",")] if args.types else None
-    summary = asyncio.run(reconcile(kg, lang=args.lang, max_concepts=args.max_concepts, types=types))
+    summary = asyncio.run(reconcile(kg, lang=args.wikidata_lang, max_concepts=args.max_concepts, types=types))
     out = kg.export_graph_json(None if args.output == "-" else args.output, gaps=data.get("gaps"))
     if args.output == "-":
         print(out)

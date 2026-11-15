@@ -1,4 +1,9 @@
-"""GEO / E-E-A-T scoring + action engine."""
+"""GEO / E-E-A-T scoring + action engine.
+
+The generated report text is English by default; Turkish-locale (``lang="tr"``) tests assert the Turkish catalog.
+Sample sites in this file are *Turkish web pages on purpose*: they exercise the Turkish heuristics (hype / claim /
+policy-page patterns) that keep the analyzers working for Turkish sites.
+"""
 import json
 
 import httpx
@@ -8,6 +13,7 @@ import respx
 from fixtures import BASE, FakeSite, ld
 from geo_crawler import CrawlConfig, parse_html
 from geo_crawler.audit_cli import main as audit_main, render_text
+from geo_crawler.i18n import catalog
 from geo_crawler.scoring import audit_site, parse_robots_rules, validate_llms_txt
 from geo_crawler.scoring.access import classify_render
 from geo_crawler.scoring.robots import evaluate
@@ -61,6 +67,14 @@ def test_llms_txt_validation():
     assert not ok and "HTML" in issues[0]
     ok, issues, *_ = validate_llms_txt("Kahve sitesi\nhttps://x")
     assert not ok and len(issues) >= 3
+    assert issues[0] == "the first line is not a '# Site Name' heading"
+
+
+def test_llms_txt_issues_follow_the_locale():
+    ok, issues, *_ = validate_llms_txt("Kahve sitesi\nhttps://x", lang="tr")
+    assert not ok and issues[0] == "ilk satır '# Site Adı' başlığı değil"
+    assert validate_llms_txt("<!doctype html><html>404</html>", lang="tr")[1] == [catalog("tr")["signals.llms.html_response"]]
+    assert validate_llms_txt("", lang="en")[1] == ["the file is empty"]
 
 
 def test_schema_validation_scores_and_errors():
@@ -82,8 +96,11 @@ def test_render_classification():
     assert classify_render(shell)[0] == "csr_shell"
     ssr = parse_html('<html><body><div id="__next"><h1>Ürün</h1><p>' + "kelime " * 120 + '</p></div>'
                      '<script id="__NEXT_DATA__" type="application/json">{}</script></body></html>', BASE + "/")
-    mode, score, _ = classify_render(ssr)
-    assert mode == "ssr_hydrated" and score == 100
+    mode, score, reason = classify_render(ssr)
+    assert mode == "ssr_hydrated" and score == 100 and reason.startswith("SSR/SSG (nextjs)")
+    mode_tr, _, reason_tr = classify_render(shell, lang="tr")
+    assert mode_tr == "csr_shell" and "kökü boş" in reason_tr and "boş" not in classify_render(ssr, lang="tr")[2]
+    assert "mount point is empty" in classify_render(shell)[2]
 
 
 def test_claims_and_hype_detection():
@@ -122,12 +139,13 @@ async def test_fixture_site_scores_and_breakdown(report):
     for p in d["pillars"].values():
         assert all(c["detail"] for c in p["checks"])
     trust = report.pillars["eeat"].check("trust")
-    assert "gizlilik" in trust.detail and "HTTPS aktif" in trust.detail
+    assert "privacy" in trust.detail and "SSL/HTTPS active" in trust.detail
     llms = report.pillars["llm_readability"].check("llms_txt")
     assert llms.score == 0 and "404" in llms.detail
     # Product price "12.499,90" is flagged as invalid schema
-    assert "sayısal değil" in report.pillars["llm_readability"].check("schema_validity").detail
-    assert report.summary.startswith(f"GEO skoru {report.geo_score}/100")
+    assert "is not numeric" in report.pillars["llm_readability"].check("schema_validity").detail
+    assert report.summary.startswith(f"GEO score {report.geo_score}/100")
+    assert report.lang == "en" and d["pillars"]["ai_access"]["label"] == "AI Crawler and Bot Accessibility"
 
 
 async def test_fixture_site_action_cards(report):
@@ -324,7 +342,7 @@ async def test_bad_site_is_capped_and_gets_crawler_actions(scenario_sites):
     llms = rep.pillars["llm_readability"].check("llms_txt")
     assert llms.score == 40 and "text/html" in llms.detail
     fact = rep.pillars["eeat"].check("factual_consistency")
-    assert "kaynaksız" in fact.detail and fact.score < 60
+    assert "unsourced claims" in fact.detail and fact.score < 60
 
 
 async def test_good_site_scores_high(scenario_sites):
@@ -344,7 +362,7 @@ async def test_unreachable_site_gets_single_blocker():
         router.route(host="wall.example.com").mock(return_value=httpx.Response(403, text="Access denied",
                                                                               headers={"content-type": "text/html"}))
         _, rep = await audit_site("https://wall.example.com/", CFG)
-    assert rep.geo_score == 0 and rep.caps[-1] == "hiç sayfa alınamadı"
+    assert rep.geo_score == 0 and rep.caps[-1] == "no pages could be fetched"
     assert rep.pillars["ai_access"].facts["general_block"] is True
     rules = [a.rule_id for a in rep.actions]
     assert rules[0] == "crawler.site_unreachable" and set(rules) <= {"crawler.site_unreachable", "crawler.waf_ua_block"}
@@ -357,4 +375,93 @@ def test_cli_writes_reports(fake_site, tmp_path, capsys):
     data = json.loads(out.read_text())
     assert 0 <= data["scores"]["geo"] <= 100 and data["actions"]
     assert json.loads(rows.read_text())["audit"]["status"] == "completed"
-    assert "NE YAPILMALI?" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "WHAT SHOULD BE DONE?" in err and "GEO SCORE:" in err and "NE YAPILMALI?" not in err
+
+
+# ---------------------------------------------------------------- Turkish locale (``lang="tr"``)
+
+async def test_turkish_locale_translates_report_text_but_not_ids(fake_site):
+    _, en = await audit_site(BASE + "/", CFG)
+    _, tr = await audit_site(BASE + "/", CFG, lang="tr")
+    assert tr.lang == "tr" and tr.summary.startswith(f"GEO skoru {tr.geo_score}/100")
+    assert "aksiyon önerisi" in tr.summary and "En zayıf alan" in tr.summary
+    # scores, ids, enums and the structure are the same in both languages
+    assert (tr.geo_score, tr.seo_score, tr.eeat_score) == (en.geo_score, en.seo_score, en.eeat_score)
+    assert [(a.rule_id, a.impact, a.effort, a.category, a.check_id) for a in tr.actions] == \
+           [(a.rule_id, a.impact, a.effort, a.category, a.check_id) for a in en.actions]
+    assert list(tr.pillars) == list(en.pillars) == ["ai_access", "llm_readability", "eeat", "technical_seo"]
+    assert [c.id for p in tr.pillars.values() for c in p.checks] == [c.id for p in en.pillars.values() for c in p.checks]
+    assert [round(c.score) for p in tr.pillars.values() for c in p.checks] == \
+           [round(c.score) for p in en.pillars.values() for c in p.checks]
+    # display names, check details and action cards are Turkish
+    assert tr.pillars["ai_access"].label == "AI Crawler ve Bot Erişilebilirliği"
+    assert tr.pillars["technical_seo"].label == "Teknik SEO"
+    assert "kelime" not in tr.pillars["eeat"].label
+    trust = tr.pillars["eeat"].check("trust")
+    assert "gizlilik/KVKK" in trust.detail and "SSL/HTTPS aktif" in trust.detail
+    assert "sayısal değil" in tr.pillars["llm_readability"].check("schema_validity").detail
+    by_rule = {a.rule_id: a for a in tr.actions}
+    assert by_rule["technical.llms_txt"].title == "/llms.txt bağlam dosyası oluşturun"
+    assert by_rule["technical.llms_txt"].snippet.instructions.startswith("Site köküne text/plain")
+    assert by_rule["schema.faq_page"].title == "Sayfadaki soru-cevapları FAQPage şemasıyla işaretleyin"
+    assert by_rule["authority.policy_pages"].title.startswith("Eksik güven sayfalarını yayınlayın: ")
+    assert "Gizlilik ve KVKK Aydınlatma Metni" in by_rule["authority.policy_pages"].title
+    assert "/gizlilik-politikasi" in by_rule["authority.policy_pages"].snippet.code
+    assert "<!-- 1) Footer'a (tüm sayfalarda) bağlantı ekleyin -->" in by_rule["authority.policy_pages"].snippet.code
+    assert by_rule["schema.faq_page"].snippet.instructions == "<head> içine ekleyin."
+    assert tr.to_dict()["summary"] == tr.summary and tr.to_db_records()["audit"]["summary"] == tr.summary
+    # the English run of the very same site uses the English snippet comments and paths
+    en_rules = {a.rule_id: a for a in en.actions}
+    assert "/privacy-policy" in en_rules["authority.policy_pages"].snippet.code
+    assert en_rules["authority.policy_pages"].title.startswith("Publish the missing trust pages: ")
+
+
+async def test_turkish_locale_scenario_texts(scenario_sites):
+    _, rep = await audit_site(BAD + "/", CFG, lang="tr")
+    assert rep.caps[0].startswith("tüm AI arama/cevap botları robots.txt ile engelli")
+    robots = next(a for a in rep.actions if a.rule_id == "crawler.robots_ai_bots")
+    assert robots.title.endswith("AI botunun erişimini açın") and "# --- AI arama ve cevap motorları (GEO) ---" in robots.snippet.code
+    assert "Disallow: /sepet/" in robots.snippet.code and "User-agent: PerplexityBot\nAllow: /" in robots.snippet.code
+    assert robots.snippet.instructions.startswith("Mevcut robots.txt dosyanızın en üstüne ekleyin")
+    spam = next(a for a in rep.actions if a.rule_id == "content.spam_signals")
+    assert spam.snippet.code.startswith('Önce: "Piyasanın en iyi, %100 garantili kahve makinesi!"')
+    fact = rep.pillars["eeat"].check("factual_consistency")
+    assert "kaynaksız" in fact.detail and "abartılı/pazarlama ifadeleri" in fact.detail
+    llms = rep.pillars["llm_readability"].check("llms_txt")
+    assert llms.score == 40 and "text/plain yerine text/html" in llms.detail
+    ssr = next(a for a in rep.actions if a.rule_id == "technical.server_side_rendering")
+    assert ssr.snippet.code.splitlines()[2] == "// app/urun/[slug]/page.tsx"
+    # the same site in English keeps the English path in the same snippet
+    _, en = await audit_site(BAD + "/", CFG)
+    ssr_en = next(a for a in en.actions if a.rule_id == "technical.server_side_rendering")
+    assert ssr_en.snippet.code.splitlines()[2] == "// app/product/[slug]/page.tsx"
+    assert "Disallow: /cart/" in next(a for a in en.actions if a.rule_id == "crawler.robots_ai_bots").snippet.code
+
+
+async def test_turkish_locale_unreachable_site():
+    with respx.mock(assert_all_called=False) as router:
+        router.route(host="wall.example.com").mock(return_value=httpx.Response(403, text="Access denied",
+                                                                              headers={"content-type": "text/html"}))
+        _, rep = await audit_site("https://wall.example.com/", CFG, lang="tr")
+    assert rep.caps[-1] == "hiç sayfa alınamadı" and "Skor sınırlandı: " in rep.summary and rep.summary.endswith("hiç sayfa alınamadı")
+    blocker = rep.actions[0]
+    assert blocker.rule_id == "crawler.site_unreachable"
+    assert blocker.title == "Site otomatik istemcilere hiç içerik döndürmüyor"
+    assert blocker.snippet.code.startswith('# Cloudflare → Security → WAF → Custom rules → "Skip"')
+
+
+def test_cli_lang_tr_text_report_and_json(fake_site, tmp_path, capsys):
+    out = tmp_path / "audit.json"
+    rc = audit_main([BASE + "/", "-o", str(out), "--rps", "0", "--text", "--code", "--no-ua-probe", "--lang", "tr"])
+    assert rc == 0
+    err = capsys.readouterr().err
+    assert "NE YAPILMALI?" in err and "GEO SKORU:" in err and "(ağırlık %25)" in err and "Hedef:" in err
+    assert "WHAT SHOULD BE DONE?" not in err
+    data = json.loads(out.read_text())
+    assert data["summary"].startswith("GEO skoru") and data["pillars"]["technical_seo"]["label"] == "Teknik SEO"
+    assert set(data["pillars"]) == {"ai_access", "llm_readability", "eeat", "technical_seo"}
+    # --lang is the report language; the Wikidata search language moved to --wikidata-lang
+    assert audit_main([BASE + "/", "-o", str(tmp_path / "a2.json"), "--rps", "0", "--no-ua-probe", "--lang", "de",
+                       "--wikidata-lang", "tr"]) == 0
+    assert json.loads((tmp_path / "a2.json").read_text())["summary"].startswith("GEO score")  # unknown -> English

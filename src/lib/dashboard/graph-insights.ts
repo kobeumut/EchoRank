@@ -1,16 +1,14 @@
-// Structural problems in the knowledge graph ("kopuk / eksik düğümler"), computed from the API graph payload.
+// Structural problems in the knowledge graph (disconnected / incomplete nodes), computed from the API graph payload.
+
+import type { Translator } from "@/lib/i18n/translate";
 
 export type GraphNodeLike = { id: string; type: string; label: string; url?: string | null; properties?: unknown };
 export type GraphEdgeLike = { source: string; target: string; type: string };
 
-export const ISSUE_LABELS = {
-  isolated: "Bağlantısız düğüm",
-  orphan_page: "Yetim sayfa (iç link almıyor)",
-  page_without_schema: "Yapısal veri (schema) yok",
-  product_without_category: "Kategorisiz ürün",
-  thin_page: "İnce içerik (<150 kelime)",
-} as const;
-export type IssueKind = keyof typeof ISSUE_LABELS;
+/** Issue kinds in display order; labels come from the `graph.issue.<kind>` catalog entries. */
+export const ISSUE_KINDS = ["isolated", "orphan_page", "page_without_schema", "product_without_category", "thin_page"] as const;
+export type IssueKind = (typeof ISSUE_KINDS)[number];
+export const issueLabel = (t: Translator, kind: IssueKind) => t(`graph.issue.${kind}`);
 
 function props(n: GraphNodeLike): Record<string, unknown> {
   return n.properties && typeof n.properties === "object" && !Array.isArray(n.properties)
@@ -56,7 +54,7 @@ export function graphIssues(nodes: GraphNodeLike[], edges: GraphEdgeLike[]): Map
 }
 
 export function issueCounts(issues: Map<string, IssueKind[]>): Record<IssueKind, number> {
-  const counts = Object.fromEntries(Object.keys(ISSUE_LABELS).map((k) => [k, 0])) as Record<IssueKind, number>;
+  const counts = Object.fromEntries(ISSUE_KINDS.map((k) => [k, 0])) as Record<IssueKind, number>;
   for (const list of issues.values()) for (const k of list) counts[k]++;
   return counts;
 }

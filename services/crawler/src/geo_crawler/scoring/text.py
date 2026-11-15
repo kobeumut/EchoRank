@@ -1,4 +1,8 @@
-"""Language heuristics (Turkish + English) for density, claims and spam signals."""
+"""Language heuristics (Turkish + English) for density, claims and spam signals.
+
+The Turkish phrase lists below are deliberate language data: they let the scorers recognise filler, hype, claim and
+experience wording on Turkish web pages. They are *not* report text (that lives in the ``geo_crawler.i18n`` catalogs).
+"""
 from __future__ import annotations
 
 import re
@@ -7,7 +11,10 @@ from collections import Counter
 from ..keywords import STOPWORDS
 
 WORD_RE = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)?", re.U)
+# numbers with an optional unit; the Turkish units (tl, yıl = year, ay = month, gün = day, saat = hour, dk = minute)
+# sit next to the English ones so that figures on Turkish pages are counted
 NUMBER_RE = re.compile(r"(?<![\w.,])(?:%\s?\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)*(?:\s?(?:%|tl|₺|\$|€|usd|eur|kg|g|gr|mg|ml|lt|l|cm|mm|m|km|w|kw|v|mah|gb|tb|mb|bar|yıl|ay|gün|saat|dk|year|years|months|days|hours|min))?)(?![\w])", re.I)
+# sentence boundary: next sentence starts with an upper-case letter (incl. the Turkish Ç Ğ İ Ö Ş Ü), digit or quote
 SENTENCE_RE = re.compile(r"(?<=[.!?])\s+(?=[A-ZÇĞİÖŞÜ0-9\"“(])")
 
 FILLER_PHRASES = (

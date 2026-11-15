@@ -3,7 +3,8 @@ import type { ReportSnapshot } from "../../src/lib/reports/snapshot";
 /** Synthetic example only; no claim about a live website. */
 export const sampleReport: ReportSnapshot = {
   version: 1,
-  site: { id: "sample", title: "Örnek Mağaza — DEMO", url: "https://example.com" },
+  locale: "en",
+  site: { id: "sample", title: "Sample Store — DEMO", url: "https://example.com" },
   period: { days: 7, since: "2026-11-01T06:00:00.000Z", until: "2026-11-08T06:00:00.000Z" },
   summary: "AI citation visibility increased by 20 percentage points (40% to 60%) on 10 matched model/query pairs.",
   scores: { geo: 74, seo: 82, eeat: 68, auditedAt: "2026-11-08T05:00:00.000Z", baselineAt: "2026-10-31T05:00:00.000Z", delta: { geo: 9, seo: 3, eeat: 5 } },

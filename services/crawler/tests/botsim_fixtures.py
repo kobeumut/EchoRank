@@ -1,4 +1,8 @@
-"""Live-response fixtures for the AI bot simulator: SSR page, CSR shell and real-world WAF interstitials."""
+"""Live-response fixtures for the AI bot simulator: SSR page, CSR shell and real-world WAF interstitials.
+
+The SSR / CSR sample pages are Turkish web content on purpose (Turkish tokenizer, <noscript> and render paths);
+the WAF interstitials are verbatim English vendor pages.
+"""
 
 ORIGIN = "https://botsim.example.com"
 

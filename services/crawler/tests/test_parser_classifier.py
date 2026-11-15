@@ -1,3 +1,4 @@
+"""Parser + page classifier on the Turkish sample site (Turkish slugs/markers are recognised on purpose)."""
 from fixtures import BASE, PAGES
 
 from geo_crawler.classifier import classify_page

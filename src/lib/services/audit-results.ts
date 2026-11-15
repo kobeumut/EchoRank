@@ -329,7 +329,7 @@ export const actionListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
 });
 
-/** Action cards ordered by priority (highest first) — the "Ne Yapılmalı?" list. */
+/** Action cards ordered by priority (highest first) — the dashboard's "What to do?" list. */
 export async function listActionItems(siteId: string, q: z.infer<typeof actionListQuerySchema>) {
   const site = await prisma.site.findUnique({ where: { id: siteId }, select: { id: true } });
   if (!site) throw notFound("Site");

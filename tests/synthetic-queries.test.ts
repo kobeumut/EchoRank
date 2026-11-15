@@ -1,3 +1,6 @@
+// The Turkish strings below are deliberate test data: the generator ships Turkish and English prompt templates, and the
+// fixtures (the "Kahve Dükkanı" coffee shop, Turkish FAQ questions and expected `tr` prompts) exercise the Turkish paths
+// (diacritic-insensitive fingerprints, Turkish capitalisation). English output is asserted alongside.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { QUERY_INTENTS } from "@/lib/constants";

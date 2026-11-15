@@ -1,5 +1,7 @@
 // Reads the scoring engine's GeoAudit.metrics (see docs/geo-scoring.md) with fallbacks for older/sparse rows.
 
+import type { Translator } from "@/lib/i18n/translate";
+
 export type PillarCheck = {
   id: string;
   label: string;
@@ -12,11 +14,12 @@ export type PillarCheck = {
 };
 export type Pillar = { key: string; label: string; score: number; weight?: number; checks: PillarCheck[] };
 
-const PILLAR_FALLBACK: [key: string, metric: string, label: string][] = [
-  ["ai_access", "aiAccess", "AI Crawler ve Bot Erişilebilirliği"],
-  ["llm_readability", "llmReadability", "LLM Okunabilirlik ve Semantik Yapı"],
-  ["eeat", "eeat", "Bilgi Güvenilirliği (E-E-A-T)"],
-  ["technical_seo", "technicalSeo", "Teknik SEO"],
+/** Flat-metric fallbacks for rows without a `pillars` breakdown; the labels are the `bots.pillar.<key>` catalog entries. */
+const PILLAR_FALLBACK: [key: string, metric: string][] = [
+  ["ai_access", "aiAccess"],
+  ["llm_readability", "llmReadability"],
+  ["eeat", "eeat"],
+  ["technical_seo", "technicalSeo"],
 ];
 
 function obj(v: unknown): Record<string, unknown> | null {
@@ -24,7 +27,8 @@ function obj(v: unknown): Record<string, unknown> | null {
 }
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
-export function readPillars(metrics: unknown): Pillar[] {
+/** `t` localises the fallback pillar labels; labels stored by the scoring engine are returned as-is. */
+export function readPillars(metrics: unknown, t: Translator): Pillar[] {
   const m = obj(metrics);
   if (!m) return [];
   const pillars = obj(m.pillars);
@@ -52,9 +56,9 @@ export function readPillars(metrics: unknown): Pillar[] {
           })),
       }));
   }
-  return PILLAR_FALLBACK.filter(([, metric]) => num(m[metric]) != null).map(([key, metric, label]) => ({
+  return PILLAR_FALLBACK.filter(([, metric]) => num(m[metric]) != null).map(([key, metric]) => ({
     key,
-    label,
+    label: t(`bots.pillar.${key}`),
     score: num(m[metric])!,
     checks: [],
   }));

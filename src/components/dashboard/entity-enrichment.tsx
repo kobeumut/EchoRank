@@ -1,29 +1,37 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ENTITY_LABELS } from "@/lib/dashboard/format";
+import type { Translator } from "@/lib/i18n/translate";
 import { apiFetch, ApiError, errorMessage, useApi } from "./api";
+import { rich } from "./rich-text";
 import { useToast } from "./toast";
 import type { EnrichmentList, EntityEnrichment, ReconcileResult, SiteJsonLd, WikidataCandidate } from "./types";
 import { Badge, Button, CodeBlock, cx, EmptyState, ErrorState, inputBase, Modal, Segmented, Skeleton, Spinner } from "./ui";
+import { useFormat } from "./use-format";
 
 /** Entity types the Wikidata reconciler handles (mirrors RECONCILABLE_TYPES on the server). */
 export const RECONCILABLE = new Set(["Organization", "Brand", "Person", "Product", "Concept"]);
 
-export const ENRICHMENT_STATUS_LABELS: Record<string, string> = {
-  verified: "Doğrulandı",
-  matched: "Otomatik eşleşti",
-  declared: "Sitede beyan edildi",
-  review: "İnceleme bekliyor",
-  unmatched: "Eşleşme yok",
-  rejected: "Reddedildi",
-  pending: "Bekliyor",
-  error: "Hata",
-};
+const ENRICHMENT_STATUSES = ["verified", "matched", "declared", "review", "unmatched", "rejected", "pending", "error"];
+
+/** Localised enrichment status (`entities.status.*`); unknown statuses are shown as-is. */
+export const statusLabel = (t: Translator, status: string) => (ENRICHMENT_STATUSES.includes(status) ? t(`entities.status.${status}`) : status);
 
 const QID_RX = /^Q[1-9]\d*$/;
 const wikidataUrl = (qid: string) => `https://www.wikidata.org/wiki/${qid}`;
-const pct = (n: number | null | undefined) => (n == null ? "—" : `%${Math.round(n * 100)}`);
+/** Percentage for a 0-1 value, in the locale's own style ("92%" / "%92"). */
+const pct = (intlLocale: string, n: number | null | undefined) =>
+  n == null ? "—" : new Intl.NumberFormat(intlLocale, { style: "percent", maximumFractionDigits: 0 }).format(n);
+
+/** URL without the scheme, percent-decoded for display; malformed escapes fall back to the raw text instead of throwing. */
+function readableUrl(url: string): string {
+  const bare = url.replace(/^https?:\/\//, "");
+  try {
+    return decodeURIComponent(bare);
+  } catch {
+    return bare;
+  }
+}
 
 export type ReconcileTarget = { id: string; name: string; type: string };
 
@@ -33,12 +41,13 @@ export function sameAsOf(e: EntityEnrichment): string[] {
 
 /** Green "Wikidata QID" pill linking straight to wikidata.org. */
 export function QidBadge({ qid, verified = true, className }: { qid: string; verified?: boolean; className?: string }) {
+  const { t } = useFormat();
   return (
     <a
       href={wikidataUrl(qid)}
       target="_blank"
       rel="noopener noreferrer"
-      title={verified ? "Wikidata ile doğrulandı — wikidata.org'da aç" : "Doğrulanmamış aday — wikidata.org'da aç"}
+      title={verified ? t("entities.qid.verifiedTitle") : t("entities.qid.candidateTitle")}
       className={cx(
         "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-xs font-medium whitespace-nowrap transition hover:underline",
         verified
@@ -63,6 +72,7 @@ export function statusTone(e: EntityEnrichment) {
 
 /** Wikidata block inside the graph node detail panel. */
 export function WikidataSection({ enrichment, reconcilable, onReconcile }: { enrichment: EntityEnrichment | undefined; reconcilable: boolean; onReconcile: () => void }) {
+  const { t, intlLocale } = useFormat();
   if (!reconcilable) return null;
   const links = enrichment ? sameAsOf(enrichment).filter((u) => !u.includes("wikidata.org")) : [];
   return (
@@ -71,8 +81,8 @@ export function WikidataSection({ enrichment, reconcilable, onReconcile }: { enr
         <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">Wikidata</span>
         {enrichment && (
           <Badge tone={statusTone(enrichment)}>
-            {ENRICHMENT_STATUS_LABELS[enrichment.status] ?? enrichment.status}
-            {enrichment.matchConfidence > 0 && !enrichment.isVerified ? ` · ${pct(enrichment.matchConfidence)}` : ""}
+            {statusLabel(t, enrichment.status)}
+            {enrichment.matchConfidence > 0 && !enrichment.isVerified ? ` · ${pct(intlLocale, enrichment.matchConfidence)}` : ""}
           </Badge>
         )}
       </div>
@@ -81,26 +91,26 @@ export function WikidataSection({ enrichment, reconcilable, onReconcile }: { enr
           <QidBadge qid={enrichment.wikidataId} verified={enrichment.isVerified} />
           {enrichment.wikipediaUrl && (
             <a href={enrichment.wikipediaUrl} target="_blank" rel="noopener noreferrer" className="block truncate text-xs text-indigo-600 hover:underline dark:text-indigo-400">
-              Wikipedia: {decodeURIComponent(enrichment.wikipediaUrl.replace(/^https?:\/\//, ""))} ↗
+              Wikipedia: {readableUrl(enrichment.wikipediaUrl)} ↗
             </a>
           )}
-          {links.length > 0 && <div className="text-xs text-zinc-500">+{links.length} sameAs bağlantısı</div>}
+          {links.length > 0 && <div className="text-xs text-zinc-500">{t("entities.section.sameAsLinks", { count: links.length })}</div>}
           {!enrichment.isVerified && (
             <Button size="sm" variant="primary" onClick={onReconcile}>
-              Eşleşmeyi doğrula
+              {t("entities.section.verify")}
             </Button>
           )}
           {enrichment.isVerified && (
             <Button size="sm" variant="ghost" onClick={onReconcile}>
-              Eşleşmeyi değiştir
+              {t("entities.section.change")}
             </Button>
           )}
         </div>
       ) : (
         <div className="space-y-2">
-          <p className="text-xs text-zinc-500">Bu varlık Wikidata ile eşleşmemiş. Eşleştirmek, AI motorlarının markayı/kişiyi doğru tanımasını sağlar (Schema.org sameAs).</p>
+          <p className="text-xs text-zinc-500">{t("entities.section.unmatchedHint")}</p>
           <Button size="sm" variant="primary" onClick={onReconcile}>
-            🔍 Wikidata&apos;da ara ve eşleştir
+            {t("entities.section.searchAndMatch")}
           </Button>
         </div>
       )}
@@ -123,13 +133,14 @@ export function ReconcileModal({
   onClose: () => void;
   onChanged: () => void;
 }) {
+  const { t, label } = useFormat();
   return (
     <Modal
       open={!!target}
       onClose={onClose}
       size="lg"
-      title={target ? `Wikidata uzlaştırma: ${target.name}` : "Wikidata uzlaştırma"}
-      subtitle={target ? `${ENTITY_LABELS[target.type] ?? target.type} · doğru Wikidata öğesini seçin; seçim yeniden taramalarda korunur.` : undefined}
+      title={target ? t("entities.reconcile.titleFor", { name: target.name }) : t("entities.reconcile.title")}
+      subtitle={target ? t("entities.reconcile.subtitle", { type: label("entity", target.type) }) : undefined}
     >
       {target && <ReconcileBody key={target.id} siteId={siteId} target={target} enrichment={enrichment} onClose={onClose} onChanged={onChanged} />}
     </Modal>
@@ -149,9 +160,11 @@ function ReconcileBody({
   onClose: () => void;
   onChanged: () => void;
 }) {
+  const { t, locale, intlLocale } = useFormat();
   const toast = useToast();
   const [query, setQuery] = useState(target.name);
-  const [lang, setLang] = useState<"tr" | "en">("tr");
+  // Wikidata search language: start with the UI language; the select below lets the user switch (tr | en).
+  const [lang, setLang] = useState<"tr" | "en">(locale === "tr" ? "tr" : "en");
   const [candidates, setCandidates] = useState<WikidataCandidate[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<unknown>(null);
@@ -178,7 +191,7 @@ function ReconcileBody({
   // One click from the graph = search immediately, unless a human already pinned the match (requery would drop it).
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (enrichment?.status !== "verified") void search(target.name, "tr");
+    if (enrichment?.status !== "verified") void search(target.name, lang);
     // Only on open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -191,23 +204,23 @@ function ReconcileBody({
       onChanged();
       onClose();
     } catch (err) {
-      toast.push("error", err instanceof ApiError && err.status === 422 ? "Bu QID Wikidata'da bulunamadı." : errorMessage(err));
+      toast.push("error", err instanceof ApiError && err.status === 422 ? t("entities.reconcile.qidNotFound") : errorMessage(err));
     } finally {
       setBusy(null);
     }
   };
-  const verify = (qid: string) => act(qid, { action: "verify", qid }, `${target.name} → ${qid} olarak doğrulandı.`);
+  const verify = (qid: string) => act(qid, { action: "verify", qid }, t("entities.reconcile.verified", { name: target.name, qid }));
   const manualOk = QID_RX.test(manualQid.trim().toUpperCase());
 
   return (
     <div className="space-y-4">
       {enrichment?.wikidataId && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg bg-zinc-50 p-3 text-sm dark:bg-zinc-950">
-          <span className="text-zinc-500">Mevcut eşleşme:</span>
+          <span className="text-zinc-500">{t("entities.reconcile.currentMatch")}</span>
           <QidBadge qid={enrichment.wikidataId} verified={enrichment.isVerified} />
-          <Badge tone={statusTone(enrichment)}>{ENRICHMENT_STATUS_LABELS[enrichment.status] ?? enrichment.status}</Badge>
-          <Button size="sm" variant="danger" className="ml-auto" loading={busy === "reject"} disabled={!!busy} onClick={() => void act("reject", { action: "reject" }, "Eşleşme reddedildi; bu QID bir daha otomatik eşleşmeyecek.")}>
-            Eşleşmeyi reddet
+          <Badge tone={statusTone(enrichment)}>{statusLabel(t, enrichment.status)}</Badge>
+          <Button size="sm" variant="danger" className="ml-auto" loading={busy === "reject"} disabled={!!busy} onClick={() => void act("reject", { action: "reject" }, t("entities.reconcile.rejected"))}>
+            {t("entities.reconcile.reject")}
           </Button>
         </div>
       )}
@@ -220,34 +233,34 @@ function ReconcileBody({
         }}
       >
         <label className="flex min-w-48 flex-1 flex-col gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
-          Arama terimi
+          {t("entities.reconcile.searchTerm")}
           <input className={`${inputBase} w-full`} value={query} onChange={(e) => setQuery(e.target.value)} maxLength={250} />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
-          Dil
+          {t("entities.reconcile.language")}
           <select className={inputBase} value={lang} onChange={(e) => setLang(e.target.value as "tr" | "en")}>
-            <option value="tr">Türkçe</option>
-            <option value="en">English</option>
+            <option value="tr">{t("entities.reconcile.lang.tr")}</option>
+            <option value="en">{t("entities.reconcile.lang.en")}</option>
           </select>
         </label>
         <Button type="submit" variant="primary" loading={searching} disabled={!!busy}>
-          Wikidata&apos;da ara
+          {t("entities.reconcile.search")}
         </Button>
       </form>
 
       {searchError ? (
         <ErrorState error={searchError} onRetry={() => void search(query, lang)} />
       ) : searching && !candidates ? (
-        <div className="space-y-2" role="status" aria-label="Aranıyor">
+        <div className="space-y-2" role="status" aria-label={t("entities.reconcile.searching")}>
           <Skeleton className="h-14" />
           <Skeleton className="h-14" />
           <Skeleton className="h-14" />
         </div>
       ) : candidates === null ? (
-        <p className="text-sm text-zinc-500">Eşleşme doğrulanmış. Değiştirmek için arama yapın veya QID girin.</p>
+        <p className="text-sm text-zinc-500">{t("entities.reconcile.alreadyVerified")}</p>
       ) : candidates.length === 0 ? (
-        <EmptyState icon="∅" title="Aday bulunamadı" className="py-6">
-          Farklı bir yazım veya İngilizce adla tekrar deneyin ya da QID&apos;yi elle girin.
+        <EmptyState icon="∅" title={t("entities.reconcile.noCandidates")} className="py-6">
+          {t("entities.reconcile.noCandidatesHint")}
         </EmptyState>
       ) : (
         <ul className={cx("space-y-2", searching && "opacity-60")} aria-busy={searching}>
@@ -261,13 +274,13 @@ function ReconcileBody({
                     <a href={c.url} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-indigo-600 hover:underline dark:text-indigo-400">
                       {c.qid} ↗
                     </a>
-                    {current && <Badge tone="good">mevcut</Badge>}
+                    {current && <Badge tone="good">{t("entities.reconcile.current")}</Badge>}
                   </div>
                   {c.description && <p className="mt-0.5 text-xs text-zinc-500">{c.description}</p>}
-                  <ConfidenceBar score={c.score} />
+                  <ConfidenceBar score={c.score} intlLocale={intlLocale} />
                 </div>
                 <Button size="sm" variant={current && enrichment?.isVerified ? "secondary" : "primary"} loading={busy === c.qid} disabled={!!busy || (current && enrichment?.status === "verified")} onClick={() => void verify(c.qid)}>
-                  {current && enrichment?.status === "verified" ? "Doğrulandı" : "Bu varlık"}
+                  {current && enrichment?.status === "verified" ? t("entities.reconcile.verifiedButton") : t("entities.reconcile.thisEntity")}
                 </Button>
               </li>
             );
@@ -283,26 +296,27 @@ function ReconcileBody({
         }}
       >
         <label className="flex flex-1 flex-col gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
-          QID&apos;yi elle girin
+          {t("entities.reconcile.manualQid")}
           <input className={`${inputBase} w-full font-mono`} placeholder="Q42" value={manualQid} onChange={(e) => setManualQid(e.target.value)} aria-invalid={!!manualQid && !manualOk} />
         </label>
         <Button type="submit" disabled={!manualOk || !!busy} loading={busy === manualQid.trim().toUpperCase()}>
-          QID ile doğrula
+          {t("entities.reconcile.verifyWithQid")}
         </Button>
       </form>
     </div>
   );
 }
 
-function ConfidenceBar({ score }: { score: number }) {
+function ConfidenceBar({ score, intlLocale }: { score: number; intlLocale: string }) {
+  const { t } = useFormat();
   const value = Math.max(0, Math.min(1, score));
   const color = value >= 0.8 ? "#0ca30c" : value >= 0.55 ? "#fab219" : "#898781";
   return (
-    <div className="mt-1.5 flex items-center gap-2" title="Eşleşme güveni (ad benzerliği, tür, site bağlamı)">
+    <div className="mt-1.5 flex items-center gap-2" title={t("entities.reconcile.confidenceTitle")}>
       <div className="h-1.5 w-28 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
         <div className="h-full rounded-full" style={{ width: `${value * 100}%`, background: color }} />
       </div>
-      <span className="text-xs tabular-nums text-zinc-500">güven {pct(value)}</span>
+      <span className="text-xs tabular-nums text-zinc-500">{t("entities.reconcile.confidence", { percent: pct(intlLocale, value) })}</span>
     </div>
   );
 }
@@ -310,6 +324,7 @@ function ConfidenceBar({ score }: { score: number }) {
 // ---------------------------------------------------------------- JSON-LD preview
 
 export function JsonLdModal({ siteId, open, onClose, version }: { siteId: string; open: boolean; onClose: () => void; version?: unknown }) {
+  const { t } = useFormat();
   const data = useApi<SiteJsonLd>(open ? `/api/sites/${siteId}/jsonld` : null, { version });
   const [tab, setTab] = useState<"json" | "script">("json");
   const json = useMemo(() => (data.data ? JSON.stringify(data.data.jsonld, null, 2) : ""), [data.data]);
@@ -318,9 +333,9 @@ export function JsonLdModal({ siteId, open, onClose, version }: { siteId: string
     return graph.filter((n) => Array.isArray(n.sameAs) ? n.sameAs.length : !!n.sameAs).length;
   }, [data.data]);
   return (
-    <Modal open={open} onClose={onClose} size="lg" title="Zenginleştirilmiş JSON-LD @graph" subtitle="Bilgi grafından ve doğrulanmış Wikidata sameAs bağlantılarından üretilen Schema.org işaretlemesi">
+    <Modal open={open} onClose={onClose} size="lg" title={t("entities.jsonld.title")} subtitle={t("entities.jsonld.subtitle")}>
       {data.loading ? (
-        <div className="space-y-3" role="status" aria-label="Yükleniyor">
+        <div className="space-y-3" role="status" aria-label={t("entities.loading")}>
           <Skeleton className="h-6 w-64" />
           <Skeleton className="h-80" />
         </div>
@@ -330,19 +345,19 @@ export function JsonLdModal({ siteId, open, onClose, version }: { siteId: string
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={data.data.valid ? "good" : "critical"} icon>
-              {data.data.valid ? "Şema geçerli" : `${data.data.errors.length} doğrulama hatası`}
+              {data.data.valid ? t("entities.jsonld.valid") : t("entities.jsonld.errors", { count: data.data.errors.length })}
             </Badge>
-            <Badge>{data.data.nodes} düğüm</Badge>
-            <Badge tone={sameAsCount ? "good" : "neutral"}>{sameAsCount} düğümde sameAs</Badge>
+            <Badge>{t("entities.jsonld.nodes", { count: data.data.nodes })}</Badge>
+            <Badge tone={sameAsCount ? "good" : "neutral"}>{t("entities.jsonld.sameAsNodes", { count: sameAsCount })}</Badge>
             {data.refreshing && <Spinner className="h-3.5 w-3.5" />}
             <div className="ml-auto">
               <Segmented
-                label="Görünüm"
+                label={t("entities.jsonld.view")}
                 value={tab}
                 onChange={setTab}
                 options={[
-                  { value: "json", label: "@graph JSON" },
-                  { value: "script", label: "<script> etiketi" },
+                  { value: "json", label: t("entities.jsonld.tabJson") },
+                  { value: "script", label: t("entities.jsonld.tabScript") },
                 ]}
               />
             </div>
@@ -358,9 +373,7 @@ export function JsonLdModal({ siteId, open, onClose, version }: { siteId: string
             <CodeBlock code={json} language="json" filename="schema-graph.jsonld" maxHeight="55vh" />
           ) : (
             <>
-              <p className="text-xs text-zinc-500">
-                Bu etiketi sitenizin <code>&lt;head&gt;</code> bölümüne yapıştırın.
-              </p>
+              <p className="text-xs text-zinc-500">{rich(t("entities.jsonld.pasteHint"), { code: <code>&lt;head&gt;</code> })}</p>
               <CodeBlock code={data.data.script} language="html" filename="schema-graph.html" maxHeight="50vh" />
             </>
           )}
@@ -391,6 +404,7 @@ export function EnrichmentTable({
   onShow: (entityId: string) => void;
   canShow: (entityId: string) => boolean;
 }) {
+  const { t, label, intlLocale } = useFormat();
   const [filter, setFilter] = useState<EnrichFilter>("all");
   const items = useMemo(() => data?.items ?? [], [data]);
   const groups = useMemo(() => {
@@ -403,7 +417,7 @@ export function EnrichmentTable({
 
   if (loading)
     return (
-      <div className="space-y-2" role="status" aria-label="Yükleniyor">
+      <div className="space-y-2" role="status" aria-label={t("entities.loading")}>
         <Skeleton className="h-8 w-80" />
         <Skeleton className="h-10" />
         <Skeleton className="h-10" />
@@ -413,36 +427,36 @@ export function EnrichmentTable({
   if (error) return <ErrorState error={error} onRetry={onRetry} />;
   if (!items.length)
     return (
-      <EmptyState icon="W" title="Uzlaştırılacak varlık yok" className="py-6">
-        Kurum, marka, kişi, ürün ve kavram varlıkları analizden sonra burada Wikidata ile eşleştirilir.
+      <EmptyState icon="W" title={t("entities.table.emptyTitle")} className="py-6">
+        {t("entities.table.emptyHint")}
       </EmptyState>
     );
   return (
     <div className="space-y-3">
       <Segmented
-        label="Wikidata filtresi"
+        label={t("entities.table.filterLabel")}
         value={filter}
         onChange={setFilter}
         options={[
-          { value: "all", label: "Tümü", count: groups.all.length },
-          { value: "verified", label: "Doğrulanmış", count: groups.verified.length },
-          { value: "review", label: "Onay bekleyen", count: groups.review.length },
-          { value: "missing", label: "Eşleşmeyen", count: groups.missing.length },
+          { value: "all", label: t("entities.table.filterAll"), count: groups.all.length },
+          { value: "verified", label: t("entities.table.filterVerified"), count: groups.verified.length },
+          { value: "review", label: t("entities.table.filterReview"), count: groups.review.length },
+          { value: "missing", label: t("entities.table.filterMissing"), count: groups.missing.length },
         ]}
       />
       {rows.length === 0 ? (
-        <p className="py-4 text-sm text-zinc-500">Bu filtrede varlık yok.</p>
+        <p className="py-4 text-sm text-zinc-500">{t("entities.table.noneInFilter")}</p>
       ) : (
         <div className="max-h-96 overflow-auto">
           <table className="w-full text-left text-sm">
             <thead className="sticky top-0 bg-white text-xs text-zinc-500 dark:bg-zinc-900">
               <tr>
-                <th className="py-2 pr-3 font-medium">Varlık</th>
-                <th className="hidden py-2 pr-3 font-medium sm:table-cell">Tür</th>
-                <th className="py-2 pr-3 font-medium">Wikidata</th>
-                <th className="hidden py-2 pr-3 font-medium md:table-cell">Durum</th>
+                <th className="py-2 pr-3 font-medium">{t("entities.table.colEntity")}</th>
+                <th className="hidden py-2 pr-3 font-medium sm:table-cell">{t("entities.table.colType")}</th>
+                <th className="py-2 pr-3 font-medium">{t("entities.table.colWikidata")}</th>
+                <th className="hidden py-2 pr-3 font-medium md:table-cell">{t("entities.table.colStatus")}</th>
                 <th className="py-2 text-right font-medium">
-                  <span className="sr-only">İşlem</span>
+                  <span className="sr-only">{t("entities.table.colAction")}</span>
                 </th>
               </tr>
             </thead>
@@ -451,7 +465,7 @@ export function EnrichmentTable({
                 <tr key={e.id} className="border-t border-zinc-100 dark:border-zinc-800">
                   <td className="max-w-56 py-2 pr-3">
                     {e.entityId && canShow(e.entityId) ? (
-                      <button type="button" className="block max-w-full truncate text-left text-indigo-600 hover:underline dark:text-indigo-400" onClick={() => onShow(e.entityId!)} title="Grafta göster">
+                      <button type="button" className="block max-w-full truncate text-left text-indigo-600 hover:underline dark:text-indigo-400" onClick={() => onShow(e.entityId!)} title={t("entities.table.showInGraph")}>
                         {e.entityName}
                       </button>
                     ) : (
@@ -463,18 +477,18 @@ export function EnrichmentTable({
                       </a>
                     )}
                   </td>
-                  <td className="hidden py-2 pr-3 text-xs text-zinc-500 sm:table-cell">{ENTITY_LABELS[e.entityType] ?? e.entityType}</td>
+                  <td className="hidden py-2 pr-3 text-xs text-zinc-500 sm:table-cell">{label("entity", e.entityType)}</td>
                   <td className="py-2 pr-3">{e.wikidataId ? <QidBadge qid={e.wikidataId} verified={e.isVerified} /> : <span className="text-xs text-zinc-400">—</span>}</td>
                   <td className="hidden py-2 pr-3 md:table-cell">
                     <Badge tone={statusTone(e)}>
-                      {ENRICHMENT_STATUS_LABELS[e.status] ?? e.status}
-                      {e.matchConfidence > 0 && !e.isVerified ? ` · ${pct(e.matchConfidence)}` : ""}
+                      {statusLabel(t, e.status)}
+                      {e.matchConfidence > 0 && !e.isVerified ? ` · ${pct(intlLocale, e.matchConfidence)}` : ""}
                     </Badge>
                   </td>
                   <td className="py-2 text-right">
                     {e.entityId && (
                       <Button size="sm" variant={e.isVerified ? "ghost" : "secondary"} onClick={() => onReconcile(e)}>
-                        {e.isVerified ? "Değiştir" : e.wikidataId ? "Onayla" : "Eşleştir"}
+                        {e.isVerified ? t("entities.table.change") : e.wikidataId ? t("entities.table.approve") : t("entities.table.match")}
                       </Button>
                     )}
                   </td>

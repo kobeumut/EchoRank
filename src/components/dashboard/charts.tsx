@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { formatDate, formatDay, scoreLabel, scoreTone } from "@/lib/dashboard/format";
+import { scoreTone } from "@/lib/dashboard/format";
 import { Button, TONE_COLOR, TONE_ICON } from "./ui";
+import { useFormat } from "./use-format";
 
 export function useWidth<T extends HTMLElement>() {
   const ref = useRef<T>(null);
@@ -19,6 +20,7 @@ export function useWidth<T extends HTMLElement>() {
 
 /** Hero score with a ring meter, tinted by status band; band named in text (never color alone). */
 export function ScoreRing({ value, label, size = 112, caption, delta }: { value: number | null | undefined; label: string; size?: number; caption?: ReactNode; delta?: number | null }) {
+  const { t, scoreLabel } = useFormat();
   const tone = scoreTone(value);
   const stroke = 9;
   const r = (size - stroke) / 2;
@@ -26,7 +28,7 @@ export function ScoreRing({ value, label, size = 112, caption, delta }: { value:
   const pct = value == null ? 0 : Math.max(0, Math.min(100, value)) / 100;
   return (
     <div className="flex items-center gap-4">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`${label}: ${value ?? "veri yok"} / 100`}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`${label}: ${value ?? t("labels.score.neutral")} / 100`}>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--chart-grid)" strokeWidth={stroke} />
         {value != null && (
           <circle
@@ -115,6 +117,7 @@ function endLabels(points: HistoryPoint[], x: (i: number) => number, y: (v: numb
 
 /** Score trend: 3 series on one 0-100 axis, crosshair tooltip, legend + end labels, table view. */
 export function HistoryChart({ points }: { points: HistoryPoint[] }) {
+  const { t, formatDate, formatDay } = useFormat();
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const [table, setTable] = useState(false);
@@ -131,7 +134,7 @@ export function HistoryChart({ points }: { points: HistoryPoint[] }) {
   return (
     <div>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <ul className="flex flex-wrap gap-3 text-xs text-zinc-600 dark:text-zinc-400" aria-label="Seriler">
+        <ul className="flex flex-wrap gap-3 text-xs text-zinc-600 dark:text-zinc-400" aria-label={t("shared.chart.series")}>
           {SERIES.map((s) => (
             <li key={s.key} className="flex items-center gap-1.5">
               <span aria-hidden className="inline-block h-0.5 w-4 rounded" style={{ background: s.color, height: 2 }} />
@@ -139,8 +142,8 @@ export function HistoryChart({ points }: { points: HistoryPoint[] }) {
             </li>
           ))}
         </ul>
-        <Button size="sm" variant="ghost" onClick={() => setTable((t) => !t)} aria-pressed={table}>
-          {table ? "Grafik" : "Tablo"}
+        <Button size="sm" variant="ghost" onClick={() => setTable((v) => !v)} aria-pressed={table}>
+          {table ? t("shared.chart.chart") : t("shared.chart.table")}
         </Button>
       </div>
       {table ? (
@@ -148,7 +151,7 @@ export function HistoryChart({ points }: { points: HistoryPoint[] }) {
           <table className="w-full text-left text-xs">
             <thead className="text-zinc-500">
               <tr>
-                <th className="py-1 pr-2 font-medium">Tarih</th>
+                <th className="py-1 pr-2 font-medium">{t("shared.chart.date")}</th>
                 {SERIES.map((s) => (
                   <th key={s.key} className="py-1 pr-2 text-right font-medium">
                     {s.label}
@@ -177,7 +180,7 @@ export function HistoryChart({ points }: { points: HistoryPoint[] }) {
               width={width}
               height={height}
               role="img"
-              aria-label="Skor geçmişi grafiği"
+              aria-label={t("shared.chart.scoreHistory")}
               onMouseLeave={() => setHover(null)}
               onMouseMove={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -185,11 +188,11 @@ export function HistoryChart({ points }: { points: HistoryPoint[] }) {
                 setHover(n <= 1 ? 0 : Math.max(0, Math.min(n - 1, Math.round((px / w) * (n - 1)))));
               }}
             >
-              {[0, 25, 50, 75, 100].map((t) => (
-                <g key={t}>
-                  <line x1={m.left} x2={m.left + w} y1={y(t)} y2={y(t)} stroke={t === 0 ? "var(--chart-axis)" : "var(--chart-grid)"} strokeWidth={1} />
-                  <text x={m.left - 6} y={y(t)} textAnchor="end" dominantBaseline="central" fill="var(--chart-muted)" style={{ fontSize: 10 }} className="tabular-nums">
-                    {t}
+              {[0, 25, 50, 75, 100].map((tick) => (
+                <g key={tick}>
+                  <line x1={m.left} x2={m.left + w} y1={y(tick)} y2={y(tick)} stroke={tick === 0 ? "var(--chart-axis)" : "var(--chart-grid)"} strokeWidth={1} />
+                  <text x={m.left - 6} y={y(tick)} textAnchor="end" dominantBaseline="central" fill="var(--chart-muted)" style={{ fontSize: 10 }} className="tabular-nums">
+                    {tick}
                   </text>
                 </g>
               ))}
@@ -248,22 +251,24 @@ export function HistoryChart({ points }: { points: HistoryPoint[] }) {
 }
 
 export type ModelVisibility = { model: string; label: string; cited: number; mentioned: number; none: number; total: number };
+/** Segment order and colors; the labels come from `labels.citation.<key>`. */
 const PARTS = [
-  { key: "cited", label: "Atıf (kaynak link)", color: "var(--seq-strong)" },
-  { key: "mentioned", label: "İsim geçti", color: "var(--seq-mid)" },
-  { key: "none", label: "Yer almadı", color: "var(--seq-none)" },
+  { key: "cited", color: "var(--seq-strong)" },
+  { key: "mentioned", color: "var(--seq-mid)" },
+  { key: "none", color: "var(--seq-none)" },
 ] as const;
 
 /** Per-model 100% stacked bars (ordinal: cited > mentioned > none), hover tooltip per segment. */
 export function VisibilityBars({ rows }: { rows: ModelVisibility[] }) {
+  const { t, label } = useFormat();
   const [hover, setHover] = useState<{ model: string; part: string } | null>(null);
   return (
     <div>
-      <ul className="mb-3 flex flex-wrap gap-3 text-xs text-zinc-600 dark:text-zinc-400" aria-label="Lejant">
+      <ul className="mb-3 flex flex-wrap gap-3 text-xs text-zinc-600 dark:text-zinc-400" aria-label={t("shared.chart.legend")}>
         {PARTS.map((p) => (
           <li key={p.key} className="flex items-center gap-1.5">
             <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: p.color }} />
-            {p.label}
+            {label("citation", p.key)}
           </li>
         ))}
       </ul>
@@ -276,10 +281,11 @@ export function VisibilityBars({ rows }: { rows: ModelVisibility[] }) {
                 <span className="font-medium text-zinc-800 dark:text-zinc-200">{r.label}</span>
                 <span className="text-xs text-zinc-500">
                   {rate == null ? (
-                    "Henüz kontrol yok"
+                    t("shared.chart.noChecks")
                   ) : (
                     <>
-                      <span className="text-sm font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">%{rate}</span> görünürlük · {r.cited}/{r.total} atıf
+                      <span className="text-sm font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">{t("shared.percent", { value: rate })}</span>{" "}
+                      {t("shared.chart.visibilityCited", { cited: r.cited, total: r.total })}
                     </>
                   )}
                 </span>
@@ -302,11 +308,11 @@ export function VisibilityBars({ rows }: { rows: ModelVisibility[] }) {
                         tabIndex={0}
                         onFocus={() => setHover({ model: r.model, part: p.key })}
                         onBlur={() => setHover(null)}
-                        aria-label={`${r.label} — ${p.label}: ${v} yanıt (%${Math.round((v / r.total) * 100)})`}
+                        aria-label={t("shared.chart.segmentLabel", { model: r.label, part: label("citation", p.key), count: v, percent: Math.round((v / r.total) * 100) })}
                       >
                         {active && (
                           <div className="pointer-events-none absolute bottom-5 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
-                            <span className="font-medium">{p.label}</span>: {v} yanıt · %{Math.round((v / r.total) * 100)}
+                            <span className="font-medium">{label("citation", p.key)}</span>: {t("shared.chart.responsesPercent", { count: v, percent: Math.round((v / r.total) * 100) })}
                           </div>
                         )}
                       </div>

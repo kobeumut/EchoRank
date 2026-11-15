@@ -25,6 +25,7 @@ describe("isAuthorized", () => {
     expect(await isAuthorized(request("/api/sites", { headers: { authorization: "Bearer nope" } }), TOKEN)).toBe(false);
     expect(await isAuthorized(request("/api/sites", { headers: { cookie } }), TOKEN)).toBe(true);
     expect(await isAuthorized(request("/api/sites", { headers: { cookie: `${SESSION_COOKIE}=forged` } }), TOKEN)).toBe(false);
+    expect(await isAuthorized(request("/api/sites", { headers: { cookie: `${SESSION_COOKIE}=%E0%A4%A` } }), TOKEN)).toBe(false); // malformed percent-encoding
     expect(await isAuthorized(request("/api/sites", { method: "POST", headers: { cookie } }), TOKEN)).toBe(false);
     expect(await isAuthorized(request("/api/sites", { method: "POST", headers: { cookie, origin: "https://evil.example" } }), TOKEN)).toBe(false);
     expect(await isAuthorized(request("/api/sites", { method: "POST", headers: { cookie, origin: "http://localhost:3000" } }), TOKEN)).toBe(true);

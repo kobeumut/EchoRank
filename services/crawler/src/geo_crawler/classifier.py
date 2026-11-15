@@ -28,7 +28,8 @@ SCHEMA_TYPE_MAP: dict[str, PageType] = {
     "ItemList": PageType.CATEGORY,
 }
 
-# order matters: first match wins
+# order matters: first match wins. The Turkish slugs next to the English ones (sss, iletisim, hakkimizda, urun, hizmet,
+# kategori, haber, ...) are deliberate: they classify pages of Turkish sites.
 URL_PATTERNS: list[tuple[PageType, re.Pattern[str]]] = [
     (PageType.FAQ, re.compile(r"/(faq|faqs|sss|sik-sorulan-sorular|sikca-sorulan-sorular|yardim|help)(/|$|\.)", re.I)),
     (PageType.CONTACT, re.compile(r"/(contact|contact-us|iletisim|bize-ulasin)(/|$|\.)", re.I)),
@@ -40,6 +41,9 @@ URL_PATTERNS: list[tuple[PageType, re.Pattern[str]]] = [
     (PageType.ARTICLE, re.compile(r"/(blog|news|haberler)(/?$)", re.I)),  # blog index treated as category below
 ]
 
+# Turkish alternatives next to the English ones are deliberate: they recognise Turkish storefronts
+# (sık sorulan = frequently asked, sepete ekle = add to cart, hemen al / satın al = buy now,
+#  stokta var/yok = in stock / out of stock, tükendi = sold out, stok adedi = stock count).
 FAQ_HEADING = re.compile(r"(sık(ça)? sorulan|sss\b|faq|frequently asked)", re.I)
 PRICE_TEXT = re.compile(r"(?:₺|\$|€|£|\bTL\b|\bTRY\b|\bUSD\b|\bEUR\b)\s?\d(?:[\d.,]*\d)?|\d[\d.,]*\s?(?:₺|TL|TRY|\$|€|USD|EUR)\b")
 ADD_TO_CART = re.compile(r"(sepete ekle|add to cart|add to basket|buy now|hemen al|satın al)", re.I)

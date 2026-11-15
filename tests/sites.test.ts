@@ -27,7 +27,7 @@ describe("/api/sites CRUD", () => {
         method: "POST",
         body: {
           url: "shop.example.com/products",
-          targetKeywords: ["zeytinyağı"],
+          targetKeywords: ["olive oil"],
           integrations: { indexnow: "abcdef1234567890" },
         },
       }),

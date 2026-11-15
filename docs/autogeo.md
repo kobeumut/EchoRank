@@ -11,11 +11,11 @@ can copy and paste. The rules come from:
 
 | Metric | Measured | Target / rule |
 | --- | --- | --- |
-| `statistics` | numeric facts per 100 words (bare years excluded), vague-quantity sentences ("birçok", "çoğu", "most", "significantly"), tables | ≥1.5 figures / 100 words, no vague quantities |
+| `statistics` | numeric facts per 100 words (bare years excluded), vague-quantity sentences ("many", "most", "significantly" and their Turkish equivalents), tables | ≥1.5 figures / 100 words, no vague quantities |
 | `quotations` | attributed quotes (`<blockquote>` with `<cite>`/`<footer>`/"— Name", inline “…” next to a speech verb or title) | ≥1 per ~600 words; an unattributed quote counts 0.4 |
-| `citations` | share of claim sentences with a source (link in the block, `[1]`, `(Author, 2024)`, "X'e göre", "according to X") + authority of external domains (tier 1: .gov/.edu/.ac/.int, DOI, arXiv, PubMed, WHO, OECD…; tier 2: Statista, Gartner, Pew, ISO, W3C, Wikipedia…) | full coverage + ≥2 weighted authoritative sources (≥1 per 500 words) |
+| `citations` | share of claim sentences with a source (link in the block, `[1]`, `(Author, 2024)`, "according to X" and its Turkish equivalent) + authority of external domains (tier 1: .gov/.edu/.ac/.int, DOI, arXiv, PubMed, WHO, OECD…; tier 2: Statista, Gartner, Pew, ISO, W3C, Wikipedia…) | full coverage + ≥2 weighted authoritative sources (≥1 per 500 words) |
 | `answer_capsules` | first block under every H2/H3 (or the intro when there are no subheadings) | 40-60 word paragraph that doesn't open with "Bu/This/It…" and repeats the question's term |
-| `authority_fluency` | hedges ("sanırım", "belki", "I think", "might be"), filler, hype, passive voice, sentences >35 words | none |
+| `authority_fluency` | hedges ("I think", "might be" and their Turkish equivalents), filler, hype, passive voice, sentences >35 words | none |
 | `keyword_stuffing` | top content word share (brand tokens excluded), top bigram repetition | word ≤4%, phrase ≤4%. Risk is `-10%` below 70 and `-25%` below 40 |
 
 The page score is a weighted mean, and the weights depend on the content type (`article`, `product`, `service`,
@@ -26,10 +26,10 @@ stuffing. Severe keyword stuffing caps the page score at 60.
 
 Each weak block yields an `Improvement`:
 
-- `kind`: `rewrite` replaces a block. `insert` adds a new block after `block_index`, such as a capsule under a heading, a quote, a key-figures table, a comparison table or a "Kaynaklar" (Sources) list.
+- `kind`: `rewrite` replaces a block. `insert` adds a new block after `block_index`, such as a capsule under a heading, a quote, a key-figures table, a comparison table or a "Sources" list (headed "Kaynaklar" on Turkish pages).
 - `after_markdown` and `after_html` hold the new content. `diff_markdown` and `diff_html` hold unified diffs against the block's canonical rendering.
 - When several rules touch the same block, they merge into one rewrite. `metrics` lists every metric that rewrite fixes, so each diff applies cleanly on its own.
-- Numbers, names and sources are never invented. Rewrites insert placeholders (`[SAYI]`, `%[ORAN]`, `([Kaynak, Yıl](https://kaynak-adresi))`, `[Ad Soyad], [Unvan], [Kurum]`, `[eş anlamlı/zamir]`) for the editor to fill.
+- Numbers, names and sources are never invented. Rewrites insert explicit placeholders for the editor to fill, for example `[NUMBER]`, `[X]% of`, `[Source, Year]`, `[Full Name], [Title], [Organisation]` and `[synonym/pronoun]`. Pages detected as Turkish get the Turkish placeholder set instead (`[SAYI]` = number, `%[ORAN]` = percentage, `[Kaynak]` = source, ...).
 
 Every report also includes a page-level `answer_capsule` and, when the page has no table, a `comparison_table` suggestion.
 
@@ -39,7 +39,13 @@ Every report also includes a page-level `answer_capsule` and, when the page has 
 services/crawler/.venv/bin/geo-autogeo https://example.com/blog/post --type article      # text report + diffs
 services/crawler/.venv/bin/geo-autogeo page.md --type service --json                    # JSON report
 services/crawler/.venv/bin/geo-autogeo page.html --url https://example.com/p --rank 7   # SERP rank → citation gain
+services/crawler/.venv/bin/geo-autogeo https://example.com/blog/post --lang tr           # report text in Turkish
 ```
+
+Two different languages are involved. `--lang en|tr` (default `en`; the keyword argument `lang` in the Python API) is the language of
+the **report**: metric labels, detail lines, improvement titles and rationales. The language of the **page content** is detected from
+the page (the `<html lang>` hint wins; `content_lang` in the Python API overrides it) and selects the lexicons and the placeholders
+written into the suggested rewrites, because those are inserted into the page itself and must match its language.
 
 ```python
 from geo_crawler.scoring import analyze_html, analyze_markdown, analyze_pages
@@ -60,12 +66,12 @@ The output appears under `autogeo` in `report.to_dict()` and `to_db_records()`. 
 
 ## Content Studio UI (`/sites/:id/studio`)
 
-The "İçerik Stüdyosu" tab is the editor workspace for persisted suggestions (`GET /api/sites/:id/autogeo`).
+The "Content Studio" tab is the editor workspace for persisted suggestions (`GET /api/sites/:id/autogeo`).
 
-- **Side-by-side diff**: line-aligned original vs. optimized content with word-level changes (or a unified view). GEO signals are underlined: statistics (blue), expert quotes (violet), source citations (amber) and placeholders to fill (dashed orange). Each card offers Copy Markdown, Copy HTML (`src/lib/autogeo/markdown.ts`), Copy Diff and **Apply to CMS** (`POST /autogeo/:id/apply`). It also has Uygulandı / Yoksay / Geri al buttons (`PATCH`).
+- **Side-by-side diff**: line-aligned original vs. optimized content with word-level changes (or a unified view). GEO signals are underlined: statistics (blue), expert quotes (violet), source citations (amber) and placeholders to fill (dashed orange). Each card offers Copy Markdown, Copy HTML (`src/lib/autogeo/markdown.ts`), Copy Diff and **Apply to CMS** (`POST /autogeo/:id/apply`). It also has Applied / Dismiss / Undo buttons (`PATCH`).
 - **Answer capsules**: heading-level 40-60 word capsules and page-level capsules as cards with a word-count meter against the 40-60 band.
 - **Tables**: comparison and key-figure tables with a rendered preview and HTML/Markdown output.
 - **GEO score predictor**: tick pending suggestions to see the projected AutoGEO score (+X points). Each suggestion closes `expectedGain`% (capped at 60%) of the page's remaining gap to 100, with compounding diminishing returns. The site score moves by the mean page delta. Applied suggestions awaiting re-audit are shown separately. This is a heuristic, and only a new audit gives the real score.
-- **Filters**: page URL, rule type (İstatistik, Alıntı, Kaynak, Ton, Yanıt Kapsülü, Anahtar Kelime, Tablo), impact (Yüksek ≥15%, Orta ≥6%, Düşük) and status. The data refetches when an audit completes and polls while one is running.
+- **Filters**: page URL, rule type (Statistics, Quote, Source, Tone, Answer Capsule, Keyword, Table), impact (High ≥15%, Medium ≥6%, Low) and status. The data refetches when an audit completes and polls while one is running.
 
 The pure logic (diff, signal tagging, capsule/table extraction, simulator) lives in `src/lib/dashboard/autogeo-studio.ts` and is covered by `tests/autogeo-studio.test.ts`.
