@@ -20,6 +20,14 @@ function ActionCard({ item, onStatus, busy, highlighted }: { item: ActionItem; o
   const d = item.details ?? {};
   const snippet = d.snippet?.code ? d.snippet : null;
   const urls = d.affected_urls ?? [];
+  const displayTitle = useMemo(() => {
+    if (d.title_key && typeof d.title_key === "string") {
+      const params = d.title_params as Record<string, string | number | null | undefined> | undefined;
+      const translated = t(d.title_key, params);
+      if (translated && translated !== d.title_key) return translated;
+    }
+    return item.title;
+  }, [d.title_key, d.title_params, item.title, t]);
 
   return (
     <article
@@ -40,7 +48,7 @@ function ActionCard({ item, onStatus, busy, highlighted }: { item: ActionItem; o
           <span className="ml-auto text-xs font-medium text-[#006300] dark:text-[#0ca30c]">{t("actions.card.expectedGain", { gain: d.expected_gain.toFixed(1) })}</span>
         )}
       </div>
-      <h3 className="mt-3 text-base font-semibold text-zinc-900 dark:text-zinc-100">{item.title}</h3>
+      <h3 className="mt-3 text-base font-semibold text-zinc-900 dark:text-zinc-100">{displayTitle}</h3>
       {item.description && <p className="mt-1 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{item.description}</p>}
       {item.targetUrl && (
         <a href={item.targetUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block max-w-full truncate font-mono text-xs text-indigo-600 hover:underline dark:text-indigo-400">

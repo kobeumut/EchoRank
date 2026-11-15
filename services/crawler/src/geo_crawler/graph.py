@@ -149,7 +149,10 @@ class KnowledgeGraph:
 
     def to_node_link(self) -> dict[str, Any]:
         """Raw NetworkX node-link format (for tools that consume it directly)."""
-        return nx.node_link_data(self.g, edges="links")
+        try:
+            return nx.node_link_data(self.g, edges="links")
+        except TypeError:
+            return nx.node_link_data(self.g, link="links")
 
     def to_graphml(self, path: str | Path) -> None:
         g = nx.MultiDiGraph()

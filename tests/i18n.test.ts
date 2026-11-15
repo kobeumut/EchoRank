@@ -15,6 +15,19 @@ describe("message catalogs", () => {
   });
 
   for (const locale of LOCALES.filter((l) => l !== "en")) {
+    it(`locales/${locale} mirrors locales/en namespace files exactly`, () => {
+      const localesRoot = path.resolve(__dirname, "../locales");
+      const enFiles = readdirSync(path.join(localesRoot, "en")).filter((f) => f.endsWith(".json")).sort();
+      const otherFiles = readdirSync(path.join(localesRoot, locale)).filter((f) => f.endsWith(".json")).sort();
+      expect(otherFiles).toEqual(enFiles);
+
+      for (const file of enFiles) {
+        const enJson = JSON.parse(readFileSync(path.join(localesRoot, "en", file), "utf8"));
+        const otherJson = JSON.parse(readFileSync(path.join(localesRoot, locale, file), "utf8"));
+        expect(Object.keys(otherJson).sort(), `key mismatch in ${locale}/${file}`).toEqual(Object.keys(enJson).sort());
+      }
+    });
+
     it(`${locale} defines exactly the English keys`, () => {
       const keys = Object.keys(en).sort();
       expect(Object.keys(catalogs[locale]).sort()).toEqual(keys);

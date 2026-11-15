@@ -53,7 +53,7 @@ def _code_literals():
 
     import geo_crawler
 
-    shape = re.compile(r"^(access|actions|autogeo|bot_simulator|eeat|engine|misc|readability|schema_rules|seo|signals|"
+    shape = re.compile(r"^(access|actions\.rule|autogeo\.(?:rule|engine|metric)|bot_simulator|eeat|engine|misc|readability|schema_rules|seo|signals|"
                        r"snippets)\.[a-z0-9_.]*$")
     exact: set[str] = set()
     heads: set[str] = set()
@@ -73,7 +73,7 @@ def _code_literals():
             if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in skip \
                     and shape.match(node.value):
                 exact.add(node.value)
-    return exact, heads
+    return exact, heads, shape
 
 
 def _plural_base(key: str) -> str:
@@ -81,14 +81,15 @@ def _plural_base(key: str) -> str:
 
 
 def test_message_ids_used_in_code_exist_and_catalog_has_no_dead_keys():
-    exact, heads = _code_literals()
+    exact, heads, shape = _code_literals()
     en = set(catalog("en"))
     bases = {_plural_base(k) for k in en}
     # a literal is valid if it is a message id, a plural base, or a prefix shared by ids (f"{prefix}.label" style)
     missing = sorted(lit for lit in exact if lit not in en and lit not in bases
                      and not any(k.startswith(lit.rstrip(".") + ".") for k in en))
     assert missing == [], f"message ids used in code but missing from the catalogs: {missing}"
+    crawler_keys = {k for k in en if shape.match(k)}
     prefixes = {lit.rstrip(".") + "." for lit in exact if lit not in en and lit not in bases} | heads
-    dead = sorted(k for k in en if k not in exact and _plural_base(k) not in exact
+    dead = sorted(k for k in crawler_keys if k not in exact and _plural_base(k) not in exact
                   and not any(k.startswith(p) for p in prefixes))
     assert dead == [], f"catalog keys never referenced by the code: {dead}"

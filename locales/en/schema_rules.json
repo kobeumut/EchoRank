@@ -1,0 +1,6 @@
+{
+  "schema_rules.error.faq_question_incomplete": "{bad}/{total} Question items are missing name or acceptedAnswer.text",
+  "schema_rules.error.breadcrumb_position": "position is missing in ListItem elements",
+  "schema_rules.error.breadcrumb_name": "name is missing in ListItem elements",
+  "schema_rules.error.price_not_numeric": "offers.price '{raw}' is not numeric (should look like 12499.90)"
+}

@@ -1,9 +1,0 @@
-// Namespace "auth" — login screen and session controls.
-export const auth = {
-  "auth.logout": "Sign out",
-  "auth.login.title": "Sign in",
-  "auth.login.intro": "This dashboard is protected. Enter the value of the server's {token} to continue.",
-  "auth.login.tokenLabel": "Access token",
-  "auth.login.submit": "Sign in",
-  "auth.login.invalidToken": "Invalid access token.",
-} satisfies Record<string, string>;

@@ -102,9 +102,9 @@ The architecture is summarized in the README ([Internationalization](README.md#i
      relative times: never hard-code `"tr-TR"` or `"en-US"` in UI code.
    - Python: `get_translator(lang)` from `geo_crawler.i18n`, with a keyword-only `lang: str = "en"` parameter threaded through
      public functions and every CLI that prints text (`--lang en|tr`).
-2. **Add `en` and `tr` keys together.** Catalogs are flat, with globally unique dotted keys prefixed by the namespace
-   (`"actions.empty.noOpen"`). Add the English text to `src/lib/i18n/messages/en/<namespace>.ts` and the Turkish text to
-   `messages/tr/<namespace>.ts` (Python: `locales/en/<namespace>.py` and `locales/tr/<namespace>.py`).
+2. **Add `en` and `tr` keys together in the single source.** Catalogs are flat, with globally unique dotted keys prefixed by the namespace
+   (`"actions.empty.noOpen"`). Add the English text to `locales/en/<namespace>.json` and the Turkish text to
+   `locales/tr/<namespace>.json`. Both the TypeScript frontend/backend and Python crawler read from these exact files.
    Use `{name}` placeholders (never string concatenation) and `key_one` / `key_other` variants plus a `count` parameter for plurals.
 3. **English is the source of truth.** Write the English message first; the Turkish message must keep the same
    `{placeholders}`. If you cannot write Turkish, add an English-text placeholder to `tr` and say so in the pull request:
@@ -132,7 +132,7 @@ To find Turkish text that slipped into code, comments or docs, list every line w
 
 ```bash
 git grep -nIP '[çğıöşüÇĞİÖŞÜ]' -- . ':(exclude)package-lock.json' ':(exclude)*.svg' ':(exclude)*.ico' \
-  ':(exclude)src/lib/i18n/messages/tr' ':(exclude)services/crawler/src/geo_crawler/locales/tr'
+  ':(exclude)locales/tr'
 ```
 
 Every remaining hit must be deliberate language data with an explanatory English comment (see rule 5). Turkish words
