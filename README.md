@@ -15,6 +15,7 @@ engine (`services/crawler`) that the web app can run for every audit.
 > (`geo-crawler`, `geo-audit`, ...) are unchanged.
 
 - [Features](#features)
+- [Usage examples](#usage-examples)
 - [Architecture](#architecture)
 - [Quick start](#quick-start)
 - [Configuration](#configuration)
@@ -51,6 +52,48 @@ engine (`services/crawler`) that the web app can run for every audit.
   RSS / Atom / JSON feeds, driven by a change queue.
 - **Scheduled reports.** Daily and weekly reports (HTML / PDF / JSON) delivered by e-mail or webhook.
 - **English and Turkish UI**, with English as the default and fallback ([details](#internationalization)).
+
+---
+
+## Usage examples
+
+Everything below was recorded from a local installation (`npm run build && npm start`, SQLite, the Python engine set as
+`GEO_AUDIT_BIN`). The **htmx** site was audited live against https://htmx.org (20 pages, crawled with `--rps 3`). The **Demo Shop**
+screens use the seed data from `npm run db:migrate`, because live LLM visibility checks need provider API keys. The short
+clips are GIFs so they play inline. Click one to open the full-quality MP4.
+
+### Videos
+
+| | |
+| --- | --- |
+| **1. Add a site and run the first audit.** Enter a URL, click **Add and audit** and watch the overview fill in when the crawl and scoring finish. <br>[![Add a site and audit it](docs/media/videos/add-site.gif)](docs/media/videos/add-site.mp4) | **2. Live AI bot diagnostics.** Fetch the site as GPTBot, ClaudeBot, PerplexityBot, Google-Extended and Applebot-Extended, then read the URL × bot matrix and switch between the WAF allow-rule formats. <br>[![Live AI bot diagnostics](docs/media/videos/bot-diagnostics.gif)](docs/media/videos/bot-diagnostics.mp4) |
+| **3. AutoGEO Content Studio.** Select suggestions and watch the GEO score simulator update, switch from the side-by-side diff to the unified diff, then browse the answer capsules and tables. <br>[![AutoGEO Content Studio](docs/media/videos/content-studio.gif)](docs/media/videos/content-studio.mp4) | **4. Knowledge graph.** Zoom, pan and fit the force-directed graph, search for nodes, filter to orphan pages and open the enriched JSON-LD `@graph`. <br>[![Knowledge graph](docs/media/videos/knowledge-graph.gif)](docs/media/videos/knowledge-graph.mp4) |
+| **5. Turkish UI and dark theme.** Switch the language to Turkish and the theme to dark, move between screens, then switch back. <br>[![Language and theme switching](docs/media/videos/language-theme.gif)](docs/media/videos/language-theme.mp4) | |
+
+### Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><b>Sites</b>: tracked sites with GEO / SEO / E-E-A-T scores and the one-click "Add and audit" form.<br><a href="docs/media/screenshots/01-sites.png"><img src="docs/media/screenshots/01-sites.png" alt="Sites"></a></td>
+    <td width="50%"><b>Overview</b>: GEO score and grade, AI bot accessibility, E-E-A-T, technical SEO, score history and the four-pillar breakdown.<br><a href="docs/media/screenshots/02-overview.png"><img src="docs/media/screenshots/02-overview.png" alt="Site overview"></a></td>
+  </tr>
+  <tr>
+    <td><b>What to Do?</b>: prioritized action cards with evidence, estimated GEO gain and ready-to-apply diffs and snippets.<br><a href="docs/media/screenshots/03-actions.png"><img src="docs/media/screenshots/03-actions.png" alt="What to Do? action list"></a></td>
+    <td><b>Content Studio</b>: AutoGEO rewrite suggestions as diffs, the GEO score simulator and metric averages.<br><a href="docs/media/screenshots/04-content-studio.png"><img src="docs/media/screenshots/04-content-studio.png" alt="AutoGEO Content Studio"></a></td>
+  </tr>
+  <tr>
+    <td><b>Knowledge Graph</b>: entities and relations from the crawl, with orphan, unlinked and schema-less pages flagged.<br><a href="docs/media/screenshots/05-knowledge-graph.png"><img src="docs/media/screenshots/05-knowledge-graph.png" alt="Knowledge graph"></a></td>
+    <td><b>AI Bot Diagnostics</b>: a live test per AI crawler, the URL × bot matrix and the WAF / nginx / Apache / robots.txt rule generator.<br><a href="docs/media/screenshots/06-ai-bot-diagnostics.png"><img src="docs/media/screenshots/06-ai-bot-diagnostics.png" alt="AI bot diagnostics"></a></td>
+  </tr>
+  <tr>
+    <td><b>LLM Visibility</b>: query × model visibility simulation, competitor citation analysis and per-query responses (seed data).<br><a href="docs/media/screenshots/07-llm-visibility.png"><img src="docs/media/screenshots/07-llm-visibility.png" alt="LLM visibility"></a></td>
+    <td><b>Share of Model &amp; Competitors</b>: Share of Model, share by model, the trend, sentiment and hallucination alerts (seed data).<br><a href="docs/media/screenshots/08-share-of-model.png"><img src="docs/media/screenshots/08-share-of-model.png" alt="Share of Model and competitors"></a></td>
+  </tr>
+  <tr>
+    <td><b>AI Distribution</b>: IndexNow key, channel toggles, the change queue and a live <code>llms.txt</code> preview.<br><a href="docs/media/screenshots/09-ai-distribution.png"><img src="docs/media/screenshots/09-ai-distribution.png" alt="AI distribution"></a></td>
+    <td><b>Turkish UI, dark theme</b>: the same overview after one click on <b>TR</b> and the theme toggle.<br><a href="docs/media/screenshots/10-overview-dark-tr.png"><img src="docs/media/screenshots/10-overview-dark-tr.png" alt="Overview in Turkish with the dark theme"></a></td>
+  </tr>
+</table>
 
 ---
 
