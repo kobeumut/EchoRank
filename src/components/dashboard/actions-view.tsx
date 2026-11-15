@@ -1,17 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ACTION_STATUS_LABELS, CATEGORY_LABELS, EFFORT_LABELS, formatDate, tierFor, TIERS } from "@/lib/dashboard/format";
+import { TIERS } from "@/lib/dashboard/format";
 import { apiFetch, errorMessage, useApi } from "./api";
 import { useSite } from "./site-shell";
 import { useToast } from "./toast";
 import type { ActionItem } from "./types";
 import { Badge, Button, CodeBlock, cx, EmptyState, ErrorState, inputBase, Segmented, SkeletonCard } from "./ui";
+import { useFormat } from "./use-format";
 
 type StatusView = "open" | "resolved" | "dismissed";
 const STATUS_QUERY: Record<StatusView, string> = { open: "open,in_progress", resolved: "resolved", dismissed: "dismissed" };
 
 function ActionCard({ item, onStatus, busy, highlighted }: { item: ActionItem; onStatus: (status: string) => void; busy: string | null; highlighted: boolean }) {
+  const { t, formatDate, tierFor, label } = useFormat();
   const { startAudit, auditActive, startingAudit } = useSite();
   const [showUrls, setShowUrls] = useState(false);
   const tier = tierFor(item.impact);
@@ -31,11 +33,11 @@ function ActionCard({ item, onStatus, busy, highlighted }: { item: ActionItem; o
         <Badge tone={tier.tone} icon>
           {tier.label}
         </Badge>
-        <Badge>{CATEGORY_LABELS[item.category] ?? item.category}</Badge>
-        {item.effort && <Badge>{EFFORT_LABELS[item.effort] ?? item.effort}</Badge>}
-        {item.status === "in_progress" && <Badge tone="warning">{ACTION_STATUS_LABELS.in_progress}</Badge>}
+        <Badge>{label("category", item.category)}</Badge>
+        {item.effort && <Badge>{label("effort", item.effort)}</Badge>}
+        {item.status === "in_progress" && <Badge tone="warning">{label("actionStatus", "in_progress")}</Badge>}
         {typeof d.expected_gain === "number" && d.expected_gain > 0 && (
-          <span className="ml-auto text-xs font-medium text-[#006300] dark:text-[#0ca30c]">≈ +{d.expected_gain.toFixed(1)} GEO puanı</span>
+          <span className="ml-auto text-xs font-medium text-[#006300] dark:text-[#0ca30c]">{t("actions.card.expectedGain", { gain: d.expected_gain.toFixed(1) })}</span>
         )}
       </div>
       <h3 className="mt-3 text-base font-semibold text-zinc-900 dark:text-zinc-100">{item.title}</h3>
@@ -48,7 +50,7 @@ function ActionCard({ item, onStatus, busy, highlighted }: { item: ActionItem; o
 
       {!!d.evidence?.length && (
         <div className="mt-3">
-          <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">Tespit</div>
+          <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">{t("actions.card.evidence")}</div>
           <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-zinc-700 dark:text-zinc-300">
             {d.evidence.map((e, i) => (
               <li key={i}>{e}</li>
@@ -60,7 +62,7 @@ function ActionCard({ item, onStatus, busy, highlighted }: { item: ActionItem; o
       {urls.length > 0 && (
         <div className="mt-3">
           <button type="button" className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400" aria-expanded={showUrls} onClick={() => setShowUrls((s) => !s)}>
-            {showUrls ? "Etkilenen sayfaları gizle" : `Etkilenen ${d.affected_count ?? urls.length} sayfayı göster`}
+            {showUrls ? t("actions.card.hideUrls") : t("actions.card.showUrls", { count: d.affected_count ?? urls.length })}
           </button>
           {showUrls && (
             <ul className="mt-2 max-h-40 space-y-0.5 overflow-auto rounded-lg bg-zinc-50 p-2 font-mono text-xs dark:bg-zinc-950">
@@ -87,37 +89,37 @@ function ActionCard({ item, onStatus, busy, highlighted }: { item: ActionItem; o
         {item.status === "open" || item.status === "in_progress" ? (
           <>
             <Button size="sm" variant="primary" loading={busy === "resolved"} disabled={!!busy} onClick={() => onStatus("resolved")}>
-              ✓ Çözüldü Olarak İşaretle
+              {t("actions.card.markResolved")}
             </Button>
             {item.status === "open" ? (
               <Button size="sm" loading={busy === "in_progress"} disabled={!!busy} onClick={() => onStatus("in_progress")}>
-                Üzerinde çalışıyorum
+                {t("actions.card.markInProgress")}
               </Button>
             ) : (
               <Button size="sm" loading={busy === "open"} disabled={!!busy} onClick={() => onStatus("open")}>
-                Açığa al
+                {t("actions.card.markOpen")}
               </Button>
             )}
             <Button size="sm" variant="ghost" loading={busy === "dismissed"} disabled={!!busy} onClick={() => onStatus("dismissed")}>
-              Yok say
+              {t("actions.card.dismiss")}
             </Button>
           </>
         ) : item.status === "resolved" ? (
           <>
-            <Button size="sm" variant="primary" loading={startingAudit} disabled={auditActive} onClick={() => void startAudit()} title="Yeni analiz düzeltmeyi doğrular; sorun sürüyorsa aksiyon yeniden açılır.">
-              ↻ Yeniden Kontrol Et
+            <Button size="sm" variant="primary" loading={startingAudit} disabled={auditActive} onClick={() => void startAudit()} title={t("actions.card.recheckHint")}>
+              {t("actions.card.recheck")}
             </Button>
             <Button size="sm" loading={busy === "open"} disabled={!!busy} onClick={() => onStatus("open")}>
-              Tekrar aç
+              {t("actions.card.reopen")}
             </Button>
           </>
         ) : (
           <Button size="sm" loading={busy === "open"} disabled={!!busy} onClick={() => onStatus("open")}>
-            Geri al
+            {t("actions.card.undo")}
           </Button>
         )}
         <span className="ml-auto text-xs text-zinc-400">
-          {item.status === "resolved" && item.resolvedAt ? `Çözüldü: ${formatDate(item.resolvedAt)}` : `Güncellendi: ${formatDate(item.updatedAt)}`}
+          {item.status === "resolved" && item.resolvedAt ? t("actions.card.resolvedOn", { date: formatDate(item.resolvedAt) }) : t("actions.card.updatedOn", { date: formatDate(item.updatedAt) })}
         </span>
       </div>
     </article>
@@ -125,6 +127,7 @@ function ActionCard({ item, onStatus, busy, highlighted }: { item: ActionItem; o
 }
 
 export function ActionsView() {
+  const { t, tierFor, label } = useFormat();
   const { siteId, version, startAudit, auditActive, startingAudit } = useSite();
   const toast = useToast();
   const [statusView, setStatusView] = useState<StatusView>("open");
@@ -165,15 +168,15 @@ export function ActionsView() {
       list.mutate((prev) =>
         prev && { items: stays ? prev.items.map((i) => (i.id === item.id ? { ...i, status, updatedAt: new Date().toISOString() } : i)) : prev.items.filter((i) => i.id !== item.id) },
       );
-      const msg: Record<string, string> = {
-        resolved: "Çözüldü olarak işaretlendi. Doğrulamak için “Yeniden Kontrol Et” ile yeni analiz başlatın.",
-        in_progress: "Üzerinde çalışılıyor olarak işaretlendi.",
-        dismissed: "Aksiyon yok sayıldı; sonraki analizlerde yeniden oluşturulmayacak.",
-        open: "Aksiyon yeniden açıldı.",
+      const msgKey: Record<string, string> = {
+        resolved: "actions.toast.resolved",
+        in_progress: "actions.toast.inProgress",
+        dismissed: "actions.toast.dismissed",
+        open: "actions.toast.reopened",
       };
-      toast.push("success", msg[status] ?? "Güncellendi.");
+      toast.push("success", t(msgKey[status] ?? "actions.toast.updated"));
     } catch (err) {
-      toast.push("error", errorMessage(err));
+      toast.push("error", errorMessage(err, t));
     } finally {
       setBusy(null);
     }
@@ -183,45 +186,45 @@ export function ActionsView() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Ne Yapılmalı?</h2>
-          <p className="text-sm text-zinc-500">Etki × kapsam / efor ile önceliklendirilmiş aksiyonlar. Kod bloklarını kopyalayıp sitenize uygulayın, ardından yeniden kontrol edin.</p>
+          <h2 className="text-lg font-semibold">{t("actions.title")}</h2>
+          <p className="text-sm text-zinc-500">{t("actions.subtitle")}</p>
         </div>
         <Button onClick={() => void startAudit()} loading={startingAudit} disabled={auditActive}>
-          ↻ {auditActive ? "Kontrol sürüyor…" : "Tümünü Yeniden Kontrol Et"}
+          ↻ {auditActive ? t("actions.recheckRunning") : t("actions.recheckAll")}
         </Button>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
         <Segmented
-          label="Durum"
+          label={t("actions.filter.status")}
           value={statusView}
           onChange={(v) => {
             setStatusView(v);
             setTier("all");
           }}
           options={[
-            { value: "open", label: "Açık" },
-            { value: "resolved", label: "Çözülen" },
-            { value: "dismissed", label: "Yok sayılan" },
+            { value: "open", label: t("actions.filter.open") },
+            { value: "resolved", label: t("actions.filter.resolved") },
+            { value: "dismissed", label: t("actions.filter.dismissed") },
           ]}
         />
         <Segmented
-          label="Öncelik"
+          label={t("actions.filter.priority")}
           value={tier}
           onChange={setTier}
-          options={[{ value: "all", label: "Tümü", count: counts.all ?? 0 }, ...TIERS.map((t) => ({ value: t.impact as string, label: t.label, count: counts[t.impact] ?? 0 }))]}
+          options={[{ value: "all", label: t("actions.filter.all"), count: counts.all ?? 0 }, ...TIERS.map((entry) => ({ value: entry.impact as string, label: tierFor(entry.impact).label, count: counts[entry.impact] ?? 0 }))]}
         />
-        <select aria-label="Kategori" value={category} onChange={(e) => setCategory(e.target.value)} className={`${inputBase} w-auto py-1.5 text-xs`}>
-          <option value="">Tüm kategoriler</option>
+        <select aria-label={t("actions.filter.category")} value={category} onChange={(e) => setCategory(e.target.value)} className={`${inputBase} w-auto py-1.5 text-xs`}>
+          <option value="">{t("actions.filter.allCategories")}</option>
           {categories.map((c) => (
             <option key={c} value={c}>
-              {CATEGORY_LABELS[c] ?? c}
+              {label("category", c)}
             </option>
           ))}
         </select>
         <label className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
           <input type="checkbox" checked={onlySnippets} onChange={(e) => setOnlySnippets(e.target.checked)} className="accent-indigo-600" />
-          Sadece hazır kod bloğu olanlar
+          {t("actions.filter.onlySnippets")}
         </label>
       </div>
 
@@ -234,10 +237,8 @@ export function ActionsView() {
       ) : list.error ? (
         <ErrorState error={list.error} onRetry={() => void list.reload()} />
       ) : !visible.length ? (
-        <EmptyState icon={statusView === "open" && !items.length ? "🎉" : "∅"} title={statusView === "open" && !items.length ? "Açık aksiyon yok" : "Bu filtreye uyan aksiyon yok"}>
-          {statusView === "open" && !items.length
-            ? "Tüm öneriler çözülmüş ya da henüz analiz yapılmamış. Yeni bir analiz ile siteyi yeniden kontrol edebilirsiniz."
-            : "Filtreleri değiştirmeyi deneyin."}
+        <EmptyState icon={statusView === "open" && !items.length ? "🎉" : "∅"} title={statusView === "open" && !items.length ? t("actions.empty.noOpen") : t("actions.empty.noMatch")}>
+          {statusView === "open" && !items.length ? t("actions.empty.noOpenHint") : t("actions.empty.noMatchHint")}
         </EmptyState>
       ) : (
         <div className="space-y-4">

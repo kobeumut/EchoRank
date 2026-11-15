@@ -17,6 +17,11 @@ type Template = { text: string; slots: Slot[] };
 
 const t = (text: string): Template => ({ text, slots: [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1] as Slot) });
 
+/**
+ * Prompt templates per language and intent. The `tr` block is deliberately Turkish: it is functional language data
+ * (the prompts a Turkish-speaking user sends to an AI assistant, used for Turkish-language sites), not UI text.
+ * `en` is its English counterpart; the language is chosen per request (`languages`).
+ */
 export const TEMPLATES: Record<QueryLanguage, Record<QueryIntent, Template[]>> = {
   tr: {
     informational: [
@@ -121,7 +126,7 @@ export function difficultyOf(query: string, intent: QueryIntent, brand: string):
 function fill(tpl: Template, values: Partial<Record<Slot, string>>, lang: QueryLanguage): string | null {
   if (tpl.slots.some((s) => !values[s])) return null;
   const text = tpl.text.replace(/\{(\w+)\}/g, (_, s: Slot) => values[s]!.trim()).replace(/\s+/g, " ").trim();
-  // "soğuk demleme nedir?" -> "Soğuk demleme nedir?", but never "iPhone" -> "IPhone"
+  // Capitalise a lower-case start with the language's rules (Turkish "ıslak" -> "Islak"; "i" -> "İ"), but never "iPhone" -> "IPhone".
   return /^\p{Ll}\p{Ll}/u.test(text) ? text.charAt(0).toLocaleUpperCase(lang) + text.slice(1) : text;
 }
 

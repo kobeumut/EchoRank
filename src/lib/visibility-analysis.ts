@@ -51,6 +51,7 @@ export function analyzeAnswer(answer: SearchAnswer, site: { url: string; title: 
   // ponytail: only explicit numbered recommendations have a rank; prose/source order is not ranking.
   let position: number | null = null;
   for (const line of answer.text.split("\n")) {
+    // "kaynaklar" = Turkish for "sources": stop at a source list, whatever the answer's language.
     if (/^\s*(?:#{1,6}\s*)?(?:sources?|references?|kaynaklar)\s*:?\s*$/i.test(line.replace(/[*_`]/g, ""))) break;
     const match = line.match(/^\s*(\d{1,3})[.)]\s+(.+)$/);
     if (!match) continue;
@@ -73,7 +74,10 @@ export function analyzeAnswer(answer: SearchAnswer, site: { url: string; title: 
   };
 }
 
-/** Explicit brand clauses only: no pronoun resolution, source lists, or cross-brand attribution. */
+/**
+ * Explicit brand clauses only: no pronoun resolution, source lists, or cross-brand attribution. Clause and source-list
+ * markers are English plus Turkish (kaynaklar = sources; ancak/ama/oysa = but/whereas).
+ */
 export function brandClauses(text: string, names: string[], otherNames: string[] = []) {
   const prose = text.split(/^\s*(?:#{1,6}\s*)?(?:\*\*|__)?(?:sources?|references?|kaynaklar)(?:\*\*|__)?\s*:?/im)[0]
     .replace(/https?:\/\/[^\s<>"\])}]+/gi, "").replace(/[*_`]/g, "");
@@ -81,6 +85,10 @@ export function brandClauses(text: string, names: string[], otherNames: string[]
     .map((s) => s.trim()).filter((s) => s && names.some((n) => containsName(s, n)) && !otherNames.some((n) => containsName(s, n)));
 }
 
+// Small English + Turkish sentiment lexicon (the Turkish words are functional data for scoring Turkish AI answers):
+// iyi = good, harika = great, güvenilir = reliable, kaliteli = high quality, başarılı = successful,
+// kötü = bad, güvensiz = unsafe, pahalı = expensive, başarısız = unsuccessful, dolandırıcı = scammer;
+// negations: değil = "is not", yok = "there is no".
 const positive = new Set(["good", "great", "excellent", "reliable", "recommended", "recommend", "best", "affordable", "iyi", "harika", "güvenilir", "kaliteli", "başarılı"]);
 const negative = new Set(["bad", "poor", "unreliable", "unsafe", "expensive", "avoid", "terrible", "scam", "kötü", "güvensiz", "pahalı", "başarısız", "dolandırıcı"]);
 const negation = /^(?:not|no|never|isn't|isnt|don't|dont|doesn't|doesnt|değil|yok)$/iu;
@@ -108,6 +116,7 @@ export function auditBrandClaims(text: string, facts: VisibilityAnalysisSettings
   const active = facts.filter((f) => Date.parse(f.verifiedAt) <= +at && Date.parse(f.validUntil) >= +at);
   const findings = active.flatMap((fact) => brandClauses(text, [fact.subject], otherNames).flatMap((clause) => {
     // ponytail: ambiguous/negated claims stay unknown; semantic verification needs a separate adjudicator.
+    // Hedging/negation markers in English and Turkish (değil = "is not", yok = "there is no", olabilir = "may be").
     if (/\b(?:not|never|no|isn't|don't|doesn't|may|might|rumou?r|alleged)\b|değil|yok|olabilir|[?"“”]/iu.test(clause)) return [];
     return fact.conflictingClaims.filter((claim) => containsName(clause, claim)).map((claim) => ({
       rule: "verified-fact-conflict", severity: "potential_hallucination", subject: fact.subject,

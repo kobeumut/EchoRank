@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { ZodError, type ZodType } from "zod";
+import { safeEqual } from "./auth";
 
 export class HttpError extends Error {
   constructor(
@@ -17,7 +18,7 @@ export const notFound = (what = "Resource") => new HttpError(404, `${what} not f
 export function requireApiToken(request: Request) {
   const token = process.env.API_TOKEN;
   if (!token) throw new HttpError(503, "Configure API_TOKEN before using scheduled reports");
-  if (request.headers.get("authorization") !== `Bearer ${token}`) throw new HttpError(401, "Unauthorized");
+  if (!safeEqual(request.headers.get("authorization") ?? "", `Bearer ${token}`)) throw new HttpError(401, "Unauthorized");
 }
 
 export function json(data: unknown, status = 200) {
@@ -62,8 +63,11 @@ export function errorResponse(err: unknown): Response {
     return json({ error: "Validation failed", details: err.issues }, 400);
   }
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
-    if (err.code === "P2002") return json({ error: "Resource already exists", details: err.meta }, 409);
+    // Never echo `err.meta` or log the full error: Prisma messages embed the query arguments (may hold secrets).
+    if (err.code === "P2002") return json({ error: "Resource already exists" }, 409);
     if (err.code === "P2025") return json({ error: "Resource not found" }, 404);
+    console.error(`Prisma error ${err.code}`);
+    return json({ error: "Internal server error" }, 500);
   }
   console.error(err);
   return json({ error: "Internal server error" }, 500);

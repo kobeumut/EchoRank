@@ -1,24 +1,49 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { Params, Translator } from "@/lib/i18n/translate";
+
+/**
+ * Translator used by the non-hook helpers in this module (`apiFetch`, `errorMessage`). It is registered by
+ * `ToastProvider` (mounted under `I18nProvider` in the root layout) so callers outside React components
+ * keep their simple `errorMessage(err)` signature and still get messages in the active locale.
+ */
+let activeTranslator: Translator | null = null;
+export function setApiTranslator(t: Translator | null) {
+  activeTranslator = t;
+}
+
+/** Catalog entry (key + params) behind a locally generated error message, so it can be re-translated later. */
+type MessageSpec = { key: string; params?: Params };
 
 export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
     public details?: unknown,
+    /** Set when `message` is one of our own fallbacks (not text returned by the server). */
+    public spec?: MessageSpec,
   ) {
     super(message);
   }
 }
 
-const STATUS_MESSAGES: Record<number, string> = {
-  401: "Oturum gerekli. Lütfen tekrar giriş yapın.",
-  403: "Bu işlem için yetkiniz yok.",
-  404: "Kayıt bulunamadı.",
-  409: "Çakışma: işlem şu anda yapılamıyor.",
-  503: "Servis yapılandırılmamış veya geçici olarak kullanılamıyor.",
+/** Fallback messages (catalog keys) for HTTP statuses when the server sent no `error` text. */
+const STATUS_MESSAGE_KEYS: Record<number, string> = {
+  401: "shared.api.status.401",
+  403: "shared.api.status.403",
+  404: "shared.api.status.404",
+  409: "shared.api.status.409",
+  503: "shared.api.status.503",
 };
+
+function localize(spec: MessageSpec, t: Translator | null = activeTranslator): string {
+  return t ? t(spec.key, spec.params) : spec.key;
+}
+
+function fallbackError(status: number, spec: MessageSpec, details?: unknown): ApiError {
+  return new ApiError(status, localize(spec), details, spec);
+}
 
 function redirectToLogin() {
   if (typeof window === "undefined" || window.location.pathname === "/login") return;
@@ -41,18 +66,20 @@ export async function apiFetch<T = unknown>(url: string, init: RequestInit & { j
   const body: unknown = type.includes("json") ? await res.json().catch(() => null) : await res.text();
   if (!res.ok) {
     if (res.status === 401) redirectToLogin();
-    const msg =
-      body && typeof body === "object" && "error" in body && typeof (body as { error: unknown }).error === "string"
-        ? (body as { error: string }).error
-        : STATUS_MESSAGES[res.status] ?? `İstek başarısız (HTTP ${res.status})`;
-    throw new ApiError(res.status, msg, body && typeof body === "object" ? (body as { details?: unknown }).details : undefined);
+    const details = body && typeof body === "object" ? (body as { details?: unknown }).details : undefined;
+    if (body && typeof body === "object" && "error" in body && typeof (body as { error: unknown }).error === "string") {
+      throw new ApiError(res.status, (body as { error: string }).error, details);
+    }
+    const key = STATUS_MESSAGE_KEYS[res.status];
+    throw fallbackError(res.status, key ? { key } : { key: "shared.api.requestFailed", params: { status: res.status } }, details);
   }
   return body as T;
 }
 
-export function errorMessage(err: unknown): string {
-  if (err instanceof ApiError) return err.message;
-  if (err instanceof TypeError) return "Sunucuya ulaşılamadı. Bağlantınızı kontrol edin.";
+/** User-facing text for any thrown value. Pass `t` to force a translator; otherwise the registered one is used. */
+export function errorMessage(err: unknown, t: Translator | null = activeTranslator): string {
+  if (err instanceof ApiError) return err.spec ? localize(err.spec, t) : err.message;
+  if (err instanceof TypeError) return localize({ key: "shared.api.network" }, t);
   return err instanceof Error ? err.message : String(err);
 }
 
@@ -111,7 +138,8 @@ export function useApi<T>(
           ? ((await fetch(url, { credentials: "same-origin", cache: "no-store" }).then(async (r) => {
               if (!r.ok) {
                 if (r.status === 401) redirectToLogin();
-                throw new ApiError(r.status, STATUS_MESSAGES[r.status] ?? `HTTP ${r.status}`);
+                const key = STATUS_MESSAGE_KEYS[r.status];
+                throw fallbackError(r.status, key ? { key } : { key: "shared.api.httpStatus", params: { status: r.status } });
               }
               return r.text();
             })) as T)

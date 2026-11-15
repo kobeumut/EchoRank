@@ -8,8 +8,14 @@ const PUBLIC_API = new Set(["/api/health", "/api/auth"]);
  * - /api/*: bearer token or dashboard session cookie. /api/health and /api/auth stay public.
  * - dashboard pages: redirect to /login without a valid session.
  */
+let warnedOpen = false;
+
 export async function proxy(request: NextRequest) {
   const token = apiToken();
+  if (!token && process.env.NODE_ENV === "production" && !warnedOpen) {
+    warnedOpen = true;
+    console.warn("[security] API_TOKEN is not set: every API route and dashboard page is publicly accessible. Set API_TOKEN before exposing this server.");
+  }
   const { pathname, search } = request.nextUrl;
   if (!token || PUBLIC_API.has(pathname) || pathname === "/login") return NextResponse.next();
 

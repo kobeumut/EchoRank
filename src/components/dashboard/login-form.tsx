@@ -2,6 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { useT } from "@/lib/i18n/provider";
 import { apiFetch, errorMessage } from "./api";
 import { Button, Field, inputClass } from "./ui";
 
@@ -11,6 +12,7 @@ function safeNext(value: string | null) {
 }
 
 export function LoginForm() {
+  const t = useT();
   const params = useSearchParams();
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
@@ -27,7 +29,7 @@ export function LoginForm() {
           await apiFetch("/api/auth", { method: "POST", json: { token } });
           window.location.assign(safeNext(params.get("next")));
         } catch (err) {
-          setError(errorMessage(err) === "Invalid token" ? "Geçersiz erişim anahtarı." : errorMessage(err));
+          setError(errorMessage(err) === "Invalid token" ? t("auth.login.invalidToken") : errorMessage(err));
           setBusy(false);
         }
       }}
@@ -38,8 +40,8 @@ export function LoginForm() {
         </span>
         <h1 className="text-lg font-semibold">AI Visibility</h1>
       </div>
-      <p className="mb-4 text-sm text-zinc-500">Bu panel korumalı. Devam etmek için sunucudaki <code>API_TOKEN</code> değerini girin.</p>
-      <Field label="Erişim anahtarı">
+      <p className="mb-4 text-sm text-zinc-500">{t("auth.login.intro", { token: "API_TOKEN" })}</p>
+      <Field label={t("auth.login.tokenLabel")}>
         <input type="password" autoComplete="current-password" required value={token} onChange={(e) => setToken(e.target.value)} className={inputClass} autoFocus />
       </Field>
       {error && (
@@ -48,7 +50,7 @@ export function LoginForm() {
         </p>
       )}
       <Button type="submit" variant="primary" loading={busy} className="mt-5 w-full">
-        Giriş yap
+        {t("auth.login.submit")}
       </Button>
     </form>
   );

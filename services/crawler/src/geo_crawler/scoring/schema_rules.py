@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..i18n import DEFAULT_LANG, Translator, get_translator
 from ..models import PageData
 
 # type family -> (required props, recommended props). "a|b" = any of; "x.y" = nested path.
@@ -82,38 +83,39 @@ class SchemaValidation:
                 "errors": self.errors}
 
 
-def _extra_errors(family: str, block: dict[str, Any]) -> list[str]:
+def _extra_errors(family: str, block: dict[str, Any], t: Translator) -> list[str]:
     errs: list[str] = []
     if family == "FAQPage":
         qs = [q for q in get_path(block, "mainEntity") if isinstance(q, dict)]
         bad = [q for q in qs if not (_present(q.get("name")) and has(q, "acceptedAnswer.text"))]
         if bad:
-            errs.append(f"{len(bad)}/{len(qs)} Question öğesinde name veya acceptedAnswer.text eksik")
+            errs.append(t("schema_rules.error.faq_question_incomplete", bad=len(bad), total=len(qs)))
     elif family == "BreadcrumbList":
         items = [i for i in get_path(block, "itemListElement") if isinstance(i, dict)]
         if any(not _present(i.get("position")) for i in items):
-            errs.append("ListItem öğelerinde position eksik")
+            errs.append(t("schema_rules.error.breadcrumb_position"))
         if any(not (_present(i.get("name")) or has(i, "item.name")) for i in items):
-            errs.append("ListItem öğelerinde name eksik")
+            errs.append(t("schema_rules.error.breadcrumb_name"))
     elif family == "Product":
         for offer in get_path(block, "offers"):
             if isinstance(offer, dict) and _present(offer.get("price")):
                 raw = str(offer["price"])
                 if "," in raw and "." in raw or any(c.isalpha() for c in raw):
-                    errs.append(f"offers.price '{raw}' sayısal değil (örn. 12499.90 olmalı)")
+                    errs.append(t("schema_rules.error.price_not_numeric", raw=raw))
     return errs
 
 
-def validate_block(block: dict[str, Any], url: str) -> SchemaValidation | None:
-    for t in types_of(block):
-        family = FAMILIES.get(t)
+def validate_block(block: dict[str, Any], url: str, *, lang: str = DEFAULT_LANG) -> SchemaValidation | None:
+    t = get_translator(lang)
+    for type_name in types_of(block):
+        family = FAMILIES.get(type_name)
         if not family:
             continue
         required, recommended = RULES[family]
-        v = SchemaValidation(url=url, type=t, family=family)
+        v = SchemaValidation(url=url, type=type_name, family=family)
         v.missing_required = [r for r in required if not has(block, r)]
         v.missing_recommended = [r for r in recommended if not has(block, r)]
-        v.errors = _extra_errors(family, block)
+        v.errors = _extra_errors(family, block, t)
         req_ratio = 1 - len(v.missing_required) / len(required) if required else 1.0
         rec_ratio = 1 - len(v.missing_recommended) / len(recommended) if recommended else 1.0
         v.score = max(0.0, 60 * req_ratio + 40 * rec_ratio - 15 * len(v.errors))
@@ -149,10 +151,10 @@ def page_families(page: PageData) -> set[str]:
     return {FAMILIES[t] for n in page_schema_nodes(page) for t in types_of(n) if t in FAMILIES}
 
 
-def validate_page(page: PageData) -> list[SchemaValidation]:
+def validate_page(page: PageData, *, lang: str = DEFAULT_LANG) -> list[SchemaValidation]:
     """Validates top-level nodes only (nested Organization-as-publisher is not expected to be complete)."""
     out = []
     for block in [*page.json_ld, *page.microdata]:
-        if isinstance(block, dict) and (v := validate_block(block, page.url)):
+        if isinstance(block, dict) and (v := validate_block(block, page.url, lang=lang)):
             out.append(v)
     return out

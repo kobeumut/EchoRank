@@ -1,6 +1,17 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
 
-# dependencies
+# ---- Environment and secrets (never commit real values; .env.example is the template) ----
+.env*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+# Google service-account / credential files
+*service-account*.json
+credentials*.json
+
+# ---- Node.js dependencies ----
 /node_modules
 /.pnp
 .pnp.*
@@ -10,38 +21,65 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
-/artifacts/
-
-# next.js
+# ---- Next.js / build output ----
 /.next/
 /out/
-
-# production
 /build
+next-env.d.ts
+*.tsbuildinfo
+.vercel
 
-# misc
-.DS_Store
-*.pem
+# ---- Testing and coverage ----
+/coverage
+/.nyc_output
+.coverage
+htmlcov/
 
-# debug
+# ---- Logs ----
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-!.env.example
-
-# sqlite
+# ---- Local databases (SQLite dev and test databases) ----
 prisma/*.db
 prisma/*.db-journal
+prisma/*.db-wal
+prisma/*.db-shm
+*.sqlite
+*.sqlite3
+
+# ---- Python (services/crawler) ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+/services/crawler/build/
+/services/crawler/dist/
+# Local crawl / audit output written next to the CLIs (graph.json, audit.json, rows.json, ...)
+/services/crawler/*.json
+/services/crawler/*.graphml
+
+# ---- Local audit and report output ----
+/artifacts/
+/audit-output/
+/crawl-output/
+/report-output/
+
+# ---- Editors and OS files ----
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ---- Local AI-assistant / agent tooling ----
+.multica/
+.claude/settings.local.json

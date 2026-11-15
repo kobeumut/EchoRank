@@ -1,4 +1,8 @@
-"""Deterministic fake Wikidata / Wikipedia / SPARQL / Crunchbase backend (httpx.MockTransport)."""
+"""Deterministic fake Wikidata / Wikipedia / SPARQL / Crunchbase backend (httpx.MockTransport).
+
+The entities are Turkish on purpose (Turkish labels, diacritic folding, ``trwiki`` sitelinks): they exercise the
+Turkish entity-matching paths of the reconciler.
+"""
 from __future__ import annotations
 
 import json

@@ -18,6 +18,20 @@ export const GOOGLE_SCOPES = {
 } as const;
 const DEFAULT_TOKEN_URI = "https://oauth2.googleapis.com/token";
 
+/**
+ * The service-account JSON is user supplied, and its `token_uri` receives a signed JWT. Only Google's own
+ * HTTPS token endpoints are honoured; anything else falls back to the default (prevents SSRF / assertion leaks).
+ */
+export function tokenUriFor(sa: ServiceAccount): string {
+  try {
+    const url = new URL(sa.token_uri ?? DEFAULT_TOKEN_URI);
+    const googleHost = url.hostname === "googleapis.com" || url.hostname.endsWith(".googleapis.com") || url.hostname === "accounts.google.com";
+    return url.protocol === "https:" && googleHost && !url.username && !url.password ? url.href : DEFAULT_TOKEN_URI;
+  } catch {
+    return DEFAULT_TOKEN_URI;
+  }
+}
+
 export interface ServiceAccount {
   client_email: string;
   private_key: string;
@@ -49,7 +63,7 @@ const b64url = (input: string | Buffer) => Buffer.from(input).toString("base64ur
 export function buildJwtAssertion(sa: ServiceAccount, scope: string, now = Math.floor(Date.now() / 1000)) {
   const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
   const claims = b64url(
-    JSON.stringify({ iss: sa.client_email, scope, aud: sa.token_uri ?? DEFAULT_TOKEN_URI, iat: now, exp: now + 3600 }),
+    JSON.stringify({ iss: sa.client_email, scope, aud: tokenUriFor(sa), iat: now, exp: now + 3600 }),
   );
   const signature = createSign("RSA-SHA256").update(`${header}.${claims}`).sign(sa.private_key, "base64url");
   return `${header}.${claims}.${signature}`;
@@ -66,8 +80,9 @@ export async function getAccessToken(sa: ServiceAccount, scope: string): Promise
   const cached = tokenCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
 
-  const res = await fetch(sa.token_uri ?? DEFAULT_TOKEN_URI, {
+  const res = await fetch(tokenUriFor(sa), {
     method: "POST",
+    redirect: "error",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",

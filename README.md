@@ -1,232 +1,457 @@
 # AI Visibility — GEO & SEO Platform
 
-A comprehensive Generative Engine Optimization (GEO) & SEO tracking, scoring, and knowledge-graph platform. It monitors how websites appear in AI answer engines (ChatGPT, Google Gemini, Anthropic Claude, Perplexity), analyzes E-E-A-T credibility, constructs an entity-relationship knowledge graph, and automates instant search indexation and distribution.
+AI Visibility is a self-hosted platform for **Generative Engine Optimization (GEO)** and SEO. It measures how a website
+appears in AI answer engines (ChatGPT, Google Gemini, Anthropic Claude, Perplexity), scores how well the site can be
+crawled, understood and trusted by those engines, builds an entity knowledge graph from the crawl, and tells you
+exactly what to fix. It also notifies search indexes (IndexNow, Google) and publishes `llms.txt` and feeds so that
+updates reach AI crawlers quickly.
 
-## Key Features
+The project is a monorepo: a Next.js 16 application (dashboard + REST API + database) and a Python crawler / scoring
+engine (`services/crawler`) that the web app can run for every audit.
 
-- **Multi-LLM Citation & Visibility Tracking**: Automated benchmarking across ChatGPT, Gemini, Claude, and Perplexity.
-- **Knowledge Graph & Graphify Engine**: Extracts entities (Products, Categories, FAQs, Authors) and semantic relationships into a queryable graph.
-- **Four-Pillar GEO Scoring**:
-  1. *AI Bot Accessibility* (`GPTBot`, `ClaudeBot`, `PerplexityBot`, `Google-Extended`).
-  2. *Semantic & Direct Answer Readability*.
-  3. *Information Trust & E-E-A-T* (Author credibility, citation density, verifiable facts).
-  4. *Schema.org JSON-LD Completeness*.
-- **Modern AI Submitter & Feeder**: IndexNow protocol for real-time Bing/ChatGPT indexing, dynamic `llms.txt` generation, and structured product syndication.
-- **Actionable Remediation Engine**: Prioritized, copy-pasteable schema and configuration recommendations.
-- **Scheduled Audits & Reporting**: Daily and weekly automated audits with trend reports.
+- [Features](#features)
+- [Architecture](#architecture)
+- [Quick start](#quick-start)
+- [Configuration](#configuration)
+- [Authentication](#authentication)
+- [Dashboard](#dashboard)
+- [API overview](#api-overview)
+- [AI distribution engine](#ai-distribution-engine)
+- [Scheduled reports](#scheduled-reports)
+- [Data model](#data-model)
+- [Internationalization](#internationalization)
+- [Development](#development)
+- [Documentation](#documentation)
+- [Contributing, security and license](#contributing-security-and-license)
 
 ---
 
-## Architecture & Services
+## Features
 
-The platform is structured as a unified monorepo:
+- **Multi-LLM visibility tracking.** Runs bounded, cached query checks against ChatGPT, Gemini, Claude and Perplexity
+  through their search-enabled APIs and records citations, mentions, positions and competing sources.
+- **Four-pillar GEO scoring** (0-100) with prioritized, copy-paste fixes:
+  1. *AI crawler access*: robots.txt rules per AI bot (RFC 9309), WAF/CDN user-agent probes, render mode (SSR vs. client-side shell).
+  2. *LLM readability*: FAQ and direct-answer blocks, information density, Schema.org coverage, `llms.txt`.
+  3. *Trust and E-E-A-T*: authors, authority signals, HTTPS/HSTS, contact and policy pages, factual consistency.
+  4. *Technical SEO*: titles, meta tags, canonicals, broken URLs, thin content, internal links.
+- **AutoGEO content engine.** Scores page content on six metrics (statistics, quotations, citations, answer capsules,
+  authority/fluency, keyword stuffing) and proposes block-level Markdown/HTML rewrites as diffs.
+- **Live AI crawler simulator.** Fetches your pages as GPTBot, ClaudeBot, PerplexityBot and others, detects WAF
+  challenges, silent blocks and empty client-side shells, and generates Cloudflare / nginx / Apache / AWS WAF allow rules.
+- **Knowledge graph.** Extracts products, brands, categories, FAQs, authors and organizations into a queryable graph,
+  detects structural gaps and reconciles entities with Wikidata to produce a valid Schema.org JSON-LD `@graph`.
+- **Competitor intelligence.** Share of Model against configured competitors, citation gaps, sentiment and brand-safety evidence.
+- **AI distribution.** IndexNow, Google Search Console / Indexing API, `llms.txt`, `llms-full.txt`, AI sitemap and
+  RSS / Atom / JSON feeds, driven by a change queue.
+- **Scheduled reports.** Daily and weekly reports (HTML / PDF / JSON) delivered by e-mail or webhook.
+- **English and Turkish UI**, with English as the default and fallback ([details](#internationalization)).
+
+---
+
+## Architecture
+
+```
+                 ┌─────────────────────────────────────────────────────────┐
+ Browser ──────► │ Next.js 16 app (src/)                                   │
+ API clients ──► │  dashboard (App Router)  ·  REST API (/api/*)           │
+                 │  services: audit, graph, visibility, distribution, ...  │
+                 └───────┬───────────────────────────┬─────────────────────┘
+                         │ Prisma                    │ execFile (GEO_AUDIT_BIN)
+                         ▼                           ▼
+              SQLite (dev) / PostgreSQL     Python engine (services/crawler)
+                                            crawl → graph → score → AutoGEO → bot simulation
+                                                         │
+                         LLM provider APIs · IndexNow · Google · Wikidata · your site
+```
+
+An audit is a crawl plus scoring run. When `GEO_AUDIT_BIN` points at the `geo-audit` executable, `POST /api/sites/:id/audit`
+runs it in-process and stores the result. Without it, audits stay `queued` and an external worker can post results
+to `/api/sites/:id/audit/:auditId/result` (see [`docs/geo-scoring.md`](docs/geo-scoring.md)).
+
+### Project layout
 
 ```
 ai-visibility/
-├── src/                     # Full-stack Next.js 16 core platform & API
-│   ├── app/                 # App Router pages and REST API handlers
-│   │   ├── api/sites/       # Site management, audits, graph, distribution & reports
-│   │   ├── api/distribution/# Background cron and distribution execution
-│   │   └── api/health/      # System health endpoint
+├── src/
+│   ├── app/                   # App Router pages and REST API route handlers (src/app/api)
+│   ├── components/dashboard/  # Client UI: site shell, overview, actions, studio, graph, bots, visibility, distribution
 │   ├── lib/
-│   │   ├── services/        # Domain services (audit, graph, sites, reports)
-│   │   ├── distribution/    # AI distribution engine (IndexNow, Google, llms.txt, feeds)
-│   │   ├── db.ts            # Prisma client singleton
-│   │   └── validation.ts    # Zod request validators
-│   ├── components/dashboard/ # Client UI: site shell, overview, actions, graph, visibility, distribution
-│   ├── lib/dashboard/       # Pure UI helpers (score bands, highlight, competitors, competitor intel, graph issues)
-│   └── proxy.ts             # API token / dashboard session guard
-├── prisma/                  # Database schema & migrations (SQLite/PostgreSQL)
-├── services/
-│   └── crawler/             # Python 3.10+ async crawler & Knowledge Graph engine
-│       ├── src/geo_crawler/ # Crawler, parser, entity extractor, graphify
-│       └── tests/           # Unit & integration test suite (respx)
-└── tests/                   # Vitest API test suite
+│   │   ├── services/          # Domain services (audit, graph, visibility, competitors, wikidata, autogeo, ...)
+│   │   ├── distribution/      # AI distribution engine (IndexNow, Google, llms.txt, feeds, queue)
+│   │   ├── reports/           # Scheduled report snapshots, rendering (HTML/PDF), delivery
+│   │   ├── dashboard/         # Pure UI helpers (score bands, diffing, competitor intel, graph insights)
+│   │   ├── i18n/              # Locale config, translator, en/tr message catalogs
+│   │   ├── text/turkish.ts    # Turkish morphology helpers (language data, deliberately Turkish)
+│   │   ├── validation.ts      # Zod request validators
+│   │   └── db.ts              # Prisma client singleton
+│   └── proxy.ts               # API token / dashboard session guard
+├── prisma/                    # Schema, SQLite migrations, demo seed
+├── scripts/                   # Report worker and sample report renderer
+├── services/crawler/          # Python 3.10+ crawler, graph, scoring and simulation engine (geo-crawler package)
+│   ├── src/geo_crawler/       # crawler, parser, extractor, graph, scoring/, locales/{en,tr}/
+│   └── tests/                 # pytest suite (respx-mocked HTTP)
+├── tests/                     # Vitest suite (API, services, i18n parity)
+└── docs/                      # Feature and API documentation
 ```
 
----
+### Tech stack
 
-## Tech Stack
-
-- **Core Web & API**: Next.js 16 (App Router, Turbopack), TypeScript, Tailwind CSS 4, `d3-force` (graph layout).
-- **ORM & Database**: Prisma 6 (SQLite for development, PostgreSQL for production).
-- **Validation & Testing**: Zod 4, Vitest.
-- **Crawler & Graph Engine** (`services/crawler`): Python 3.10+, HTTPX (async), BeautifulSoup4, lxml, NetworkX.
+- **Web and API:** Next.js 16 (App Router, Turbopack), React 19, TypeScript, Tailwind CSS 4, `d3-force`, Zod 4.
+- **Data:** Prisma 6 with SQLite for development and PostgreSQL for production.
+- **Crawler and scoring engine:** Python 3.10+, HTTPX (async), BeautifulSoup4, lxml, NetworkX.
+- **Tests:** Vitest (web), pytest + respx (Python).
 
 ---
 
-## Quick Start
+## Quick start
 
-### 1. Web Application & API
+### Prerequisites
+
+- Node.js 22 or newer (the report scripts use `node --env-file-if-exists`) and npm
+- Python 3.10 or newer (only for the crawler / audit engine)
+
+### 1. Web application and API
 
 ```bash
-# Install dependencies and generate Prisma client
-npm install
-
-# Copy environment variables template
-cp .env.example .env
-
-# Run migrations and seed demo data
-npm run db:migrate
-
-# Start development server
-npm run dev
-# -> http://localhost:3000
-
-# Run API tests
-npm test
-
-# Build for production
-npm run build
+npm ci                       # installs dependencies and runs `prisma generate`
+cp .env.example .env         # review the values, see "Configuration"
+npm run db:migrate           # creates prisma/dev.db (SQLite), applies migrations and, on a fresh database, loads the demo data
+npm run dev                  # http://localhost:3000
 ```
 
-Use `npm run db:seed` to reseed the demo site and `npm run db:studio` to browse data.
+Useful scripts: `npm run db:seed` (re-create the demo site: graph, audits, visibility checks and actions),
+`npm run db:studio` (browse the database), `npm run build && npm start` (production build),
+`npm test` (Vitest), `npm run lint`, `npm run typecheck`.
 
-#### PostgreSQL Setup
-
-Set `provider = "postgresql"` in `prisma/schema.prisma`, point `DATABASE_URL` at Postgres, and run `npx prisma migrate dev --name init`. The schema only uses portable types: enum-like fields are `String` columns validated in `src/lib/constants.ts`.
-
-### 2. Crawler & Knowledge Graph Service
+### 2. Crawler and scoring engine (optional but recommended)
 
 ```bash
 cd services/crawler
+python3 -m venv .venv
+.venv/bin/pip install -e '.[dev]'     # add the `tokens` extra for exact token counts: '.[dev,tokens]'
+.venv/bin/python -m pytest -q
 
-# Install package in editable mode with test dependencies
-pip install -e '.[dev]'
+# Crawl a site and export its knowledge graph
+.venv/bin/geo-crawler https://example.com -o graph.json --db-records records.json --depth 2 --max-pages 50 --rps 5 -v
 
-# Run crawler tests
-pytest -q
-
-# Example CLI crawl command:
-geo-crawler https://example.com -o graph.json --db-records records.json --depth 2 --max-pages 50 --rps 5 -v
+# Full GEO audit with a human-readable report on stderr
+.venv/bin/geo-audit https://example.com -o audit.json --text --code
 ```
 
----
+To let the web app run audits itself, set `GEO_AUDIT_BIN=services/crawler/.venv/bin/geo-audit` in `.env` (relative paths
+resolve against the directory the server was started in) and restart the dev server.
+All CLIs are documented in [`services/crawler/README.md`](services/crawler/README.md).
 
-## Dashboard (Web UI)
+### 3. First audit
 
-`npm run dev` → http://localhost:3000. The whole UI is Turkish and talks to the REST API below (no hidden server-only data paths), with skeleton loaders, empty states and inline error/retry everywhere. Light/dark theme follows the OS and can be toggled.
+1. Open http://localhost:3000, add a site (for example `https://example.com`) and click **Add and audit**.
+2. Wait for the audit to finish. The header polls `GET /api/sites/:id/audit` and refreshes every screen when it completes.
+3. Open **What to Do?** for the prioritized fix list, and **AI Bot Diagnostics** to test live AI crawler access.
 
-| Screen | Route | What it does |
-| --- | --- | --- |
-| Siteler | `/` | Site cards with GEO / SEO / E-E-A-T scores, open action count, add-site form ("Ekle ve Analiz Et" = create + one-click audit), search |
-| Genel Bakış | `/sites/:id` | GEO score (grade, delta), AI bot accessibility checks, E-E-A-T checks, technical SEO, per-model visibility (ChatGPT / Gemini / Claude / Perplexity), score history, 4-pillar breakdown, top actions, audit history |
-| Ne Yapılmalı? | `/sites/:id/actions` | Prioritized action cards (Kritik / Önemli / İyileştirme = impact high / medium / low), category filter, evidence, affected URLs, copy / download ready-made JSON-LD, robots.txt, `llms.txt` snippets; "Çözüldü Olarak İşaretle", "Yeniden Kontrol Et" (new audit verifies the fix — still-failing items reopen), dismiss / reopen |
-| Bilgi Grafı | `/sites/:id/graph` | Interactive force-directed knowledge graph (canvas + `d3-force`): pan / zoom / drag, type filters, search, node details & relations; flags orphan pages, isolated nodes, schema-less pages, thin pages and uncategorized products, with an accessible table of problem nodes. Verified Wikidata entities carry a green **W** badge; the node panel shows the QID (→ wikidata.org) / Wikipedia link and opens a one-click Wikidata search & reconcile modal (`/entities/reconcile`); the enrichment table filters verified / pending / unmatched entities; the JSON-LD modal previews and copies the enriched `@graph` (`/jsonld`) |
-| AI Bot Teşhis | `/sites/:id/bots` | Live AI crawler diagnostic center (`/simulation/bots`): status cards for GPTBot, ClaudeBot, PerplexityBot, Google-Extended (+ Applebot-Extended) — green 200 OK, red WAF/403 (with vendor), yellow JS shell — with average load time and token weight; one-click live test (optional URL list), bot-only blocks, CSR-shell pages, URL × bot matrix and a copy-paste allow-rule generator for Cloudflare WAF, nginx, Apache/.htaccess and robots.txt |
-| LLM Görünürlük | `/sites/:id/visibility` | Runs bounded paid visibility checks (query × model), shows each model's answer with the site's name / domain / cited URLs highlighted, position, sources; competitor citation table |
-| AI Dağıtım | `/sites/:id/distribution` | IndexNow key create / download / verify, channel toggles, queue counters, "IndexNow bildirimini tetikle" (dispatch), crawl sync, manual URL announce, submission history, live `llms.txt` / `llms-full.txt` preview with copy & download |
+Or use the API (`$API_TOKEN` only if you configured one):
 
-While an audit runs the site header polls `GET /api/sites/:id/audit` and refreshes every screen when it finishes.
+```bash
+curl -X POST localhost:3000/api/sites -H 'content-type: application/json' -H "Authorization: Bearer $API_TOKEN" \
+  -d '{"url":"https://example.com"}'
+curl -X POST localhost:3000/api/sites/$SITE_ID/audit -H "Authorization: Bearer $API_TOKEN"
+```
 
-### Authentication
+### PostgreSQL
 
-When `API_TOKEN` is set, `/api/*` accepts either `Authorization: Bearer <API_TOKEN>` (machine clients) or the dashboard session cookie, and dashboard pages redirect to `/login`. `POST /api/auth { "token": "…" }` exchanges the token for an `HttpOnly; SameSite=Strict` cookie that holds a SHA-256 digest of the token (never the token itself); `DELETE /api/auth` logs out; `GET /api/auth` reports `{ required, authenticated }`. Cookie-authenticated unsafe requests must be same-origin (CSRF guard). Without `API_TOKEN` the dashboard is open, but paid visibility checks stay disabled.
-
----
-
-## Data Model
-
-| Model | Purpose |
-| --- | --- |
-| `Site` | Tracked site: normalized origin URL (unique), title, `settings`, `targetKeywords`, `integrations` (secrets, masked in API output) |
-| `CrawlSession` | Crawl run: status, trigger, limits, pages crawled/failed, timings |
-| `CrawledPage` | Latest technical snapshot per `(site, url)`: status code, page type, title, meta, canonical, H1, word count, extracted data |
-| `GraphEntity` | Knowledge-graph node (`Page`, `Product`, `Category`, `FAQ`, `Organization`, `Author`, `Brand`, `Article`, `Concept`), unique `(site, key)` for idempotent upserts |
-| `GraphRelation` | Edge (`links_to`, `has_category`, `contains_product`, `written_by`, `mentions_entity`, `answers_question`, `same_as`, `part_of`), unique per `(source, target, type)` |
-| `GeoAudit` | GEO / SEO / E-E-A-T scores (0–100) plus sub-`metrics` |
-| `LlmVisibilityRecord` | One AI engine check: model, query, `cited`/`mentioned`/`none`, position, excerpt |
-| `ActionItem` | Recommendation: category (`crawler`, `schema`, `content`, `authority`, `technical`), impact, status |
-| `ScheduledReport` | `daily`/`weekly` report: recipients, last/next run |
-| `PlatformSubmission` | Log of URL/content pushes (`indexnow`, `google_indexing`, `google_search_console`, `webhook`) with the remote response |
-| `SubmissionQueueItem` | Outbound notification queue: one row per `(site, url, channel)`, change reason, content fingerprint, attempts / backoff |
-
----
-
-## API Endpoints
-
-All responses are formatted in JSON with standard HTTP status codes.
-
-### Core Endpoints
-
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| `GET` | `/api/health` | System and database health status |
-| `GET/POST/DELETE` | `/api/auth` | Dashboard session: status / exchange `API_TOKEN` for a session cookie / log out |
-| `GET` | `/api/sites` | List tracked sites with latest GEO audit summary |
-| `POST` | `/api/sites` | Register a new site for tracking |
-| `GET` | `/api/sites/:id` | Retrieve site details and configuration |
-| `PATCH` | `/api/sites/:id` | Update site properties and integration credentials |
-| `DELETE` | `/api/sites/:id` | Remove a site and cascade-delete associated audits |
-| `POST` | `/api/sites/:id/audit` | Trigger an asynchronous GEO audit and crawl run |
-| `GET` | `/api/sites/:id/audit` | Get recent audits and active crawl session progress |
-| `GET` | `/api/sites/:id/graph` | Fetch knowledge graph nodes, edges, and semantic gaps |
-| `GET/POST` | `/api/sites/:id/autogeo` | AutoGEO content metrics + persisted page suggestions; POST extracts suggestions ([usage](docs/autogeo.md), [API](docs/geo-api.md)) |
-| `PATCH` | `/api/sites/:id/autogeo/:suggestionId` | Mark a suggestion `applied` / `dismissed` / `pending` |
-| `GET` | `/api/sites/:id/competitors` | Share of Model vs configured competitors, citation gaps ([API](docs/geo-api.md)) |
-| `GET/POST` | `/api/sites/:id/entities/reconcile` | Wikidata enrichments + verified `sameAs`; sync / verify / reject / requery |
-| `GET/POST` | `/api/sites/:id/simulation/bots` | Persisted per-run bot probe records (WAF block, CSR shell, token estimate); see [geo-api](docs/geo-api.md) |
-| `GET/POST` | `/api/sites/:id/bot-simulator` | Full AI crawler diagnosis: bot-vs-browser parity, WAF vendor, CSR shell, token weight + ready-made Cloudflare/nginx/Apache/AWS allow rules ([usage](docs/bot-simulator.md)) |
-| `GET/POST` | `/api/sites/:id/queries/synthetic` | GEO-bench style multi-intent TR/EN test prompts |
-| `GET/POST` | `/api/sites/:id/visibility` | Query suggestions/history and bounded multi-model visibility checks ([usage](docs/visibility.md)) |
-| `GET` | `/api/sites/:id/queries` | Multi-intent synthetic test prompts (TR/EN) with intent, difficulty and volume labels ([details](docs/query-generator.md)) |
-| `GET` | `/api/sites/:id/reports` | Get score trends, LLM visibility metrics, and action items |
-| `GET/POST`| `/api/sites/:id/reports/schedules` | Manage daily and weekly automated report schedules |
-
-### AI Distribution Endpoints
-
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| `GET` | `/api/sites/:id/distribution` | Settings, channel readiness, queue counters, last 20 submissions |
-| `PATCH` | `/api/sites/:id/distribution` | Partial settings update (nested objects are merged) |
-| `GET/POST` | `/api/sites/:id/distribution/indexnow-key` | Show / create the IndexNow key (`{ "rotate": true }` replaces it). `?format=txt` downloads the key file |
-| `POST` | `/api/sites/:id/distribution/indexnow-key/verify` | Fetch the published key file from the site and check it |
-| `GET` | `/api/sites/:id/distribution/queue?status=&channel=&limit=` | Queue rows |
-| `POST` | `/api/sites/:id/distribution/queue` | Announce URLs now `{ urls, reason?: "created"\|"updated"\|"deleted", channels? }` → 202 (CMS hook) |
-| `POST` | `/api/sites/:id/distribution/sync` | Diff the latest crawl against the queue `{ mode?: "notify"\|"baseline" }` |
-| `POST` | `/api/sites/:id/distribution/dispatch` | Send due queue rows now |
-| `GET/POST` | `/api/sites/:id/distribution/syndicate` | Preview / push this period's rotation to webhooks `{ force? }` |
-| `GET` | `/api/sites/:id/ai/llms.txt`, `llms-full.txt` | Generated `llms.txt` files (Markdown) |
-| `GET` | `/api/sites/:id/ai/sitemap-ai.xml` | Prioritized sitemap of indexable URLs |
-| `GET` | `/api/sites/:id/ai/ai-feed.xml`, `ai-feed.atom`, `ai-feed.json` | RSS 2.0 / Atom / JSON Feed 1.1 of the current rotation |
-| `POST` | `/api/distribution/run` | Cron hook: flush due queues for all sites and publish due syndication periods |
-
----
-
-## AI Distribution Engine
-
-The modern replacement for legacy "URL submitters". AI answer engines ground their answers on live web indexes (ChatGPT search → Bing, Gemini → Google, Perplexity → own crawler + Bing), so the engine ensures those indexes learn about updates rapidly.
-
-- **Change Queue**: After each completed crawl (or `POST …/distribution/sync`) every indexable page gets a fingerprint. New pages are queued as `created`, changed fingerprints as `updated`, and removed pages as `deleted`.
-- **IndexNow Channel**: Notifies Bing, Yandex, Seznam, Naver, and other participating engines in batches of up to 10,000 URLs.
-- **Google Search Console Channel**: Automatically re-submits configured sitemaps via Google Search Console API.
-- **Google Indexing API Channel**: Optional direct notification for immediate URL indexing.
-- **`llms.txt` & Feeds**: Publishes standard `/llms.txt`, `/llms-full.txt`, `/sitemap-ai.xml`, and rotating JSON/Atom feeds for AI crawlers.
+The committed migrations are SQLite SQL. For PostgreSQL, set `provider = "postgresql"` in `prisma/schema.prisma`, point
+`DATABASE_URL` at your database, remove `prisma/migrations/` (including `migration_lock.toml`) in your deployment fork and
+create a fresh baseline with `npx prisma migrate dev --name init`. The schema only uses portable types: enum-like fields are
+`String` columns validated in `src/lib/constants.ts`.
 
 ---
 
 ## Configuration
 
-Refer to `.env.example` for all configurable environment variables:
-- `DATABASE_URL`: SQLite or PostgreSQL connection string.
-- `API_TOKEN`: Bearer token for securing API endpoints; mandatory for paid visibility POST requests, optional elsewhere.
-- `OPENAI_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `PERPLEXITY_API_KEY`: Multi-model visibility testing keys.
-- `INDEXNOW_KEY`, `INDEXNOW_HOST`: Instant Bing / ChatGPT search indexation configuration.
-- `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY`: Google Search Console & Indexing API credentials.
-- `SMTP_*`: Notification and scheduled report delivery settings.
+Copy `.env.example` to `.env`. Next.js loads it automatically; the `reports:*` scripts load it with
+`node --env-file-if-exists=.env`. Never commit `.env` (it is git-ignored).
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `DATABASE_URL` | `file:./dev.db` | SQLite file (relative to `prisma/schema.prisma`) or a PostgreSQL URL |
+| `API_TOKEN` | empty | When set, `/api/*` requires `Authorization: Bearer <API_TOKEN>` (or a dashboard session) and pages redirect to `/login`. Required for paid visibility checks and scheduled reports. Generate with `openssl rand -hex 32` |
+| `OPENAI_API_KEY`, `OPENAI_MODEL` | empty | ChatGPT visibility checks (OpenAI Responses API with `web_search`). Both key and model must be set |
+| `GEMINI_API_KEY`, `GEMINI_MODEL` | empty | Gemini visibility checks (`google_search` grounding) |
+| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | empty | Claude visibility checks (`web_search` tool) |
+| `PERPLEXITY_API_KEY`, `PERPLEXITY_MODEL` | empty / `sonar` | Perplexity visibility checks |
+| `INDEXNOW_KEY` | empty | Fallback IndexNow key for single-site deployments (per-site keys are generated through the API) |
+| `INDEXNOW_ENDPOINT` | `https://api.indexnow.org/indexnow` | IndexNow endpoint |
+| `GOOGLE_SERVICE_ACCOUNT_JSON`, `GOOGLE_SERVICE_ACCOUNT_FILE` | empty | Google Search Console / Indexing API service account (JSON content or key file path), used when a site has no `googleServiceAccount` integration |
+| `ALLOW_PRIVATE_NETWORK_TARGETS` | `false` | Disables the SSRF guard: lets site URLs, the crawler / simulators, webhooks and IndexNow checks reach localhost and private networks. Development only. Scheduled-report webhooks always require public addresses |
+| `SESSION_SECRET` | empty | Optional extra secret for signing dashboard session cookies. Generate with `openssl rand -hex 32` |
+| `GEO_AUDIT_BIN` | empty | Path to the `geo-audit` executable. Empty: audits stay `queued` for an external worker |
+| `GEO_AUDIT_ARGS` | empty | Extra flags for `geo-audit`, split on whitespace (for example `--rps 2 --no-ua-probe`) |
+| `CRAWLER_MAX_PAGES` | `500` | Default page cap for audits whose site settings do not set `maxPages` |
+| `RESEND_API_KEY`, `REPORT_FROM_EMAIL` | empty | E-mail delivery of scheduled reports through [Resend](https://resend.com) |
+| `CRUNCHBASE_API_KEY` | empty | Optional Crunchbase fallback for Wikidata reconciliation (read by the Python engine) |
+| `CRAWLER_USER_AGENT`, `CRAWLER_CONCURRENCY`, `SMTP_*` | | Reserved: present in `.env.example` but not read by the current code |
+
+Per-site integration secrets (IndexNow key, Google service account, webhook secret) are stored in the database
+(`Site.integrations`) and masked in API output. See [`SECURITY.md`](SECURITY.md) before deploying.
 
 ---
 
-## License & Attribution
+## Authentication
 
-This project is licensed under the **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0)**.
+Without `API_TOKEN` the API and dashboard are open, which is suitable for local development only. Paid operations
+(`POST /api/sites/:id/visibility`) and the scheduled-report endpoints stay disabled (HTTP 503) until a token is configured.
 
-### Author & Attribution
-- **Original Author**: Umut ADALI ([@kobeumut](https://github.com/kobeumut))
-- **Source Repository**: [https://github.com/kobeumut/ai-visibility](https://github.com/kobeumut/ai-visibility)
+When `API_TOKEN` is set:
 
-### Terms:
-1. **Attribution (BY)**: Any fork, redistribution, or modification of this software must clearly credit **Umut ADALI** as the original creator and provide a direct link to the original repository.
-2. **Non-Commercial (NC)**: You may **not** sell, sublicense, or distribute this software or derivative works for commercial advantage or monetary compensation.
-3. **Share-Alike (SA)**: If you modify, transform, or build upon this codebase, you must distribute your contributions under the identical CC BY-NC-SA 4.0 license.
-4. **Disclaimer of Liability**: This software is provided "AS IS", without warranty of any kind, express or implied. In no event shall the author or copyright holder (**Umut ADALI**) be liable for any claim, damages, or other liability arising from the use of or inability to use this software.
+- `/api/*` accepts `Authorization: Bearer <API_TOKEN>` (machine clients) or the dashboard session cookie. `/api/health` and
+  `/api/auth` are public. Dashboard pages redirect to `/login`.
+- `POST /api/auth {"token": "..."}` exchanges the token for an `HttpOnly; SameSite=Strict` cookie (`aiv_session`, 7 days)
+  that carries an expiry and an HMAC signature, never the token itself (optionally keyed with `SESSION_SECRET`; repeated wrong tokens
+  are rate-limited). `DELETE /api/auth` logs out and
+  `GET /api/auth` reports `{ required, authenticated }`.
+- Cookie-authenticated unsafe requests must be same-origin (CSRF guard). The scheduled-report endpoints require the bearer
+  header and ignore the cookie.
+
+This is a shared-token, single-tenant design: there are no per-user accounts or roles.
+
+---
+
+## Dashboard
+
+`npm run dev` serves the dashboard at http://localhost:3000. It talks to the REST API below (there are no hidden
+server-only data paths) and provides loading skeletons, empty states and inline error / retry. The light or dark theme
+follows the OS and can be toggled; the language switcher in the header selects English or Turkish.
+
+| Screen | Route | What it does |
+| --- | --- | --- |
+| Sites | `/` | Site cards with GEO / SEO / E-E-A-T scores and open action counts, search, and an add-site form ("Add and audit" creates the site and starts an audit) |
+| Overview | `/sites/:id` | GEO score (grade, delta), AI bot accessibility, E-E-A-T and technical SEO checks, per-model visibility, score history, 4-pillar breakdown, top actions, audit history |
+| What to Do? | `/sites/:id/actions` | Prioritized action cards (Critical / Important / Improvement = impact high / medium / low), category filter, evidence, affected URLs, copy / download of ready-made JSON-LD, robots.txt and `llms.txt` snippets. "Mark as Resolved" and "Re-check" (a new audit verifies the fix; still-failing items reopen), dismiss / reopen |
+| Content Studio | `/sites/:id/studio` | AutoGEO workspace: side-by-side diffs, answer capsules, tables, GEO score predictor, filters, "Apply to CMS" webhook ([details](docs/autogeo.md)) |
+| Knowledge Graph | `/sites/:id/graph` | Interactive force-directed graph (canvas + `d3-force`) with filters, search and node details; flags orphan pages, isolated nodes, schema-less and thin pages. Verified Wikidata entities carry a **W** badge, and a search / reconcile modal and a JSON-LD `@graph` preview are built in |
+| AI Bot Diagnostics | `/sites/:id/bots` | Live AI crawler diagnostic center ([details](docs/bot-simulator.md)): status per bot (OK, WAF block with vendor, JS shell), load time, token weight, URL x bot matrix and a copy-paste allow-rule generator |
+| LLM Visibility | `/sites/:id/visibility` | Runs bounded paid visibility checks (query x model) and shows each answer with the site's name, domain and cited URLs highlighted ([details](docs/visibility.md)) |
+| Share of Model & Competitors | `/sites/:id/competitors` | Share of Model against configured competitors, citation gaps, trend and brand safety ([details](docs/geo-api.md)) |
+| AI Distribution | `/sites/:id/distribution` | IndexNow key management, channel toggles, queue counters, dispatch / sync / manual announce, submission history and live `llms.txt` preview |
+
+---
+
+## API overview
+
+All routes live under `/api` and answer JSON unless noted. Validation errors use the shared shape
+`{ "error": "...", "details"?: ... }` with `400` (validation), `401`, `404`, `409` (conflict) and `5xx`.
+Route details and payloads: [`docs/geo-api.md`](docs/geo-api.md), [`docs/geo-scoring.md`](docs/geo-scoring.md) and the other pages under [`docs/`](docs).
+
+### Core
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/health` | Service and database health |
+| `GET` `POST` `DELETE` | `/api/auth` | Session status / exchange `API_TOKEN` for a cookie / log out |
+| `GET` `POST` | `/api/sites` | List tracked sites with their latest audit summary / register a site |
+| `GET` `PATCH` `DELETE` | `/api/sites/:id` | Site details / update settings and integrations / delete with all related data |
+| `GET` `POST` | `/api/sites/:id/audit` | Recent audits and crawl progress / queue a crawl + audit (`202`) |
+| `POST` | `/api/sites/:id/audit/:auditId/result` | Ingest scoring output from an external worker |
+| `GET` | `/api/sites/:id/actions` | Prioritized action cards (`?status=&category=&impact=&limit=`) |
+| `PATCH` | `/api/sites/:id/actions/:actionId` | Set status `open` / `in_progress` / `resolved` / `dismissed` |
+| `GET` | `/api/sites/:id/graph` | Knowledge-graph nodes, edges and gaps |
+| `GET` | `/api/sites/:id/jsonld` | Site-wide Schema.org `@graph` and a paste-ready `<script>` tag |
+| `GET` | `/api/sites/:id/reports` | Score trends, visibility metrics and action metrics (`?days=30`) |
+
+### GEO analysis
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` `POST` | `/api/sites/:id/visibility` | Query suggestions and history / bounded multi-model visibility checks ([usage](docs/visibility.md)) |
+| `GET` | `/api/sites/:id/queries` | Generated multi-intent test prompts ([details](docs/query-generator.md)) |
+| `GET` `POST` | `/api/sites/:id/queries/synthetic` | Stored test prompts: generate, add manually, archive |
+| `GET` `POST` | `/api/sites/:id/autogeo` | AutoGEO metrics and persisted suggestions / extract suggestions ([usage](docs/autogeo.md)) |
+| `PATCH` | `/api/sites/:id/autogeo/:suggestionId` | Mark a suggestion `applied` / `dismissed` / `pending` |
+| `POST` | `/api/sites/:id/autogeo/:suggestionId/apply` | Send the suggestion to the site's webhooks ("Apply to CMS") |
+| `GET` | `/api/sites/:id/competitors` | Share of Model, citation gaps, trend, brand safety |
+| `GET` `POST` | `/api/sites/:id/entities/reconcile` | Wikidata enrichments and verified `sameAs`: sync / verify / reject / requery |
+| `GET` | `/api/sites/:id/reconciliation` | Wikidata review queue ([details](docs/wikidata.md)) |
+| `POST` | `/api/sites/:id/reconciliation/:entityId` | Verify / reject / requery one entity |
+| `GET` `POST` | `/api/sites/:id/bot-simulator` | Latest audit's AI crawler summary / run a live simulation now ([usage](docs/bot-simulator.md)) |
+| `GET` `POST` | `/api/sites/:id/simulation/bots` | Persisted per-run bot probe records |
+
+### Distribution and reports
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` `PATCH` | `/api/sites/:id/distribution` | Settings, channel readiness, queue counters, last submissions / partial settings update |
+| `GET` `POST` | `/api/sites/:id/distribution/indexnow-key` | Show / create the IndexNow key (`{ "rotate": true }` replaces it, `?format=txt` downloads the key file) |
+| `POST` | `/api/sites/:id/distribution/indexnow-key/verify` | Fetch the published key file from the site and check it |
+| `GET` `POST` | `/api/sites/:id/distribution/queue` | Queue rows (`?status=&channel=&limit=`) / announce URLs now `{ urls, reason?, channels? }` (`202`, CMS hook) |
+| `POST` | `/api/sites/:id/distribution/sync` | Diff the latest crawl against the queue `{ mode?: "notify" \| "baseline" }` |
+| `POST` | `/api/sites/:id/distribution/dispatch` | Send due queue rows now |
+| `GET` `POST` | `/api/sites/:id/distribution/syndicate` | Preview / push this period's rotation to webhooks `{ force? }` |
+| `GET` | `/api/sites/:id/ai/llms.txt`, `llms-full.txt` | Generated `llms.txt` files (Markdown) |
+| `GET` | `/api/sites/:id/ai/sitemap-ai.xml` | Prioritized sitemap of indexable URLs |
+| `GET` | `/api/sites/:id/ai/ai-feed.xml`, `ai-feed.atom`, `ai-feed.json` | RSS 2.0 / Atom / JSON Feed 1.1 of the current rotation |
+| `POST` | `/api/distribution/run` | Cron hook: flush due queues for all sites and publish due syndication periods |
+| `GET` `POST` | `/api/sites/:id/reports/schedules` | List / create daily or weekly report schedules (bearer `API_TOKEN` required) |
+| `PATCH` | `/api/sites/:id/reports/schedules/:scheduleId` | Enable or disable a schedule |
+| `GET` | `/api/sites/:id/reports/runs`, `.../runs/:runId` | Report run history / one run (`?format=json\|html\|pdf`) |
+
+---
+
+## AI distribution engine
+
+AI answer engines ground their answers on live web indexes (ChatGPT search on Bing, Gemini on Google, Perplexity on its
+own crawler plus Bing), so the engine makes sure those indexes learn about changes quickly.
+
+- **Change queue.** After each completed crawl (or `POST .../distribution/sync`) every indexable page gets a content
+  fingerprint. New pages are queued as `created`, changed fingerprints as `updated` and removed pages as `deleted`.
+- **IndexNow.** Notifies Bing, Yandex, Seznam, Naver and other participating engines in batches of up to 10,000 URLs.
+- **Google Search Console.** Re-submits configured sitemaps through the Search Console API.
+- **Google Indexing API.** Optional direct URL notifications.
+- **`llms.txt` and feeds.** Generates `llms.txt`, `llms-full.txt`, `sitemap-ai.xml` and rotating RSS / Atom / JSON feeds
+  that you serve from your own site (the endpoints above return the content).
+- **Webhook syndication.** Pushes each period's rotation, and applied AutoGEO suggestions, to signed webhooks
+  (`x-aiv-signature` HMAC-SHA256).
+
+Call `POST /api/distribution/run` from cron to flush queues and publish due periods.
+
+---
+
+## Scheduled reports
+
+Create a schedule with `POST /api/sites/:id/reports/schedules` (`{ "frequency": "daily" | "weekly", "recipients": [...], "webhookUrl"?: "https://..." }`,
+bearer `API_TOKEN` required). A separate foreground worker executes due schedules; it never runs inside the Next.js server:
+
+```bash
+npm run reports:worker    # long-running worker, checks every minute (UTC)
+npm run reports:run       # run all due schedules once and exit
+npm run reports:sample    # render a synthetic sample report to artifacts/ (HTML and PDF)
+```
+
+Weekly runs also start an audit when `GEO_AUDIT_BIN` is configured. E-mail needs `RESEND_API_KEY` and `REPORT_FROM_EMAIL`;
+webhook targets must resolve to public addresses. Each run stores an immutable snapshot that can be downloaded as JSON, HTML or PDF.
+
+---
+
+## Data model
+
+| Model | Purpose |
+| --- | --- |
+| `Site` | Tracked site: normalized origin URL (unique), title, `settings`, `targetKeywords`, `integrations` (secrets, masked in API output) |
+| `CrawlSession` | One crawl run: status, trigger, limits, pages crawled / failed, timings |
+| `CrawledPage` | Latest technical snapshot per `(site, url)`: status, page type, title, meta, canonical, H1, word count, extracted data |
+| `GraphEntity` | Knowledge-graph node, unique per `(site, key)` for idempotent upserts. Types are listed in `src/lib/constants.ts` (`Page`, `Product`, `Category`, `FAQ`, `Organization`, `Brand`, `Person`, `Article`, `Concept`, ...) |
+| `GraphRelation` | Edge (`links_to`, `has_category`, `contains_product`, `written_by`, `mentions_entity`, `answers_question`, `same_as`, ...), unique per `(source, target, type)` |
+| `GeoAudit` | GEO / SEO / E-E-A-T scores (0-100) plus detailed `metrics` |
+| `ActionItem` | Recommendation: category (`crawler`, `schema`, `content`, `authority`, `technical`), impact, status, evidence, fix snippet |
+| `LlmVisibilityRecord` | One AI engine check: model, query, `cited` / `mentioned` / `none`, position, excerpt |
+| `AutoGeoSuggestion` | One block-level AutoGEO rewrite or insertion, with a user decision that survives re-runs |
+| `CompetitorAnalysis` | Latest Share-of-Model snapshot per configured competitor |
+| `EntityEnrichment` | Queryable mirror of Wikidata reconciliation results |
+| `BotSimulationRecord` | One live fetch per URL x bot, grouped by run |
+| `SyntheticQuery` | Stored test prompts with intent, language and difficulty |
+| `ScheduledReport`, `ReportRun` | Report schedules and immutable run evidence with delivery outcomes |
+| `PlatformSubmission` | Log of URL / content pushes (`indexnow`, `google_indexing`, `google_search_console`, `webhook`) with the remote response |
+| `SubmissionQueueItem` | Outbound notification queue: one row per `(site, url, channel)` with change reason, fingerprint and retry state |
+
+---
+
+## Internationalization
+
+The user interface, the text generated by audits and analyses, and reports are available in **English (`en`, default and fallback)** and
+**Turkish (`tr`)**.
+
+**Dashboard and API locale.** The locale is resolved per request, without changing URLs:
+
+1. the `locale` cookie, which the language switcher in the header sets (EN / TR), then
+2. the `Accept-Language` header, then
+3. `en`.
+
+API clients can also pass `?lang=en|tr` (or `?locale=`), which takes precedence over the cookie and the header. Programmatic
+clients without any of these (cron jobs, `curl`) receive English. A message missing in the requested language falls back
+to English.
+
+**Generated content.** Text that the platform generates and stores (audit labels, findings and action cards, bot-simulator
+diagnostics, AutoGEO suggestions, reports) is written in the language of the request that triggers it and stays in that
+language afterwards: re-run the audit or analysis in the other language to regenerate it. Background jobs have no
+request, so scheduled audits and reports use the site's language (`settings.locale`: `tr*` means Turkish, anything else
+English), and each report snapshot records the `locale` it was written in. The web app passes the locale to the Python
+engine with `--lang <locale>`; add `--lang` to `GEO_AUDIT_BIN` arguments (`GEO_AUDIT_ARGS`) to pin the engine language.
+The Python CLIs that print localized text (`geo-audit`, `geo-autogeo`, `geo-botsim`) accept `--lang en|tr` (default `en`).
+JSON field names, enum values and endpoint paths never change with the locale.
+
+**Related, but different, language settings.** The site's own content language (`settings.locale`, for example `tr-TR`) decides
+whether synthetic test prompts are generated in Turkish, English or both (`languages=tr,en`). Wikidata lookups take their own
+search language (`--wikidata-lang` on `geo-audit`, `--lang` on `geo-crawler` and `geo-reconcile`, `lang` on the requery action).
+These are independent of the UI locale.
+
+**Turkish language data is intentional.** Some Turkish text in the repository is functional data and is not translated:
+Turkish morphology (`src/lib/text/turkish.ts`), Turkish query-template variants, stop-word lists, and the patterns used to
+recognize Turkish web content (privacy / returns / shipping pages), plus the Turkish sample content in tests that exercises
+those paths. Each occurrence carries an English comment explaining why.
+
+### Adding a language
+
+1. **Web app.** Create `src/lib/i18n/messages/<lang>/` with one file per namespace, copying the structure of
+   `messages/tr/` (`export const common: Record<keyof typeof en, string> = {...}`: TypeScript enforces key parity).
+   Register them in `src/lib/i18n/messages/index.ts` (import each namespace, merge them into one catalog and add it to
+   `catalogs`), and add the code to `LOCALES`, `LOCALE_NAMES` and `INTL_LOCALES` in `src/lib/i18n/config.ts`.
+2. **Python engine.** Create `services/crawler/src/geo_crawler/locales/<lang>/` with the same modules as `locales/en/`
+   (each exposes `MESSAGES: dict[str, str]`) and add the code to `SUPPORTED_LANGS` in `src/geo_crawler/i18n.py`.
+3. **Run the parity tests**, which fail on missing keys or mismatched `{placeholders}`:
+
+   ```bash
+   npx vitest run tests/i18n.test.ts
+   cd services/crawler && .venv/bin/python -m pytest -q tests/test_i18n.py
+   ```
+
+Catalog conventions: flat dotted keys prefixed by the namespace (`"actions.empty.noOpen"`), `{name}` placeholders, plural
+variants `key_one` / `key_other` selected by `count`. User-facing strings must never be hard-coded; see
+[`CONTRIBUTING.md`](CONTRIBUTING.md#internationalization-rules).
+
+---
+
+## Development
+
+```bash
+npm test                  # Vitest: API, services and i18n parity (creates and removes prisma/test.db)
+npm run lint              # ESLint
+npm run typecheck         # tsc --noEmit (run `npx next typegen` once on a fresh clone)
+npm run build             # production build
+
+cd services/crawler && .venv/bin/python -m pytest -q   # Python tests (no network required)
+```
+
+Tests never call paid providers: HTTP is mocked and the database is a throw-away SQLite file.
+
+## Documentation
+
+| Page | Topic |
+| --- | --- |
+| [`docs/geo-scoring.md`](docs/geo-scoring.md) | How audit results reach the database and API; action item lifecycle |
+| [`docs/geo-api.md`](docs/geo-api.md) | AutoGEO, competitors, entities, bot simulation and synthetic query endpoints |
+| [`docs/visibility.md`](docs/visibility.md) | Multi-model visibility checks, providers, caching and cost bounds |
+| [`docs/query-generator.md`](docs/query-generator.md) | Multi-intent synthetic prompt generation |
+| [`docs/autogeo.md`](docs/autogeo.md) | AutoGEO content metrics, rewrites and Content Studio |
+| [`docs/bot-simulator.md`](docs/bot-simulator.md) | Live AI crawler simulation, WAF and render diagnosis |
+| [`docs/wikidata.md`](docs/wikidata.md) | Wikidata reconciliation and JSON-LD `@graph` |
+| [`services/crawler/README.md`](services/crawler/README.md) | Python engine: CLIs, graph model, scoring pillars |
+
+## Contributing, security and license
+
+- Contributions are welcome: read [`CONTRIBUTING.md`](CONTRIBUTING.md).
+- Report vulnerabilities privately as described in [`SECURITY.md`](SECURITY.md). Do not open public issues for them.
+
+### License
+
+This project is licensed under the **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License
+(CC BY-NC-SA 4.0)**, as stated in [`LICENSE`](LICENSE). Note that it includes a **non-commercial clause**: you may not use the
+material for commercial purposes, so check that your use case is permitted before adopting it.
+
+- **Attribution (BY):** give appropriate credit to the original author, **Umut ADALI**
+  ([@kobeumut](https://github.com/kobeumut)), link to the license and to the original repository
+  (https://github.com/kobeumut/ai-visibility), and indicate if changes were made.
+- **Non-commercial (NC):** you may not sell, rent, lease, license or sublicense the software or derivative works for
+  monetary compensation or direct commercial advantage.
+- **Share-alike (SA):** if you remix, transform or build upon the material, you must distribute your contributions under the same license.
+- **No warranty:** the software is provided "as is"; see `LICENSE` for the full disclaimer.
+
+`LICENSE` is the authoritative text.

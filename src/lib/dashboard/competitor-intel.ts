@@ -1,40 +1,23 @@
 // Share of Model / competitor intelligence panel helpers over GET /api/sites/:id/competitors (pure, no React).
 
 import type { CitationGap, CompetitorReport, QueryIntent, SentimentCounts, SentimentLabel } from "@/components/dashboard/types";
+import type { Translator } from "@/lib/i18n/translate";
+import { foldCase } from "./highlight";
 import type { Tone } from "./format";
 
-export const INTENT_LABELS: Record<QueryIntent, string> = {
-  informational: "Bilgilendirici",
-  comparative: "Karşılaştırmalı",
-  transactional: "İşlemsel",
-  reputation: "Marka",
-};
-export const INTENT_ORDER = Object.keys(INTENT_LABELS) as QueryIntent[];
+/** Display order of the query intents (labels: `competitors.intent.*`). */
+export const INTENT_ORDER: QueryIntent[] = ["informational", "comparative", "transactional", "reputation"];
+export const intentLabel = (t: Translator, intent: QueryIntent) => t(`competitors.intent.${intent}`);
 
-export const SENTIMENT_LABELS: Record<SentimentLabel, string> = { positive: "Pozitif", neutral: "Nötr", negative: "Negatif / Riskli", unknown: "Belirsiz" };
+export const sentimentLabel = (t: Translator, label: SentimentLabel) => t(`competitors.sentiment.${label}`);
 export const SENTIMENT_TONE: Record<SentimentLabel, Tone> = { positive: "good", neutral: "neutral", negative: "critical", unknown: "neutral" };
 
-/** "Cite-Magnet" hints for som-analysis missingFactors: why the rival page was picked over ours. */
-export const CITE_MAGNET_TIPS: Record<string, { label: string; tip: string }> = {
-  less_word_coverage: {
-    label: "Daha kapsamlı içerik",
-    tip: "Rakip sayfa konuyu daha fazla kelimeyle işliyor. Alt başlıklar, örnekler ve SSS ile kapsamı genişletin.",
-  },
-  no_structured_schema: {
-    label: "Yapısal veri",
-    tip: "Rakip sayfada Schema.org işaretlemesi var, sizinkinde yok. İlgili JSON-LD (Product, FAQPage, Article) ekleyin.",
-  },
-  no_data_tables: {
-    label: "Veri tablosu",
-    tip: "Rakip karşılaştırma/veri tabloları kullanıyor. Özellik veya fiyat karşılaştırma tablosu ekleyin.",
-  },
-  lower_statistics_density: {
-    label: "İstatistik yoğunluğu",
-    tip: "Rakip metinde daha çok sayısal veri ve yüzde var. Somut rakamlar ve kaynaklı istatistikler ekleyin.",
-  },
-};
-export function citeMagnetTip(factor: string) {
-  return CITE_MAGNET_TIPS[factor] ?? { label: factor, tip: "Rakip sayfanın bu sorgu için öne çıkan bir özelliği." };
+/** "Cite-Magnet" hints for som-analysis missingFactors: why the rival page was picked over ours (keys: `competitors.citeMagnet.<factor>.*`). */
+export const CITE_MAGNET_FACTORS = ["less_word_coverage", "no_structured_schema", "no_data_tables", "lower_statistics_density"] as const;
+export function citeMagnetTip(factor: string, t: Translator) {
+  return (CITE_MAGNET_FACTORS as readonly string[]).includes(factor)
+    ? { label: t(`competitors.citeMagnet.${factor}.label`), tip: t(`competitors.citeMagnet.${factor}.tip`) }
+    : { label: factor, tip: t("competitors.citeMagnet.unknown.tip") };
 }
 
 /** Site first (series-1), competitors in snapshot order; beyond the 8-color palette fall back to muted gray. */
@@ -79,13 +62,13 @@ export function siteRank(rows: BrandRow[]) {
 export type GapFilter = { intent?: QueryIntent | "all"; model?: string; competitor?: string; search?: string };
 
 export function filterGaps(gaps: CitationGap[], f: GapFilter) {
-  const needle = f.search?.trim().toLocaleLowerCase("tr");
+  const needle = f.search?.trim() ? foldCase(f.search.trim()) : "";
   return gaps.filter(
     (g) =>
       (!f.intent || f.intent === "all" || g.intent === f.intent) &&
       (!f.model || f.model === "all" || g.model === f.model) &&
       (!f.competitor || f.competitor === "all" || g.competitors.some((c) => c.domain === f.competitor)) &&
-      (!needle || g.query.toLocaleLowerCase("tr").includes(needle)),
+      (!needle || foldCase(g.query).includes(needle)),
   );
 }
 

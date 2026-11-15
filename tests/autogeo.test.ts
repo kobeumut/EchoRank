@@ -3,8 +3,10 @@ import path from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { ACTION_CATEGORIES, ACTION_EFFORTS, ACTION_IMPACTS } from "@/lib/constants";
+import { serverT } from "@/lib/i18n/request";
 import {
   applyUnifiedDiff,
+  AUTOGEO_METRIC_INFO,
   AUTOGEO_METRICS,
   autoGeoReportSchema,
   autogeoToActionItems,
@@ -19,6 +21,8 @@ import * as autogeoRoute from "@/app/api/sites/[id]/autogeo/route";
 import { ctx, req, resetDb } from "./helpers";
 
 // Real output of geo_crawler.scoring.autogeo (services/crawler/tests/autogeo_fixtures.py): Python <-> API contract.
+// The analysed sample page is Turkish on purpose: its rewrites ("[SAYI]", "([Kaynak, Yıl](...))") and the engine text
+// that is passed through verbatim (metric details, rationales) are in the page's language.
 const RAW = JSON.parse(readFileSync(path.resolve(__dirname, "fixtures/autogeo-report.json"), "utf8"));
 const AUDIT = JSON.parse(readFileSync(path.resolve(__dirname, "fixtures/geo-audit-result.json"), "utf8"));
 const REPORT = autoGeoReportSchema.parse(RAW);
@@ -114,10 +118,57 @@ describe("autogeoToActionItems", () => {
     expect(d.snippet.language).toBe("diff");
     expect(d.snippet.code).toContain("+++ b/blog/espresso-rehberi.md");
     expect(d.improvements.length).toBeGreaterThan(1);
+    // the engine rewrites a Turkish page with Turkish placeholders
     expect(d.improvements.some((i) => i.afterMarkdown.includes("([Kaynak, Yıl](https://kaynak-adresi))"))).toBe(true);
     expect(d.improvements.every((i) => i.diffHtml.includes(".html"))).toBe(true);
-    expect(stats.description).toMatch(/İstatistik ve sayısal veri skoru \d+\/100/);
-    expect(stats.description).toContain("ayrıca");
+    expect(stats.title).toMatch(/^Statistics and numeric data: \d+ improvements — \/blog\/espresso-rehberi$/);
+    expect(stats.description).toMatch(/^Statistics and numeric data score \d+\/100\. /);
+    expect(stats.description).toMatch(/Estimated visibility gain: \+\d+\.\d%\./);
+    expect(stats.description).toMatch(/These patches also improve: .*Keyword stuffing\.$/);
+    expect(d.snippet.instructions).toBe("Fill in the bracketed placeholders ([NUMBER], [X]% …) with verified figures and their sources.");
+  });
+
+  it("writes titles, descriptions and snippet instructions in the requested locale; ids, scores and diffs stay", () => {
+    const tr = autogeoToActionItems(REPORT, { locale: "tr" });
+    expect(tr).toHaveLength(items.length);
+    const structure = (list: typeof items) =>
+      list.map((i) => ({ ruleId: i.ruleId, targetUrl: i.targetUrl, category: i.category, impact: i.impact, effort: i.effort, priority: i.priority }));
+    expect(structure(tr)).toEqual(structure(items));
+    const stats = tr.find((i) => i.targetUrl === WEAK && i.ruleId === "autogeo.statistics")!;
+    const enStats = items.find((i) => i.targetUrl === WEAK && i.ruleId === "autogeo.statistics")!;
+    expect(stats.title).toMatch(/^İstatistik ve sayısal veri: \d+ iyileştirme — \/blog\/espresso-rehberi$/);
+    expect(stats.description).toMatch(/^İstatistik ve sayısal veri skoru \d+\/100\. /);
+    expect(stats.description).toMatch(/Tahmini görünürlük kazancı: \+%\d+\.\d\./);
+    expect(stats.description).toContain("Bu yamalar ayrıca şunları da iyileştirir: ");
+    expect((stats.details.snippet as { instructions: string }).instructions).toBe("Köşeli parantezli [SAYI]/[%ORAN] alanlarını doğrulanmış rakamlarla ve kaynağıyla doldurun.");
+    expect((stats.details as { snippet: { code: string } }).snippet.code).toBe((enStats.details as { snippet: { code: string } }).snippet.code);
+    expect(tr.find((i) => i.targetUrl === WEAK && i.ruleId === "autogeo.comparison_table")!.title).toBe("Karşılaştırma tablosu ekleyin — /blog/espresso-rehberi");
+    expect(items.find((i) => i.targetUrl === WEAK && i.ruleId === "autogeo.comparison_table")!.title).toBe("Add a comparison table — /blog/espresso-rehberi");
+  });
+
+  it("titles a metric without block-level improvements as needing work and pluralises the count", () => {
+    const base = REPORT.pages[0];
+    const page = { ...base, improvements: [], metrics: { ...base.metrics, citations: { ...base.metrics.citations, score: 20 } } };
+    const weak = autogeoToActionItems({ ...REPORT, pages: [page] }).find((i) => i.ruleId === "autogeo.citations")!;
+    expect(weak.title).toBe("Authoritative source citations: needs work — /blog/espresso-rehberi");
+    expect(autogeoToActionItems({ ...REPORT, pages: [page] }, { locale: "tr" }).find((i) => i.ruleId === "autogeo.citations")!.title).toBe(
+      "Yetkili kaynak gösterimi zayıf — /blog/espresso-rehberi",
+    );
+    const one = { ...base, improvements: [base.improvements.find((i) => i.metrics?.includes("keyword_stuffing"))!] };
+    expect(autogeoToActionItems({ ...REPORT, pages: [one] }).find((i) => i.ruleId === "autogeo.keyword_stuffing")!.title).toBe(
+      "Keyword stuffing: 1 improvement — /blog/espresso-rehberi",
+    );
+  });
+
+  it("has a catalog entry for every metric (label + instructions) in every locale", () => {
+    for (const m of AUTOGEO_METRICS) {
+      expect(AUTOGEO_METRIC_INFO[m].labelKey).toBe(`autogeo.metric.${m}.label`);
+      expect(AUTOGEO_METRIC_INFO[m].instructionsKey).toBe(`autogeo.metric.${m}.instructions`);
+      for (const t of [serverT("en"), serverT("tr")]) {
+        expect(t(AUTOGEO_METRIC_INFO[m].labelKey)).not.toBe(AUTOGEO_METRIC_INFO[m].labelKey);
+        expect(t(AUTOGEO_METRIC_INFO[m].instructionsKey)).not.toBe(AUTOGEO_METRIC_INFO[m].instructionsKey);
+      }
+    }
   });
 
   it("flags severe keyword stuffing as high impact and attaches the page capsule", () => {

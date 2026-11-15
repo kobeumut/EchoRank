@@ -8,6 +8,10 @@ import { executeAudit, registerAuditRunner, startAudit } from "@/lib/services/au
 import { computeNextRun } from "@/lib/services/reports";
 import { ctx, req, resetDb } from "./helpers";
 
+// `after()` only works inside a Next.js request scope: run the callbacks it receives ourselves.
+const afterCallbacks: (() => unknown)[] = [];
+vi.mock("next/server", async (original) => ({ ...(await original<typeof import("next/server")>()), after: (fn: () => unknown) => { afterCallbacks.push(fn); } }));
+
 beforeEach(resetDb);
 afterAll(() => prisma.$disconnect());
 afterEach(() => vi.unstubAllEnvs());
@@ -35,6 +39,29 @@ describe("/api/sites/[id]/audit", () => {
 
   it("returns 404 for unknown site", async () => {
     expect((await audit.POST(req("/api/sites/x/audit", { method: "POST" }), ctx("x"))).status).toBe(404);
+  });
+
+  it("hands the request's locale to the audit runner (query, cookie, Accept-Language; default English)", async () => {
+    const seen: (string | undefined)[] = [];
+    registerAuditRunner(async (job) => { seen.push(job.locale); });
+    try {
+      const post = async (path: string, headers: Record<string, string> = {}) => {
+        const s = await prisma.site.create({ data: { url: `https://${seen.length}-${Math.random().toString(36).slice(2)}.example.com`, title: "A" } });
+        const request = req(path.replace("{id}", s.id), { method: "POST" });
+        for (const [k, v] of Object.entries(headers)) request.headers.set(k, v);
+        const res = await audit.POST(request, ctx(s.id));
+        expect((await res.json()).execution).toBe("started");
+        for (const run of afterCallbacks.splice(0)) await run();
+      };
+      await post("/api/sites/{id}/audit");
+      await post("/api/sites/{id}/audit?lang=tr");
+      await post("/api/sites/{id}/audit", { cookie: "locale=tr" });
+      await post("/api/sites/{id}/audit", { "accept-language": "tr-TR,tr;q=0.9,en;q=0.8" });
+      await post("/api/sites/{id}/audit?lang=en", { cookie: "locale=tr" });
+      expect(seen).toEqual(["en", "tr", "tr", "tr", "en"]);
+    } finally {
+      registerAuditRunner(null);
+    }
   });
 
   it("marks job failed when the runner throws", async () => {

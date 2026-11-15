@@ -1,4 +1,6 @@
 import { prisma } from "../db";
+import { DEFAULT_LOCALE, type Locale } from "../i18n/config";
+import { serverT } from "../i18n/request";
 import {
   analyzeAnswer, analyzeBrandSentiment, auditBrandClaims, host, VISIBILITY_MODELS,
   visibilityAnalysisSettings, type VisibilityAnalysisSettings, type VisibilityModel,
@@ -24,6 +26,7 @@ const pageKey = (url: string) => { const parsed = new URL(url); parsed.hash = ""
 
 /** No page fetching: structured crawler snapshots and explicitly supplied reference evidence only. */
 export function analyzeCiteMagnet(page: CiteMagnetPage) {
+  // A "statistic" is a number followed by "%", "percent" or the Turkish "yüzde" (percent).
   const statistics = page.text?.match(/\b\d+(?:[.,]\d+)?\s*(?:%|percent\b|yüzde\b)/giu) ?? [];
   return {
     url: page.url, observedAt: page.observedAt,
@@ -49,16 +52,17 @@ function comparePages(reference: CiteMagnetPage | undefined, target: CiteMagnetP
   return { status: t ? "compared" : "target_snapshot_missing", reference: r, target: t, missingFactors };
 }
 
-/** Shares are among configured brands, once per answer/brand, not the global AI market. */
+/** Shares are among configured brands, once per answer/brand, not the global AI market. `locale` is the language of the returned warnings. */
 export function analyzeSom(
   site: Brand, records: Observation[], config: VisibilityAnalysisSettings = visibilityAnalysisSettings.parse({}),
-  pages: CiteMagnetPage[] = [],
+  pages: CiteMagnetPage[] = [], locale: Locale = DEFAULT_LOCALE,
 ) {
+  const t = serverT(locale);
   const warnings: string[] = [];
   const brands = [site];
   for (const rival of config.competitors) {
     if (brands.some((b) => matches(rival.url, b) || matches(b.url, rival) || b.title.toLowerCase() === rival.title.toLowerCase())) {
-      warnings.push(`Overlapping competitor ignored: ${rival.url}`);
+      warnings.push(t("services.som.overlappingCompetitor", { url: rival.url }));
     } else brands.push(rival);
   }
   const seen = new Set<string>();
@@ -152,7 +156,7 @@ function schemaTypes(value: unknown): string[] {
 }
 
 /** Latest 1,000 successful observations in the window, independent of history pagination. */
-export async function getSomAnalysis(siteId: string, days = 30) {
+export async function getSomAnalysis(siteId: string, days = 30, locale: Locale = DEFAULT_LOCALE) {
   const site = await getSiteOrThrow(siteId);
   const settings = object(site.settings).visibilityAnalysis;
   const parsed = visibilityAnalysisSettings.safeParse(settings ?? {});
@@ -174,7 +178,7 @@ export async function getSomAnalysis(siteId: string, days = 30) {
     };
   });
   return {
-    ...analyzeSom(site, records, config, pages),
+    ...analyzeSom(site, records, config, pages, locale),
     window: { days, since, total, limit: 1000, truncated: total > records.length, pageLimit: 100, pagesTruncated: storedPages.length > 100 },
     settingsValid: parsed.success,
   };

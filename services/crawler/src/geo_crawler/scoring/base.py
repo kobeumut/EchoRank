@@ -4,8 +4,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..models import CrawlResult, PageData, PageType
 from ..graph import KnowledgeGraph
+from ..i18n import DEFAULT_LANG, Translator, get_translator, normalize_lang
+from ..models import CrawlResult, PageData, PageType
 from .signals import SiteSignals
 
 
@@ -28,7 +29,7 @@ class Check:
     label: str
     score: float
     weight: float
-    detail: str  # concrete reason shown in the report ("gerekçe")
+    detail: str  # concrete rationale shown in the report (already translated)
     urls: list[str] = field(default_factory=list)
     applicable: bool = True  # non-applicable checks are excluded from the weighted mean
 
@@ -70,13 +71,23 @@ class Pillar:
 
 @dataclass
 class AuditContext:
-    """Everything the analyzers read. Built once per audit."""
+    """Everything the analyzers read. Built once per audit.
+
+    ``lang`` is the language of the human-readable text the analyzers produce (check labels/details, action
+    cards, fix snippets); ``t`` is the matching translator (``geo_crawler.i18n``).
+    """
 
     crawl: CrawlResult
     graph: KnowledgeGraph
     gaps: dict[str, Any]
     signals: SiteSignals | None = None
     bot_simulation: Any = None  # BotSimulationReport (live AI crawler simulation), when it ran
+    lang: str = DEFAULT_LANG
+    t: Translator = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        self.lang = normalize_lang(self.lang)
+        self.t = get_translator(self.lang)
 
     @property
     def pages(self) -> list[PageData]:

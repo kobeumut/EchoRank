@@ -1,3 +1,9 @@
+"""AutoGEO scoring and rewrites.
+
+Report text (labels, details, titles, rationales) is English by default and follows ``lang``; the *sample pages* are
+Turkish web content on purpose: they exercise the Turkish lexicons/placeholders that are written into rewrites
+for Turkish pages (the content language is independent of the report language).
+"""
 import json
 import re
 import sys
@@ -167,7 +173,7 @@ def test_low_serp_rank_boosts_citation_gain():
 
 def test_answer_capsule_metric(weak, strong):
     secs = weak.metrics["answer_capsules"].facts["sections"]
-    assert len(secs) == 3 and secs[1]["reason"].startswith("başlığın hemen altında paragraf yerine liste")
+    assert len(secs) == 3 and secs[1]["reason"].startswith("there is a list instead of a paragraph right under the heading")
     assert strong.metrics["answer_capsules"].score == 100
 
 
@@ -307,3 +313,71 @@ def test_cli_markdown_file(tmp_path, capsys):
     assert data["page_type"] == "service" and set(data["metrics"]) == set(METRIC_KEYS)
     assert main([str(f)]) == 0
     assert capsys.readouterr().out.startswith("AutoGEO ")
+
+
+def test_cli_lang_option_selects_report_language(tmp_path, capsys):
+    f = tmp_path / "hizmet.md"
+    f.write_text(SERVICE_MD, encoding="utf-8")
+    assert main([str(f), "--type", "service"]) == 0
+    en = capsys.readouterr().out
+    assert "Statistics and numeric data" in en and " words]" in en and "improvement" in en and "İstatistik" not in en
+    assert main([str(f), "--type", "service", "--lang", "tr"]) == 0
+    tr = capsys.readouterr().out
+    assert "İstatistik ve sayısal veri" in tr and " kelime]" in tr and "iyileştirme" in tr
+    assert main([str(f), "--type", "service", "--lang", "de"]) == 0  # unsupported -> English
+    assert "Statistics and numeric data" in capsys.readouterr().out
+    assert main([str(f), "--type", "service", "--json", "--lang", "tr"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["metrics"]["statistics"]["label"] == "İstatistik ve sayısal veri" and data["language"] == "tr"
+
+
+# ---------------- report language vs. content language ----------------
+
+def test_report_language_follows_lang_not_content_language():
+    en = analyze_html(WEAK_BLOG, URL, "article")  # Turkish page, English report (default)
+    tr = analyze_html(WEAK_BLOG, URL, "article", lang="tr")  # Turkish page, Turkish report
+    assert en.language == tr.language == "tr"
+    assert en.metrics["statistics"].label == "Statistics and numeric data"
+    assert tr.metrics["statistics"].label == "İstatistik ve sayısal veri"
+    assert en.metrics["statistics"].detail.startswith("Numeric figures: ")
+    assert tr.metrics["statistics"].detail.endswith("tablo.")
+    # identical analysis: scores, ids, improvement structure and the inserted (content-language) rewrites
+    assert en.score == tr.score and en.caps != tr.caps and len(en.caps) == len(tr.caps) == 1
+    assert [(i.rule_id, i.kind, i.block_index, i.metrics) for i in en.improvements] == \
+           [(i.rule_id, i.kind, i.block_index, i.metrics) for i in tr.improvements]
+    assert [i.after_markdown for i in en.improvements] == [i.after_markdown for i in tr.improvements]
+    assert en.improvements[0].title != tr.improvements[0].title
+    assert any(i.title.startswith("Replace vague quantities with concrete figures") for i in en.improvements)
+    assert any(i.title.startswith("Muğlak nicelikleri somut veriye çevirin") for i in tr.improvements)
+    assert en.caps == ["excessive keyword repetition (cap 60)"] and tr.caps == ["aşırı anahtar kelime tekrarı (üst sınır 60)"]
+    # rewrites inserted into a Turkish page keep the Turkish placeholders even in an English report
+    assert any("[SAYI]" in i.after_markdown for i in en.improvements)
+
+
+def test_english_page_in_turkish_report_keeps_english_placeholders():
+    r = analyze_html(EN_BLOG, URL, "article", lang="tr")
+    assert r.language == "en"
+    assert r.metrics["citations"].label == "Yetkili kaynak gösterimi"
+    inserted = " ".join(i.after_markdown for i in r.improvements)
+    assert "[NUMBER]" in inserted or "[Source, Year]" in inserted or "[Expert's direct quotation]" in inserted
+    assert all(i.title and i.rationale for i in r.improvements)
+    assert any("kapsül" in i.title.lower() or "kaynak" in i.title.lower() or "ifade" in i.title.lower()
+               for i in r.improvements)
+
+
+def test_content_language_hint_is_separate_from_report_language():
+    text = "# Rehber\n\nEspresso hazırlamak için 18 gram kahve kullanılır ve birçok kişi bunu sever.\n"
+    assert analyze_markdown(text, URL, "article", content_lang="en").language == "en"
+    assert analyze_markdown(text, URL, "article", content_lang="en", lang="tr").language == "en"
+    assert analyze_markdown(text, URL, "article").language == "tr"  # detected from the text
+
+
+def test_answer_capsule_diagnostics_are_localized_but_ids_are_not():
+    en = analyze_html(WEAK_BLOG, URL, "article")
+    tr = analyze_html(WEAK_BLOG, URL, "article", lang="tr")
+    secs_en, secs_tr = en.metrics["answer_capsules"].facts["sections"], tr.metrics["answer_capsules"].facts["sections"]
+    assert [(r["heading"], r["block_index"], r["quality"]) for r in secs_en] == \
+           [(r["heading"], r["block_index"], r["quality"]) for r in secs_tr]
+    assert secs_tr[1]["reason"].startswith("başlığın hemen altında paragraf yerine liste")
+    assert secs_en[1]["reason"].startswith("there is a list instead of a paragraph")
+    assert " words" in secs_en[0]["reason"] and " kelime" in secs_tr[0]["reason"]

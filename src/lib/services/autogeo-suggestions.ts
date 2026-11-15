@@ -8,6 +8,8 @@ import { z } from "zod";
 import { AUTOGEO_RULE_TYPES, SUGGESTION_STATUSES, type AutoGeoRuleType } from "../constants";
 import { prisma } from "../db";
 import { HttpError, notFound } from "../http";
+import { DEFAULT_LOCALE, type Locale } from "../i18n/config";
+import { serverT } from "../i18n/request";
 import { markdownToHtml } from "../autogeo/markdown";
 import { getDistributionSettings, getIntegration, INTEGRATION_KEYS } from "../distribution/config";
 import { assertPublicHttpUrl, OUTBOUND_TIMEOUT_MS, readSnippet } from "../distribution/net";
@@ -263,12 +265,13 @@ export type CmsDelivery = { url: string; status: "sent" | "failed"; httpStatus: 
 
 /**
  * "Apply to CMS": pushes the suggestion as a signed `autogeo.suggestion.applied` event to the site's configured
- * syndication webhooks (AI Dağıtım → webhooks; same `x-aiv-signature` HMAC as syndication), logs each delivery as a
+ * syndication webhooks (AI Distribution → webhooks; same `x-aiv-signature` HMAC as syndication), logs each delivery as a
  * PlatformSubmission and marks the suggestion `applied` when at least one CMS hook accepted it. Without configured
  * webhooks nothing is sent and the status is unchanged (`configured: false`), so the UI can fall back to copy-paste.
- * When every hook fails the status is unchanged as well.
+ * When every hook fails the status is unchanged as well. The delivery messages are in `locale` (default English).
  */
-export async function applySuggestionToCms(siteId: string, suggestionId: string) {
+export async function applySuggestionToCms(siteId: string, suggestionId: string, locale: Locale = DEFAULT_LOCALE) {
+  const t = serverT(locale);
   const site = await getSiteOrThrow(siteId);
   const row = await prisma.autoGeoSuggestion.findUnique({ where: { id: suggestionId } });
   if (!row || row.siteId !== siteId) throw notFound("Suggestion");
@@ -318,7 +321,7 @@ export async function applySuggestionToCms(siteId: string, suggestionId: string)
         body,
         signal: AbortSignal.timeout(OUTBOUND_TIMEOUT_MS),
       });
-      d = { url: hook.url, status: res.ok ? "sent" : "failed", httpStatus: res.status, message: res.ok ? "Delivered" : await readSnippet(res, 300) };
+      d = { url: hook.url, status: res.ok ? "sent" : "failed", httpStatus: res.status, message: res.ok ? t("autogeo.cms.delivered") : await readSnippet(res, 300) };
     } catch (err) {
       d = { url: hook.url, status: "failed", httpStatus: null, message: (err as Error).message };
     }

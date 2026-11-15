@@ -74,7 +74,13 @@ describe("Share of Model mathematics", () => {
     expect(result.overall.samples).toBe(2);
     expect(result.overall.brands).toHaveLength(2);
     expect(result.overall.brands[0].citations).toBe(2);
-    expect(result.warnings).toHaveLength(2);
+    expect(result.warnings).toEqual(["Overlapping competitor ignored: https://www.rival.test/", "Overlapping competitor ignored: https://shop.example.com"]);
+  });
+
+  it("writes warnings in the requested locale (English by default)", () => {
+    const duplicate = visibilityAnalysisSettings.parse({ competitors: [rival, { ...rival, url: "https://www.rival.test/" }] });
+    expect(analyzeSom(site, [], duplicate).warnings).toEqual(["Overlapping competitor ignored: https://www.rival.test/"]);
+    expect(analyzeSom(site, [], duplicate, [], "tr").warnings).toEqual(["Çakışan rakip yok sayıldı: https://www.rival.test/"]);
   });
 });
 
@@ -115,6 +121,7 @@ describe("brand-scoped sentiment and fact evidence", () => {
     expect(analyzeBrandSentiment("Acme is not reliable.", site)).toMatchObject({ label: "negative", score: -1 });
     expect(analyzeBrandSentiment("Acme is unsafe.", site).label).toBe("negative");
     expect(analyzeBrandSentiment("Rival is great. AcmeTools is bad.", site)).toMatchObject({ label: "unknown", score: null });
+    // Turkish lexicon and negation ("kaliteli değil" = "not high quality"), Unicode brand name.
     expect(analyzeBrandSentiment("Yağ Dünyası kaliteli değil.", { ...site, title: "Yağ Dünyası" }).label).toBe("negative");
     expect(analyzeBrandSentiment("Rival is great but Acme is expensive.", site, ["Rival"]).label).toBe("negative");
     expect(analyzeBrandSentiment("Rival is excellent compared with Acme.", site, ["Rival"]).label).toBe("unknown");

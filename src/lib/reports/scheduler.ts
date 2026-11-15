@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "../db";
 import { executeAudit, getAuditRunner, startAudit } from "../services/audit";
+import { serverT } from "../i18n/request";
 import { computeNextRun } from "../services/reports";
+import { siteLocale } from "../services/sites";
 import { runVisibility, visibilityInput } from "../services/visibility";
 import { describeKeyFile, getIndexNowKey } from "../distribution/indexnow";
 import { getDistributionSettings } from "../distribution/config";
@@ -25,53 +27,56 @@ export async function runSchedule(id: string, options: { force?: boolean; now?: 
   });
   if (!claimed) return null;
   const { schedule, run } = claimed;
+  // No HTTP request here: the report (job-step details, summary, e-mail) is written in the site's configured language.
+  const locale = siteLocale(schedule.site);
+  const t = serverT(locale);
   const steps: Step[] = [];
   let deliveries: Delivery[] = [];
   let status = "failed";
   async function step(name: string, fn: () => Promise<string>) {
     try { steps.push({ name, status: "ok", detail: await fn() }); }
     // Do not persist raw exception messages: provider / webhook errors may contain credentials.
-    catch { steps.push({ name, status: "failed", detail: "Check failed; verify configuration and service availability" }); }
+    catch { steps.push({ name, status: "failed", detail: t("reports.step.failed") }); }
   }
   try {
     if (schedule.frequency === "weekly") {
-      if (!getAuditRunner()) steps.push({ name: "crawl-graph-eeat", status: "skipped", detail: "Configure GEO_AUDIT_BIN; no crawl was queued" });
+      if (!getAuditRunner()) steps.push({ name: "crawl-graph-eeat", status: "skipped", detail: t("reports.step.auditNoRunner") });
       else await step("crawl-graph-eeat", async () => {
-        const job = await startAudit(schedule.siteId, { trigger: "scheduled" }, run.id);
+        const job = await startAudit(schedule.siteId, { trigger: "scheduled" }, run.id, locale);
         await executeAudit(job);
         const audit = await prisma.geoAudit.findUniqueOrThrow({ where: { id: job.audit.id } });
         if (audit.status !== "completed") throw new Error("Audit did not complete");
-        return `Completed audit ${audit.id}: crawl, knowledge graph and E-E-A-T scoring`;
+        return t("reports.step.auditDone", { id: audit.id });
       });
     }
     await step("llm-visibility", async () => {
       const result = await runVisibility(schedule.siteId, visibilityInput.parse({ refresh: true }));
       if (result.failed) {
-        steps.push({ name: "llm-provider-coverage", status: "failed", detail: `${result.successful}/${result.attempted} checks succeeded; missing or failed providers were not recorded as zero scores` });
+        steps.push({ name: "llm-provider-coverage", status: "failed", detail: t("reports.step.providerCoverage", { successful: result.successful, attempted: result.attempted }) });
       }
-      return `${result.successful}/${result.attempted} fresh checks succeeded (cache bypassed)`;
+      return t("reports.step.visibilityDone", { successful: result.successful, attempted: result.attempted });
     });
     const key = getIndexNowKey(schedule.site);
-    if (!key) steps.push({ name: "indexnow", status: "skipped", detail: "No valid IndexNow key configured" });
+    if (!key) steps.push({ name: "indexnow", status: "skipped", detail: t("reports.step.indexnowNoKey") });
     else await step("indexnow", async () => {
       const response = await publicRequest(describeKeyFile(schedule.site, key).keyLocation);
       if (response.status !== 200 || response.body.replace(/^\uFEFF/, "").trim() !== key) throw new Error("Key verification failed");
-      return "Published key matches; this is not proof of indexing or search inclusion";
+      return t("reports.step.indexnowVerified");
     });
     const distribution = getDistributionSettings(schedule.site);
     if (distribution.enabled && distribution.channels.indexnow) await step("indexnow-queue", async () => {
       const result = await dispatchSite(schedule.siteId, { limit: 100, channels: ["indexnow"] });
       const sent = result.channels.reduce((n, c) => n + c.sent, 0);
       if (result.channels.some((c) => c.failed || c.deferred)) throw new Error("IndexNow submissions failed or deferred");
-      return `${sent}/${result.claimed} queued notifications submitted; not proof of indexing`;
+      return t("reports.step.indexnowQueue", { sent, claimed: result.claimed });
     });
-    const snapshot = await buildSnapshot(schedule.siteId, schedule.frequency === "weekly" ? 7 : 1, new Date(), steps);
+    const snapshot = await buildSnapshot(schedule.siteId, schedule.frequency === "weekly" ? 7 : 1, new Date(), steps, locale);
     // Save evidence before any outbound side effect. Interrupted delivery is never silently retried.
     await prisma.reportRun.update({ where: { id: run.id }, data: { snapshot: snapshotJson(snapshot), steps } });
-    deliveries = await deliverReport(schedule, run.id, snapshot);
+    deliveries = await deliverReport(schedule, run.id, snapshot, locale);
     status = steps.every((s) => s.status === "ok") && deliveries.every((d) => d.status === "sent") ? "completed" : "partial";
   } catch {
-    steps.push({ name: "report", status: "failed", detail: "Report generation failed; no automatic delivery retry" });
+    steps.push({ name: "report", status: "failed", detail: t("reports.step.reportFailed") });
   }
   const finishedAt = new Date();
   // ponytail: non-expiring DB claim favors no duplicate paid checks/deliveries over automatic crash retry.

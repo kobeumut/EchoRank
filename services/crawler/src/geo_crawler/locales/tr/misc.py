@@ -1,0 +1,16 @@
+"""Turkish messages — namespace "misc" (same keys and {placeholders} as en/misc.py)."""
+MESSAGES: dict[str, str] = {
+    # shared one-word values used inside check details
+    "misc.word.present": "var",
+    "misc.word.absent": "yok",
+    "misc.word.missing_caps": "YOK",
+    "misc.word.active": "aktif",
+    # ---- geo-audit text report
+    "misc.report.title": "GEO SKORU: {geo}/100 ({grade})  ·  SEO {seo}  ·  E-E-A-T {eeat}",
+    "misc.report.pillar": "■ {label}: {score}/100 (ağırlık %{weight})",
+    "misc.report.actions_heading": "NE YAPILMALI?",
+    "misc.report.action_line": "{index}. [{impact} etki / {effort} efor / +{gain} puan] {title}",
+    "misc.report.target": "    Hedef: {url}",
+    "misc.report.more_pages_one": " (+{count} sayfa)",
+    "misc.report.more_pages_other": " (+{count} sayfa)",
+}

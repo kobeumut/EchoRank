@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   BOT_META, botVerdict, buildAllowRule, DIAGNOSTIC_BOTS, formatMs, formatTokens, RULE_PLATFORM_LABELS, RULE_PLATFORMS, statusMix,
-  VENDOR_LABELS, VERDICT_LABELS, type BotRecord, type BotSummary, type RulePlatform, type Verdict,
+  vendorLabel, verdictLabel, type BotRecord, type BotSummary, type RulePlatform, type Verdict,
 } from "@/lib/dashboard/bot-diagnostics";
-import { formatDate, timeAgo } from "@/lib/dashboard/format";
 import { apiFetch, ApiError, errorMessage, useApi } from "./api";
 import { useSite } from "./site-shell";
 import { useToast } from "./toast";
 import { Badge, Button, Card, CodeBlock, cx, EmptyState, ErrorState, inputBase, Segmented, Skeleton, Spinner } from "./ui";
+import { useFormat } from "./use-format";
 
 type Summary = {
   perBot: BotSummary[];
@@ -31,6 +31,7 @@ const VERDICT_STYLE: Record<Verdict, { dot: string; ring: string; text: string; 
 };
 
 export function BotDiagnosticsView() {
+  const { t, formatDate, timeAgo } = useFormat();
   const { siteId, site } = useSite();
   const toast = useToast();
   const list = useApi<SimulationList>(`/api/sites/${siteId}/simulation/bots?limit=500`);
@@ -42,9 +43,9 @@ export function BotDiagnosticsView() {
   useEffect(() => {
     if (!running) return;
     const started = Date.now();
-    const t = setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 1000);
+    const timer = setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 1000);
     return () => {
-      clearInterval(t);
+      clearInterval(timer);
       setElapsed(0);
     };
   }, [running]);
@@ -63,9 +64,9 @@ export function BotDiagnosticsView() {
       });
       list.mutate(() => ({ runId: res.runId, checkedAt: res.checkedAt, summary: res.summary, items: res.records, total: res.records.length }));
       const blocked = res.summary.perBot.filter((b) => b.botName !== "Browser" && b.blocked > 0).length;
-      toast.push(blocked ? "error" : "success", blocked ? `Test tamamlandı: ${blocked} bot engelleniyor.` : `Test tamamlandı: ${res.urls.length} URL × ${res.bots.length} kimlik.`);
+      toast.push(blocked ? "error" : "success", blocked ? t("bots.run.blockedToast", { count: blocked }) : t("bots.run.doneToast", { urls: res.urls.length, bots: res.bots.length }));
     } catch (err) {
-      toast.push("error", err instanceof ApiError && err.status === 409 ? "Bu site için zaten çalışan bir bot testi var. Birkaç saniye sonra tekrar deneyin." : errorMessage(err));
+      toast.push("error", err instanceof ApiError && err.status === 409 ? t("bots.run.conflict") : errorMessage(err));
     } finally {
       setRunning(false);
     }
@@ -86,25 +87,25 @@ export function BotDiagnosticsView() {
   return (
     <div className="space-y-5">
       <Card
-        title="Canlı AI Bot Teşhis Merkezi"
-        subtitle="Sitenizi GPTBot, ClaudeBot, PerplexityBot ve Google-Extended kimlikleriyle canlı olarak çeker; WAF engelini, JS shell (boş render) sorununu ve token yükünü ölçer."
+        title={t("bots.title")}
+        subtitle={t("bots.subtitle")}
         action={
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="ghost" onClick={() => setShowOptions((v) => !v)} aria-expanded={showOptions}>
-              {showOptions ? "Seçenekleri gizle" : "URL seç"}
+              {showOptions ? t("bots.run.hideOptions") : t("bots.run.chooseUrls")}
             </Button>
             <Button variant="primary" onClick={() => void run()} loading={running}>
-              {running ? `Test ediliyor… ${elapsed}s` : "▶ Canlı Bot Testini Çalıştır"}
+              {running ? t("bots.run.running", { elapsed }) : t("bots.run.start")}
             </Button>
           </div>
         }
       >
         {showOptions && (
           <label className="mb-4 flex flex-col gap-1 text-xs font-medium text-zinc-600 dark:text-zinc-400">
-            Test edilecek URL&apos;ler (boşluk/satır ile ayırın, en fazla 10; boş = ana sayfa + son taranan 4 sayfa)
+            {t("bots.run.urlsLabel")}
             <textarea
               className={`${inputBase} min-h-20 w-full font-mono text-xs`}
-              placeholder={`${site.url}\n/blog\n/urunler`}
+              placeholder={t("bots.run.urlsPlaceholder", { url: site.url })}
               value={urlsText}
               onChange={(e) => setUrlsText(e.target.value)}
               disabled={running}
@@ -114,30 +115,29 @@ export function BotDiagnosticsView() {
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500">
           {data?.checkedAt ? (
             <>
-              <span title={formatDate(data.checkedAt)}>Son test: {timeAgo(data.checkedAt)}</span>
-              <span>
-                {new Set(records.map((r) => r.url)).size} URL · {perBot.size} kimlik
-              </span>
+              <span title={formatDate(data.checkedAt)}>{t("bots.run.lastTest", { time: timeAgo(data.checkedAt) })}</span>
+              <span>{t("bots.run.coverage", { count: new Set(records.map((r) => r.url)).size, identities: perBot.size })}</span>
               {browser && (
                 <span>
-                  Kontrol (tarayıcı): {browser.blocked ? <b className="text-red-600">engelli — site geneli sorun</b> : <b className="text-[#006300] dark:text-[#0ca30c]">erişilebilir</b>}
+                  {t("bots.run.control")}{" "}
+                  {browser.blocked ? <b className="text-red-600">{t("bots.run.controlBlocked")}</b> : <b className="text-[#006300] dark:text-[#0ca30c]">{t("bots.run.controlOk")}</b>}
                 </span>
               )}
             </>
           ) : (
-            !list.loading && <span>Henüz test çalıştırılmadı.</span>
+            !list.loading && <span>{t("bots.run.notRun")}</span>
           )}
           {list.refreshing && !running && <Spinner className="h-3 w-3" />}
         </div>
         {running && (
-          <div className="mt-3 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800" role="progressbar" aria-label="Bot testi sürüyor" aria-valuetext={`${elapsed} saniye`}>
+          <div className="mt-3 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800" role="progressbar" aria-label={t("bots.run.inProgress")} aria-valuetext={t("bots.run.elapsed", { count: elapsed })}>
             <div className="h-1 w-1/3 animate-[botscan_1.4s_ease-in-out_infinite] rounded-full bg-indigo-500" />
           </div>
         )}
       </Card>
 
       {list.loading ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" role="status" aria-label="Yükleniyor">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" role="status" aria-label={t("bots.loading")}>
           {DIAGNOSTIC_BOTS.map((b) => (
             <Skeleton key={b} className="h-48" />
           ))}
@@ -160,14 +160,14 @@ export function BotDiagnosticsView() {
             !running && (
               <EmptyState
                 icon="🤖"
-                title="AI botları sitenizi görebiliyor mu?"
+                title={t("bots.empty.title")}
                 action={
                   <Button variant="primary" onClick={() => void run()}>
-                    ▶ İlk testi çalıştır
+                    {t("bots.empty.firstTest")}
                   </Button>
                 }
               >
-                robots.txt izni erişim demek değildir: Cloudflare/WAF kuralları veya yalnızca JavaScript ile render edilen sayfalar AI botlarına boş içerik döndürebilir.
+                {t("bots.empty.hint")}
               </EmptyState>
             )
           )}
@@ -180,16 +180,17 @@ export function BotDiagnosticsView() {
 }
 
 function BotCard({ bot, summary, records, running }: { bot: string; summary: BotSummary | undefined; records: BotRecord[]; running: boolean }) {
+  const { t } = useFormat();
   const verdict = botVerdict(summary);
   const style = VERDICT_STYLE[verdict];
   const meta = BOT_META[bot];
   const vendors = (summary?.blockedBy ?? []).filter((v): v is string => !!v);
   return (
-    <section className={cx("flex flex-col rounded-xl border-2 bg-white p-4 shadow-sm dark:bg-zinc-900", style.ring)} aria-label={`${bot}: ${VERDICT_LABELS[verdict]}`}>
+    <section className={cx("flex flex-col rounded-xl border-2 bg-white p-4 shadow-sm dark:bg-zinc-900", style.ring)} aria-label={`${bot}: ${verdictLabel(t, verdict)}`}>
       <header className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="truncate font-semibold">{bot}</h3>
-          <p className="text-xs text-zinc-500">{meta?.vendor ?? "AI crawler"}</p>
+          <p className="text-xs text-zinc-500">{meta?.vendor ?? t("bots.meta.vendorFallback")}</p>
         </div>
         <span className="relative mt-1 flex h-3 w-3 shrink-0" aria-hidden>
           {running && <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" style={{ background: style.dot }} />}
@@ -198,18 +199,18 @@ function BotCard({ bot, summary, records, running }: { bot: string; summary: Bot
       </header>
       <div className={cx("mt-3 flex items-center gap-1.5 text-sm font-semibold", style.text)}>
         <span aria-hidden>{style.icon}</span>
-        {VERDICT_LABELS[verdict]}
+        {verdictLabel(t, verdict)}
       </div>
-      {verdict === "blocked" && vendors.length > 0 && <p className="mt-0.5 text-xs text-red-700 dark:text-red-300">{vendors.map((v) => VENDOR_LABELS[v] ?? v).join(", ")}</p>}
-      {verdict === "shell" && summary && <p className="mt-0.5 text-xs text-amber-800 dark:text-amber-300">{summary.csrShells}/{summary.checked} sayfa boş JS kabuğu</p>}
+      {verdict === "blocked" && vendors.length > 0 && <p className="mt-0.5 text-xs text-red-700 dark:text-red-300">{vendors.map((v) => vendorLabel(t, v)).join(", ")}</p>}
+      {verdict === "shell" && summary && <p className="mt-0.5 text-xs text-amber-800 dark:text-amber-300">{t("bots.card.shellPages", { shells: summary.csrShells, count: summary.checked })}</p>}
       <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
         <div>
-          <dt className="text-zinc-500">Ort. yüklenme</dt>
-          <dd className="mt-0.5 text-lg font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">{summary ? formatMs(summary.avgLoadTimeMs) : "—"}</dd>
+          <dt className="text-zinc-500">{t("bots.card.avgLoad")}</dt>
+          <dd className="mt-0.5 text-lg font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">{summary ? formatMs(summary.avgLoadTimeMs, t) : "—"}</dd>
         </div>
         <div>
-          <dt className="text-zinc-500" title="Botun gördüğü görünür metin, ≈ karakter ÷ 4">
-            Token ağırlığı
+          <dt className="text-zinc-500" title={t("bots.card.tokenWeightTitle")}>
+            {t("bots.card.tokenWeight")}
           </dt>
           <dd className="mt-0.5 text-lg font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">{summary ? formatTokens(summary.avgTokens) : "—"}</dd>
         </div>
@@ -217,27 +218,26 @@ function BotCard({ bot, summary, records, running }: { bot: string; summary: Bot
       <div className="mt-auto pt-3 text-xs text-zinc-500">
         {summary ? (
           <>
-            <span className="tabular-nums">
-              {summary.ok}/{summary.checked} sayfa erişilebilir
-            </span>
-            <span className="block truncate font-mono" title="HTTP durum kodları">
+            <span className="tabular-nums">{t("bots.card.pagesOk", { ok: summary.ok, count: summary.checked })}</span>
+            <span className="block truncate font-mono" title={t("bots.card.httpCodes")}>
               HTTP {statusMix(records) || "—"}
             </span>
           </>
         ) : (
-          "Henüz test edilmedi"
+          t("bots.card.notTested")
         )}
-        {meta?.note && <span className="mt-1 block text-[11px] text-zinc-400">{meta.note}</span>}
+        {meta?.noteKey && <span className="mt-1 block text-[11px] text-zinc-400">{t(meta.noteKey)}</span>}
       </div>
     </section>
   );
 }
 
 function Findings({ summary }: { summary: Summary }) {
+  const { t } = useFormat();
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       {summary.botOnlyBlocks.length > 0 && (
-        <Card title="Yalnızca botlara özel engeller" subtitle="Normal tarayıcı erişebiliyor ama AI botu engelleniyor → WAF / bot kuralı sorunu">
+        <Card title={t("bots.findings.botOnlyTitle")} subtitle={t("bots.findings.botOnlySubtitle")}>
           <ul className="space-y-1.5 text-sm">
             {summary.botOnlyBlocks.slice(0, 20).map((b) => (
               <li key={`${b.url}-${b.botName}`} className="flex flex-wrap items-center gap-2">
@@ -246,7 +246,7 @@ function Findings({ summary }: { summary: Summary }) {
                   {b.url}
                 </span>
                 <span className="text-xs text-zinc-500">
-                  {b.statusCode ?? "—"} · {VENDOR_LABELS[b.blockedBy ?? ""] ?? b.blockedBy}
+                  {b.statusCode ?? "—"} · {b.blockedBy ? vendorLabel(t, b.blockedBy) : b.blockedBy}
                 </span>
               </li>
             ))}
@@ -254,7 +254,7 @@ function Findings({ summary }: { summary: Summary }) {
         </Card>
       )}
       {summary.csrShellUrls.length > 0 && (
-        <Card title="JS shell sayfalar" subtitle="AI botları JavaScript çalıştırmaz: bu sayfaların ilk HTML'i neredeyse boş">
+        <Card title={t("bots.findings.shellTitle")} subtitle={t("bots.findings.shellSubtitle")}>
           <ul className="space-y-1 text-sm">
             {summary.csrShellUrls.slice(0, 20).map((u) => (
               <li key={u} className="truncate font-mono text-xs" title={u}>
@@ -264,7 +264,7 @@ function Findings({ summary }: { summary: Summary }) {
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-xs text-zinc-500">Çözüm: sayfayı sunucu tarafında render edin (SSR/SSG) veya botlara prerender edilmiş HTML sunun.</p>
+          <p className="mt-3 text-xs text-zinc-500">{t("bots.findings.shellFix")}</p>
         </Card>
       )}
     </div>
@@ -279,19 +279,20 @@ function cellTone(r: BotRecord): Verdict {
 }
 
 function ResultMatrix({ records, bots }: { records: BotRecord[]; bots: string[] }) {
+  const { t } = useFormat();
   const urls = useMemo(() => [...new Set(records.map((r) => r.url))], [records]);
   const cell = useMemo(() => new Map(records.map((r) => [`${r.url}\u0000${r.botName}`, r])), [records]);
   const shown = bots.filter((b) => records.some((r) => r.botName === b));
   return (
-    <Card title="URL × Bot sonuç matrisi" subtitle="Her hücre: HTTP durumu · yüklenme süresi · token">
+    <Card title={t("bots.matrix.title")} subtitle={t("bots.matrix.subtitle")}>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] text-left text-xs">
           <thead className="text-zinc-500">
             <tr>
-              <th className="py-2 pr-3 font-medium">URL</th>
+              <th className="py-2 pr-3 font-medium">{t("bots.matrix.colUrl")}</th>
               {shown.map((b) => (
                 <th key={b} className="px-2 py-2 font-medium whitespace-nowrap">
-                  {b === "Browser" ? "Tarayıcı (kontrol)" : b}
+                  {b === "Browser" ? t("bots.matrix.browser") : b}
                 </th>
               ))}
             </tr>
@@ -312,14 +313,14 @@ function ResultMatrix({ records, bots }: { records: BotRecord[]; bots: string[] 
                     );
                   const v = cellTone(r);
                   return (
-                    <td key={b} className="px-2 py-2 whitespace-nowrap" title={r.blockedBy ? `Engelleyen: ${VENDOR_LABELS[r.blockedBy] ?? r.blockedBy}` : VERDICT_LABELS[v]}>
+                    <td key={b} className="px-2 py-2 whitespace-nowrap" title={r.blockedBy ? t("bots.matrix.blockedBy", { vendor: vendorLabel(t, r.blockedBy) }) : verdictLabel(t, v)}>
                       <span className="inline-flex items-center gap-1.5">
                         <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: VERDICT_STYLE[v].dot }} />
                         <span className={cx("font-semibold tabular-nums", VERDICT_STYLE[v].text)}>{r.statusCode ?? "ERR"}</span>
-                        <span className="sr-only">{VERDICT_LABELS[v]}</span>
+                        <span className="sr-only">{verdictLabel(t, v)}</span>
                       </span>
                       <span className="block text-zinc-500 tabular-nums">
-                        {formatMs(r.loadTimeMs)} · {formatTokens(r.tokenCount)} tk
+                        {formatMs(r.loadTimeMs, t)} · {formatTokens(r.tokenCount)} {t("bots.unit.tokensShort")}
                       </span>
                     </td>
                   );
@@ -334,11 +335,12 @@ function ResultMatrix({ records, bots }: { records: BotRecord[]; bots: string[] 
 }
 
 function RuleGenerator({ blockedBots, vendors }: { blockedBots: string[]; vendors: string[] }) {
+  const { t } = useFormat();
   const [platform, setPlatform] = useState<RulePlatform>("cloudflare");
   const [picked, setPicked] = useState<Set<string> | null>(null);
   // Until the user picks bots themselves, follow the latest result: the blocked bots, or every headline bot.
   const selected = picked ?? new Set(blockedBots.length ? blockedBots : RUN_BOTS);
-  const rule = buildAllowRule(platform, RUN_BOTS.filter((b) => selected.has(b)));
+  const rule = buildAllowRule(platform, RUN_BOTS.filter((b) => selected.has(b)), t);
   const toggle = (b: string) => {
     const next = new Set(selected);
     if (next.has(b)) next.delete(b);
@@ -347,13 +349,13 @@ function RuleGenerator({ blockedBots, vendors }: { blockedBots: string[]; vendor
   };
   return (
     <Card
-      title="WAF bypass kuralı üretici"
-      subtitle="Seçilen AI botlarını güvenlik duvarı ve sunucu kurallarından muaf tutan, kopyalanmaya hazır yapılandırma"
-      action={vendors.length > 0 ? <Badge tone="critical">Tespit edilen: {vendors.map((v) => VENDOR_LABELS[v] ?? v).join(", ")}</Badge> : undefined}
+      title={t("bots.rules.title")}
+      subtitle={t("bots.rules.subtitle")}
+      action={vendors.length > 0 ? <Badge tone="critical">{t("bots.rules.detected", { vendors: vendors.map((v) => vendorLabel(t, v)).join(", ") })}</Badge> : undefined}
     >
       <div className="flex flex-wrap items-center gap-3">
-        <Segmented label="Platform" value={platform} onChange={setPlatform} options={RULE_PLATFORMS.map((p) => ({ value: p, label: RULE_PLATFORM_LABELS[p] }))} />
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Botlar">
+        <Segmented label={t("bots.rules.platform")} value={platform} onChange={setPlatform} options={RULE_PLATFORMS.map((p) => ({ value: p, label: RULE_PLATFORM_LABELS[p] }))} />
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("bots.rules.bots")}>
           {RUN_BOTS.map((b) => {
             const on = selected.has(b);
             return (
@@ -387,7 +389,7 @@ function RuleGenerator({ blockedBots, vendors }: { blockedBots: string[]; vendor
             </ol>
           </div>
         ) : (
-          <p className="text-sm text-zinc-500">Kural üretmek için en az bir bot seçin.</p>
+          <p className="text-sm text-zinc-500">{t("bots.rules.pickOne")}</p>
         )}
       </div>
     </Card>

@@ -1,6 +1,8 @@
 // Pure helpers for the AutoGEO Content Studio (no React): side-by-side line/word diff, GEO signal highlighting
 // (statistics, quotes, citations, placeholders), impact tiers, answer-capsule/table extraction and the GEO score
 // simulator. Kept framework-free so they are unit-tested in tests/autogeo-studio.test.ts.
+// Display text comes from the `studio.*` catalog entries through a `Translator` passed by the caller.
+import type { Translator } from "@/lib/i18n/translate";
 import { markdownToHtml, parseMarkdownTable } from "../autogeo/markdown";
 import type { Tone } from "./format";
 
@@ -9,29 +11,22 @@ import type { Tone } from "./format";
 export const STUDIO_RULE_TYPES = ["stats", "quotes", "citations", "tone", "answer_capsule", "keyword_stuffing", "comparison_table"] as const;
 export type StudioRuleType = (typeof STUDIO_RULE_TYPES)[number];
 
-export const RULE_TYPE_LABELS: Record<string, string> = {
-  stats: "İstatistik",
-  quotes: "Alıntı",
-  citations: "Kaynak",
-  tone: "Ton",
-  answer_capsule: "Yanıt Kapsülü",
-  keyword_stuffing: "Anahtar Kelime",
-  comparison_table: "Tablo",
-};
+/** Label of a rule type (`studio.ruleType.*`); unknown types fall back to `fallback` (default: the raw value). */
+export function ruleTypeLabel(t: Translator, ruleType: string, fallback: string = ruleType): string {
+  return (STUDIO_RULE_TYPES as readonly string[]).includes(ruleType) ? t(`studio.ruleType.${ruleType}`) : fallback;
+}
 
-export const SUGGESTION_STATUS_LABELS: Record<string, string> = {
-  pending: "Bekliyor",
-  applied: "Uygulandı",
-  dismissed: "Yoksayıldı",
-  superseded: "Güncelliğini yitirdi",
-};
+const SUGGESTION_STATUSES = ["pending", "applied", "dismissed", "superseded"];
+/** Label of a stored suggestion status (`studio.status.*`); unknown statuses are shown as-is. */
+export const suggestionStatusLabel = (t: Translator, status: string) => (SUGGESTION_STATUSES.includes(status) ? t(`studio.status.${status}`) : status);
 
 export type Impact = "high" | "medium" | "low";
-export const IMPACTS: { value: Impact; label: string; tone: Tone }[] = [
-  { value: "high", label: "Yüksek", tone: "critical" },
-  { value: "medium", label: "Orta", tone: "serious" },
-  { value: "low", label: "Düşük", tone: "good" },
+export const IMPACTS: { value: Impact; tone: Tone }[] = [
+  { value: "high", tone: "critical" },
+  { value: "medium", tone: "serious" },
+  { value: "low", tone: "good" },
 ];
+export const impactLabel = (t: Translator, impact: Impact) => t(`studio.impact.${impact}`);
 
 /** Same bands as the AutoGEO ActionItem impact (`impactOf` in services/autogeo.ts): ≥15% high, ≥6% medium. */
 export function impactOfGain(gain: number): Impact {
@@ -178,21 +173,19 @@ export function diffStats(rows: DiffRow[]) {
 // ---------------------------------------------------------------- GEO signal highlighting
 
 export type SignalTag = "placeholder" | "citation" | "stat" | "quote";
-export const SIGNAL_LABELS: Record<SignalTag, string> = {
-  stat: "İstatistik",
-  quote: "Uzman alıntısı",
-  citation: "Kaynak atfı",
-  placeholder: "Doldurulacak alan",
-};
+export const SIGNAL_TAGS: SignalTag[] = ["stat", "quote", "citation", "placeholder"];
+export const signalLabel = (t: Translator, tag: SignalTag) => t(`studio.signal.${tag}`);
 
 // Highest priority first; a character keeps the first tag that claims it.
 const SIGNAL_PATTERNS: [SignalTag, RegExp][] = [
-  // [Kaynak, Yıl](https://…) placeholder links are citations to fill; plain links and numbered refs are citations.
+  // [Source, Year](https://…) placeholder links are citations to fill; plain links and numbered refs are citations.
+  // `X'e göre` ("according to X") is the Turkish attribution form and is kept so Turkish suggestions are still tagged.
   ["citation", /\[(?:[^\[\]\n]|\[[^\[\]\n]*\])+\]\([^()\s]+\)|https?:\/\/[^\s)>\]]+|\[\d{1,3}\]|\((?:[\p{Lu}][^()\n]{1,60}),\s*(?:19|20)\d{2}\)|\b[\p{Lu}][\p{L}.&-]+(?:\s[\p{Lu}][\p{L}.&-]+)*['’](?:[ae]|ya|ye|na|ne)\s+göre\b|\baccording to\s+[^,.;\n]+/gu],
   ["placeholder", /%?\[[^\[\]\n]{2,120}\](?!\()/gu],
   [
     "stat",
-    /(?:%|±)\s?\d+(?:[.,]\d+)*|\d+(?:[.,]\d+)*(?:\s?(?:%|‰|°C|TL|₺|\$|€|USD|EUR|milyon|milyar|bin|kat|bar|W|kW|L|ml|mg|kg|g|km|mm|cm|dk|sn|saat|gün|hafta|ay|yıl|kişi|adet|x)(?![\p{L}]))|\b(?!(?:19|20)\d{2}\b)\d+(?:[.,]\d+)*\b/gu,
+    // Units: metric/currency symbols, English words (million … people) and their Turkish counterparts (milyon … kişi).
+    /(?:%|±)\s?\d+(?:[.,]\d+)*|\d+(?:[.,]\d+)*(?:\s?(?:%|‰|°C|TL|₺|\$|€|USD|EUR|million|billion|thousand|times|min|sec|hours?|days?|weeks?|months?|years?|people|pcs|milyon|milyar|bin|kat|bar|W|kW|L|ml|mg|kg|g|km|mm|cm|dk|sn|saat|gün|hafta|ay|yıl|kişi|adet|x)(?![\p{L}]))|\b(?!(?:19|20)\d{2}\b)\d+(?:[.,]\d+)*\b/gu,
   ],
   ["quote", /“[^”\n]{3,}”|"[^"\n]{8,}"|^\s*>.*$/gmu],
 ];
@@ -258,10 +251,10 @@ export function countWords(text: string): number {
 }
 
 export type CapsuleFit = { tone: Tone; label: string };
-export function capsuleFit(words: number): CapsuleFit {
-  if (words >= 40 && words <= 60) return { tone: "good", label: "İdeal (40-60)" };
-  if (words >= 30 && words <= 75) return { tone: "warning", label: words < 40 ? "Biraz kısa" : "Biraz uzun" };
-  return { tone: "critical", label: words < 40 ? "Çok kısa" : "Çok uzun" };
+export function capsuleFit(words: number, t: Translator): CapsuleFit {
+  if (words >= 40 && words <= 60) return { tone: "good", label: t("studio.capsule.fit.ideal") };
+  if (words >= 30 && words <= 75) return { tone: "warning", label: t(words < 40 ? "studio.capsule.fit.slightlyShort" : "studio.capsule.fit.slightlyLong") };
+  return { tone: "critical", label: t(words < 40 ? "studio.capsule.fit.tooShort" : "studio.capsule.fit.tooLong") };
 }
 
 export type CapsuleCard = {
@@ -319,7 +312,9 @@ export function insertedPart(s: Pick<StudioSuggestion, "originalSnippet" | "sugg
 function headingOf(s: StudioSuggestion): string | null {
   const h = /^#{1,6}\s+(.+)$/m.exec(s.originalSnippet);
   if (h) return h[1].trim();
-  const q = /['‘’"“]([^'‘’"”]{2,120})['’"”]\s+için/u.exec(s.title ?? "");
+  // Suggestion titles are stored in the language they were generated in: "Answer capsule for 'X'" (en) / "'X' için yanıt kapsülü" (tr).
+  const title = s.title ?? "";
+  const q = /\bfor\s+['‘’"“]([^'‘’"”]{2,120})['’"”]/u.exec(title) ?? /['‘’"“]([^'‘’"”]{2,120})['’"”]\s+için/u.exec(title);
   return q ? q[1].trim() : null;
 }
 
@@ -348,7 +343,7 @@ export function collectCapsules(suggestions: StudioSuggestion[], items: StudioAc
 }
 
 /** Table cards from comparison-table / key-figure suggestions and the stored `comparisonTable` details. */
-export function collectTables(suggestions: StudioSuggestion[], items: StudioActionItem[]): TableCard[] {
+export function collectTables(suggestions: StudioSuggestion[], items: StudioActionItem[], t: Translator): TableCard[] {
   const out: TableCard[] = [];
   const seen = new Set<string>();
   for (const s of suggestions) {
@@ -359,15 +354,15 @@ export function collectTables(suggestions: StudioSuggestion[], items: StudioActi
     const key = `${s.pageUrl}\u0000${md}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ key: s.id, pageUrl: s.pageUrl, title: s.title ?? RULE_TYPE_LABELS[s.ruleType] ?? "Tablo", rows, markdown: md, html: markdownToHtml(md), suggestionId: s.id, status: s.status });
+    out.push({ key: s.id, pageUrl: s.pageUrl, title: s.title ?? ruleTypeLabel(t, s.ruleType, t("studio.table.title")), rows, markdown: md, html: markdownToHtml(md), suggestionId: s.id, status: s.status });
   }
   for (const item of items) {
-    const t = item.details?.comparisonTable as TableDetail | undefined;
-    if (!item.targetUrl || !t?.markdown || seen.has(`${item.targetUrl}\u0000${t.markdown.trim()}`)) continue;
-    seen.add(`${item.targetUrl}\u0000${t.markdown.trim()}`);
-    const rows = Array.isArray(t.rows) && t.rows.length ? t.rows : parseMarkdownTable(t.markdown);
+    const detail = item.details?.comparisonTable as TableDetail | undefined;
+    if (!item.targetUrl || !detail?.markdown || seen.has(`${item.targetUrl}\u0000${detail.markdown.trim()}`)) continue;
+    seen.add(`${item.targetUrl}\u0000${detail.markdown.trim()}`);
+    const rows = Array.isArray(detail.rows) && detail.rows.length ? detail.rows : parseMarkdownTable(detail.markdown);
     if (!rows) continue;
-    out.push({ key: `item:${item.id}`, pageUrl: item.targetUrl, title: "Karşılaştırma tablosu", rows, markdown: t.markdown, html: t.html || markdownToHtml(t.markdown) });
+    out.push({ key: `item:${item.id}`, pageUrl: item.targetUrl, title: t("studio.table.comparisonTitle"), rows, markdown: detail.markdown, html: detail.html || markdownToHtml(detail.markdown) });
   }
   return out;
 }

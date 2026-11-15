@@ -1,3 +1,7 @@
+// The Turkish strings in this file are deliberate test data, not leftover UI text: the generator produces Turkish
+// prompts (with Turkish case suffixes, question particles and stop words) for Turkish-language sites, so the
+// fixtures below (the "Kahvecim" coffee shop, Turkish category names, expected `tr` prompts) exercise those paths.
+// English behaviour is covered by the `en` assertions next to them.
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import { detectLanguage, guessNameLanguage, inflect, questionParticle } from "@/lib/text/turkish";
@@ -230,6 +234,18 @@ describe("LLM query expansion", () => {
     expect(out.map((q) => q.text)).toEqual(["Which shops stock coffee grinders with next-day delivery?"]);
     expect(out[0]).toMatchObject({ source: "llm", intent: "transactional", language: "en", targets: seeds[0].targets });
     expect(await expandWithLlm(seeds, async () => { throw new Error("down"); })).toEqual([]);
+  });
+
+  it("asks for rewrites in the seed's own language (English prompt for en seeds, Turkish prompt for tr seeds)", async () => {
+    const seeds = generateQueries({ ...base, languages: ["en", "tr"], intents: ["transactional"], perIntent: 1, expand: false });
+    const prompts = new Map<string, string>();
+    await expandWithLlm(seeds, async (prompt) => {
+      prompts.set(seeds.find((s) => prompt.endsWith(s.text))!.language, prompt);
+      return "";
+    });
+    expect(prompts.get("en")).toMatch(/^Rewrite the search question below as 3 different natural questions/);
+    expect(prompts.get("en")).not.toContain("Türkçe");
+    expect(prompts.get("tr")).toMatch(/^Aşağıdaki arama sorusunu, .* 3 farklı doğal Türkçe soruya dönüştür\./);
   });
 });
 

@@ -1,3 +1,4 @@
+"""Wikidata reconciliation + JSON-LD export (Turkish sample entities on purpose, see wikidata_fixtures.py)."""
 import json
 
 import httpx

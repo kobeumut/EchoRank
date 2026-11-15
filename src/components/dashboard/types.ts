@@ -273,5 +273,4 @@ export type CompetitorReport = {
   window: { days: number; since: string; total: number; limit: number; truncated: boolean };
   settingsValid: boolean;
   warnings: string[];
->>>>>>> origin/main
 };

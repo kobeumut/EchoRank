@@ -14,6 +14,15 @@ bearer token or a dashboard session (see `src/proxy.ts`).
 | `BotSimulationRecord` | `POST /simulation/bots` | One live fetch per URL × bot, grouped by `runId` |
 | `SyntheticQuery` | `POST /queries/synthetic` | Test prompts with intent, language, difficulty |
 
+## Localization
+
+Human-readable text produced by these endpoints follows the request locale: `?lang=en|tr` (or `?locale=`), then the `locale`
+cookie, then `Accept-Language`, then English (the default and fallback). Persisted generated text (bot-simulation
+diagnostics, AutoGEO suggestions and action items) keeps the language of the request that created it: repeat the call with
+`?lang=tr` or `?lang=en` to regenerate it in another language. Status codes, JSON field names and enum values never depend on
+the locale. The `languages` / `language` parameters of the query endpoints (test prompts: `tr`, `en`) and the `lang` field of
+the Wikidata `requery` action (Wikidata search language) are separate, data-level settings.
+
 ## AutoGEO — `/autogeo`
 
 - `GET ?status=pending,applied&ruleType=stats,quotes,citations,answer_capsule,tone,keyword_stuffing,comparison_table&pageUrl=&minGain=&sort=gain|recent&limit=&offset=`
@@ -30,7 +39,7 @@ Insertions keep their anchor block in `suggestedSnippet`, so applying a suggesti
 
 - `POST /autogeo/:suggestionId/apply` — "Apply to CMS". Sends a signed `autogeo.suggestion.applied` event
   (`x-aiv-event`, `x-aiv-timestamp`, `x-aiv-signature` = HMAC-SHA256 like syndication) to every syndication webhook
-  configured under AI Dağıtım. Payload: `site`, `suggestion { id, pageUrl, ruleType, ruleId, title, expectedGain,
+  configured under AI Distribution. Payload: `site`, `suggestion { id, pageUrl, ruleType, ruleId, title, expectedGain,
   original {markdown, html}, suggested {markdown, html}, inserted?, diffMarkdown }`. At least one `2xx` → status
   `applied`. No webhook configured → `{ configured: false }`, nothing sent, status unchanged. Every webhook failed →
   `502` with `details.deliveries`, status unchanged. Each delivery is logged as a `PlatformSubmission`.
@@ -54,7 +63,7 @@ Also returned on refresh:
 - `brandSafety` — site tone counts (overall and per model), the strongest sentiment evidence (negative first) and
   potential hallucinations (`visibilityAnalysis.facts` conflicts with the quoted clause), capped by `evidenceLimit`.
 
-The dashboard panel is `/sites/:id/competitors` (Model Payı & Rakipler).
+The dashboard panel is `/sites/:id/competitors` (Share of Model & Competitors).
 
 ## Entities — `/entities/reconcile`
 
@@ -84,12 +93,12 @@ The dashboard panel is `/sites/:id/competitors` (Model Payı & Rakipler).
 ## Synthetic queries — `/queries/synthetic`
 
 - `POST { "mode": "generate", "languages"?: ["tr","en"], "intents"?: [...], "maxPerIntent"?: 10, "save"?: true }`
-  expands TR/EN templates for the four intents (informational, comparative, transactional, reputation) over the
+  expands Turkish and English templates for the four intents (informational, comparative, transactional, reputation) over the
   knowledge graph (products, categories, concepts, FAQ questions), target keywords, the site brand and configured
   competitors. `save: false` previews.
-- `POST { "mode": "manual", "queries": [{ "query", "intent", "language"? }] }` stores hand-written prompts;
+- `POST { "mode": "manual", "queries": [{ "query", "intent", "language"? }] }` stores hand-written prompts (`language` is `tr` or `en`);
   `POST { "mode": "archive", "ids": [...] }` retires them (re-adding revives).
-- Exact duplicates are caught case/diacritics-insensitively (`Güvenilir` = `guvenilir`), near duplicates by token
+- Exact duplicates are caught case- and diacritics-insensitively (`Café` = `cafe`), near duplicates by token
   Jaccard ≥ 0.8. `difficulty` (0-100) is a heuristic: comparative > transactional > reputation > informational,
   unbranded prompts are harder, prompts naming the site's own brand easier.
 - `GET ?intent=comparative,reputation&language=tr&status=active&source=template&limit=&offset=` → `items`, `total`, `byIntent`.

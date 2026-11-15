@@ -1,11 +1,19 @@
 // AutoGEO integration: turns the crawler's page-level AutoGEO reports (services/crawler
 // `geo_crawler.scoring.autogeo`, shipped under `autogeo` in the `geo-audit --db-records` payload) into
-// "Ne Yapılmalı?" ActionItems with copy-paste Markdown/HTML diffs, plus a compact summary for GeoAudit.metrics.
+// "What to do?" ActionItems with copy-paste Markdown/HTML diffs, plus a compact summary for GeoAudit.metrics.
+//
+// The text this module writes itself (metric labels, item titles / descriptions, snippet instructions) comes from the
+// `autogeo.*` message catalog in the requested `locale` (default English). The engine's own text (rationale, metric
+// details, rewrites) arrives in the payload and is passed through untouched. Stored items keep the language they were
+// generated in.
 //
 // Research basis: GEO (KDD 2024, arXiv:2311.09735) and AutoGEO (ICLR 2026, arXiv:2510.11438).
 import { z } from "zod";
 import { prisma } from "../db";
 import type { ActionCategory, ActionEffort, ActionImpact } from "../constants";
+import { DEFAULT_LOCALE, type Locale } from "../i18n/config";
+import { serverT } from "../i18n/request";
+import type { Translator } from "../i18n/translate";
 import { getSiteOrThrow } from "./sites";
 
 export const AUTOGEO_METRICS = [
@@ -19,47 +27,21 @@ export const AUTOGEO_METRICS = [
 export type AutoGeoMetricKey = (typeof AUTOGEO_METRICS)[number];
 export const AUTOGEO_RULE_PREFIX = "autogeo.";
 
+/** Per-metric defaults. `labelKey` / `instructionsKey` are `autogeo.metric.*` catalog keys (resolve with `t`). */
 export const AUTOGEO_METRIC_INFO: Record<
   AutoGeoMetricKey,
-  { label: string; category: ActionCategory; effort: ActionEffort; instructions: string }
+  { labelKey: string; category: ActionCategory; effort: ActionEffort; instructionsKey: string }
 > = {
-  statistics: {
-    label: "İstatistik ve sayısal veri",
-    category: "content",
-    effort: "medium",
-    instructions: "Köşeli parantezli [SAYI]/[%ORAN] alanlarını doğrulanmış rakamlarla ve kaynağıyla doldurun.",
-  },
-  quotations: {
-    label: "Uzman alıntısı",
-    category: "authority",
-    effort: "medium",
-    instructions: "Gerçek, izinli ve unvanlı bir uzmandan doğrudan alıntı kullanın; ad, unvan ve kurumu yazın.",
-  },
-  citations: {
-    label: "Yetkili kaynak gösterimi",
-    category: "authority",
-    effort: "medium",
-    instructions: "Yer tutucu bağlantıları .gov/.edu, DOI veya tanınmış sektör raporlarının adresleriyle değiştirin.",
-  },
-  answer_capsules: {
-    label: "Yanıt kapsülü (40-60 kelime)",
-    category: "content",
-    effort: "low",
-    instructions: "Paragrafı başlığın hemen altına yerleştirin; 40-60 kelime ve kendi başına anlaşılır kalsın.",
-  },
-  authority_fluency: {
-    label: "Otoriter ton ve akıcılık",
-    category: "content",
-    effort: "low",
-    instructions: "Önerilen metni yayına almadan önce anlamın korunduğunu kontrol edin.",
-  },
-  keyword_stuffing: {
-    label: "Anahtar kelime doldurma",
-    category: "content",
-    effort: "low",
-    instructions: "[eş anlamlı/zamir] yer tutucularını doğal eş anlamlılar veya zamirlerle değiştirin.",
-  },
+  statistics: { labelKey: "autogeo.metric.statistics.label", category: "content", effort: "medium", instructionsKey: "autogeo.metric.statistics.instructions" },
+  quotations: { labelKey: "autogeo.metric.quotations.label", category: "authority", effort: "medium", instructionsKey: "autogeo.metric.quotations.instructions" },
+  citations: { labelKey: "autogeo.metric.citations.label", category: "authority", effort: "medium", instructionsKey: "autogeo.metric.citations.instructions" },
+  answer_capsules: { labelKey: "autogeo.metric.answer_capsules.label", category: "content", effort: "low", instructionsKey: "autogeo.metric.answer_capsules.instructions" },
+  authority_fluency: { labelKey: "autogeo.metric.authority_fluency.label", category: "content", effort: "low", instructionsKey: "autogeo.metric.authority_fluency.instructions" },
+  keyword_stuffing: { labelKey: "autogeo.metric.keyword_stuffing.label", category: "content", effort: "low", instructionsKey: "autogeo.metric.keyword_stuffing.instructions" },
 };
+
+/** Human-readable metric name in the translator's language. */
+export const autoGeoMetricLabel = (metric: AutoGeoMetricKey, t: Translator) => t(AUTOGEO_METRIC_INFO[metric].labelKey);
 
 // ---------------------------------------------------------------- payload schema (snake_case from Python)
 
@@ -294,6 +276,7 @@ function serializeImprovement(imp: AutoGeoImprovement, url: string) {
 }
 
 function buildItem(
+  t: Translator,
   page: AutoGeoPage,
   ruleId: string,
   metric: AutoGeoMetricKey,
@@ -303,6 +286,7 @@ function buildItem(
   extra: Record<string, unknown> = {},
 ): AutoGeoActionItem {
   const info = AUTOGEO_METRIC_INFO[metric];
+  const metricLabel = autoGeoMetricLabel(metric, t);
   const m = page.metrics[metric];
   const effort: ActionEffort = imps.length > 3 && info.effort === "low" ? "medium" : info.effort;
   const impact = impactOf(gain, metric, page);
@@ -311,9 +295,9 @@ function buildItem(
   const patch = serialized.map((s) => s.diffMarkdown).filter(Boolean).join("\n");
   const others = [...new Set(imps.flatMap((i) => i.metrics ?? []).filter((k) => k !== metric && isMetric(k)))];
   const description = [
-    m ? `${info.label} skoru ${Math.round(m.score)}/100. ${m.detail}` : info.label,
-    `Tahmini görünürlük kazancı: +%${gain.toFixed(1)}.`,
-    others.length ? `Bu yamalar ayrıca şunları da iyileştirir: ${others.map((k) => AUTOGEO_METRIC_INFO[k as AutoGeoMetricKey].label).join(", ")}.` : "",
+    m ? t("autogeo.item.description.score", { label: metricLabel, score: Math.round(m.score), detail: m.detail }) : metricLabel,
+    t("autogeo.item.description.gain", { gain: gain.toFixed(1) }),
+    others.length ? t("autogeo.item.description.others", { labels: others.map((k) => autoGeoMetricLabel(k as AutoGeoMetricKey, t)).join(", ") }) : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -338,7 +322,7 @@ function buildItem(
       affected_urls: [page.url],
       affected_count: 1,
       snippet: patch
-        ? { language: "diff", code: patch, filename: `${p}.md`, instructions: info.instructions }
+        ? { language: "diff", code: patch, filename: `${p}.md`, instructions: t(info.instructionsKey) }
         : null,
       improvements: serialized,
       ...extra,
@@ -349,12 +333,14 @@ function buildItem(
 /**
  * One ActionItem per (page, metric) that needs work, carrying every block-level improvement for that metric.
  * ruleId `autogeo.<metric>` + targetUrl keeps the item stable across audits (see `applyAuditResult`), so a
- * fixed page auto-resolves its item on the next audit.
+ * fixed page auto-resolves its item on the next audit. `opts.locale` selects the language of the generated titles,
+ * descriptions and snippet instructions (default English); engine text from the payload is passed through as is.
  */
 export function autogeoToActionItems(
   report: AutoGeoReport,
-  opts: { maxItems?: number; passScore?: number } = {},
+  opts: { maxItems?: number; passScore?: number; locale?: Locale } = {},
 ): AutoGeoActionItem[] {
+  const t = serverT(opts.locale ?? DEFAULT_LOCALE);
   const maxItems = opts.maxItems ?? 150;
   const passScore = opts.passScore ?? 70;
   const items: AutoGeoActionItem[] = [];
@@ -376,17 +362,18 @@ export function autogeoToActionItems(
       const imps = byMetric.get(metric) ?? [];
       if (!m || (m.score >= passScore && imps.length === 0)) continue;
       const gain = m.potential_gain_pct || imps.reduce((s, i) => s + i.expected_gain_pct, 0);
-      const info = AUTOGEO_METRIC_INFO[metric];
+      const label = autoGeoMetricLabel(metric, t);
+      const path = pathOf(page.url).replace(/^index$/, "");
       const title = imps.length
-        ? `${info.label}: ${imps.length} iyileştirme — /${pathOf(page.url).replace(/^index$/, "")}`
-        : `${info.label} zayıf — /${pathOf(page.url).replace(/^index$/, "")}`;
-      items.push(buildItem(page, `${AUTOGEO_RULE_PREFIX}${metric}`, metric, title, imps, gain));
+        ? t("autogeo.item.title", { label, count: imps.length, path })
+        : t("autogeo.item.titleWeak", { label, path });
+      items.push(buildItem(t, page, `${AUTOGEO_RULE_PREFIX}${metric}`, metric, title, imps, gain));
     }
     if (tables.length) {
       const gain = tables.reduce((s, i) => s + i.expected_gain_pct, 0);
       items.push(
-        buildItem(page, "autogeo.comparison_table", "statistics",
-          `Karşılaştırma tablosu ekleyin — /${pathOf(page.url).replace(/^index$/, "")}`, tables, gain,
+        buildItem(t, page, "autogeo.comparison_table", "statistics",
+          t("autogeo.item.titleComparison", { path: pathOf(page.url).replace(/^index$/, "") }), tables, gain,
           { comparisonTable: page.comparison_table ?? null }),
       );
     }

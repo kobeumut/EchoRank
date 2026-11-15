@@ -2,7 +2,7 @@
 
 AI answer engines (ChatGPT search, Perplexity, Gemini, Claude) disambiguate brands, companies and authors
 against public knowledge graphs. Linking site entities to their Wikidata item through Schema.org `sameAs`
-tells them exactly *which* "Ayşe Yılmaz" or "Brevio" the page is about.
+tells them exactly *which* "Jane Doe" or "Brevio" the page is about.
 
 ## Pipeline (Python, `services/crawler`)
 
@@ -13,7 +13,12 @@ geo-reconcile graph.json -o graph.reconciled.json --jsonld schema.json [--lang t
 ```
 
 `CRUNCHBASE_API_KEY` enables the Crunchbase fallback. `--max-concepts` (default 15) bounds how many keyword
-concepts are looked up; schema.org `about`/`mentions` concepts always go first.
+concepts are looked up; schema.org `about`/`mentions` concepts always go first. `geo-reconcile` also takes
+`--types Organization,Brand,...` to restrict the entity types.
+
+The Wikidata / Wikipedia search language defaults to the dominant language of the crawled pages. Override it with
+`--lang <code>` on `geo-crawler` and `geo-reconcile`, or `--wikidata-lang <code>` on `geo-audit`, where `--lang en|tr` is the
+language of the report text. It is unrelated to the dashboard locale.
 
 For every `Organization`, `Brand`, `Person`, `Product` and `Concept` node (`geo_crawler/wikidata.py`):
 
@@ -21,7 +26,7 @@ For every `Organization`, `Brand`, `Person`, `Product` and `Concept` node (`geo_
 2. `wbsearchentities` (site language, then English) → `wbgetentities` (labels, aliases, claims, sitelinks).
 3. Each candidate is scored 0–1:
    `0.5·name + 0.25·type + 0.15·sector context + 0.10·search rank`
-   - **name**: Turkish-aware folding, legal suffixes (A.Ş., Ltd. Şti., Inc.) ignored, aliases count.
+   - **name**: diacritic folding that also covers Turkish letters (dotless i included), legal suffixes (Inc., Ltd., GmbH, and Turkish forms such as "A.S." / "Ltd. Sti.") ignored, aliases count.
    - **type**: `P31` against accepted classes (organization/company/brand/human/product…); unknown classes go
      through a SPARQL `P31/P279*` closure query (skipped gracefully when the endpoint is busy).
      Disambiguation pages, given/family-name items and Wikimedia lists score 0 and are multiplied by 0.3.
@@ -43,7 +48,7 @@ Only `matched` / `declared` / `verified` results publish anything. Node properti
 | `reconciliation` | `{status, method, confidence, candidates[top 3 with signals], lang, suggested?, rejectedQids?, reconciledAt, verifiedAt?}` |
 
 Graph edges: `entity ─same_as→ wikidata:Q…` (`WikidataEntity` node) and `same_as` between two site entities
-that resolved to the same QID (e.g. Brand "Brevio" and Organization "Brevio A.Ş.").
+that resolved to the same QID (e.g. Brand "Brevio" and Organization "Brevio Ltd.").
 
 ## Review API (Next.js, `src/lib/services/wikidata.ts`)
 

@@ -11,8 +11,8 @@ async function main() {
       url,
       title: "Demo Shop",
       description: "Seed site for local development",
-      targetKeywords: ["organik zeytinyağı", "soğuk sıkım zeytinyağı fiyatları"],
-      settings: { maxPages: 200, maxDepth: 4, locale: "tr-TR" },
+      targetKeywords: ["organic olive oil", "cold-pressed olive oil prices"],
+      settings: { maxPages: 200, maxDepth: 4, locale: "en-US" },
     },
   });
 
@@ -20,12 +20,12 @@ async function main() {
     prisma.graphEntity.create({
       data: { siteId: site.id, key, entityType, name, url: path ? url + path : null },
     });
-  const home = await mk(url + "/", "Page", "Anasayfa", "/");
-  const cat = await mk("category:zeytinyagi", "Category", "Zeytinyağı", "/zeytinyagi");
-  const prod = await mk("product:sk-1", "Product", "Soğuk Sıkım Zeytinyağı 1L", "/urun/soguk-sikim-1l");
-  const faq = await mk("faq:1", "FAQ", "Soğuk sıkım nedir?", "/sss");
-  const org = await mk("org", "Organization", "Demo Shop A.Ş.");
-  const orphan = await mk(url + "/eski-kampanya", "Page", "Eski Kampanya", "/eski-kampanya");
+  const home = await mk(url + "/", "Page", "Home", "/");
+  const cat = await mk("category:olive-oil", "Category", "Olive Oil", "/olive-oil");
+  const prod = await mk("product:cp-1", "Product", "Cold-Pressed Olive Oil 1L", "/product/cold-pressed-1l");
+  const faq = await mk("faq:1", "FAQ", "What is cold-pressed olive oil?", "/faq");
+  const org = await mk("org", "Organization", "Demo Shop Inc.");
+  const orphan = await mk(url + "/old-campaign", "Page", "Old Campaign", "/old-campaign");
   void orphan;
 
   const rel = (s: string, t: string, relationType: string) =>
@@ -53,10 +53,10 @@ async function main() {
   });
 
   const checks: [string, string, string, number | null][] = [
-    ["chatgpt", "en iyi organik zeytinyağı", "mentioned", 4],
-    ["gemini", "en iyi organik zeytinyağı", "cited", 2],
-    ["claude", "soğuk sıkım zeytinyağı nereden alınır", "none", null],
-    ["perplexity", "soğuk sıkım zeytinyağı nereden alınır", "cited", 1],
+    ["chatgpt", "best organic olive oil", "mentioned", 4],
+    ["gemini", "best organic olive oil", "cited", 2],
+    ["claude", "where to buy cold-pressed olive oil", "none", null],
+    ["perplexity", "where to buy cold-pressed olive oil", "cited", 1],
   ];
   for (const [model, query, citationStatus, position] of checks) {
     await prisma.llmVisibilityRecord.create({ data: { siteId: site.id, model, query, citationStatus, position } });
@@ -64,10 +64,10 @@ async function main() {
 
   await prisma.actionItem.createMany({
     data: [
-      { siteId: site.id, auditId: audit.id, title: "Ürün sayfalarına Product + Offer JSON-LD ekleyin", category: "schema", impact: "high" },
-      { siteId: site.id, auditId: audit.id, title: "robots.txt içinde GPTBot / PerplexityBot erişimini açın", category: "crawler", impact: "high" },
-      { siteId: site.id, auditId: audit.id, title: "Yazar biyografisi ve uzmanlık sayfası oluşturun (E-E-A-T)", category: "authority", impact: "medium" },
-      { siteId: site.id, auditId: audit.id, title: "Yetim sayfa /eski-kampanya için iç link ekleyin veya kaldırın", category: "content", impact: "low" },
+      { siteId: site.id, auditId: audit.id, title: "Add Product + Offer JSON-LD to product pages", category: "schema", impact: "high" },
+      { siteId: site.id, auditId: audit.id, title: "Allow GPTBot / PerplexityBot access in robots.txt", category: "crawler", impact: "high" },
+      { siteId: site.id, auditId: audit.id, title: "Create an author bio and expertise page (E-E-A-T)", category: "authority", impact: "medium" },
+      { siteId: site.id, auditId: audit.id, title: "Add internal links to the orphan page /old-campaign or remove it", category: "content", impact: "low" },
     ],
   });
 

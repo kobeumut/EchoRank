@@ -1,4 +1,8 @@
-"""Sample pages (weak vs. optimized) for the AutoGEO tests: blog, product and service content."""
+"""Sample pages (weak vs. optimized) for the AutoGEO tests: blog, product and service content.
+
+The pages are Turkish web content on purpose: they exercise the Turkish lexicons, placeholders and heuristics
+(vague quantities, hedges, attribution verbs, ...). ``EN_BLOG`` covers the English paths.
+"""
 
 WEAK_BLOG = """<html lang="tr"><head><title>Espresso Rehberi | Kahve Dükkanı</title></head><body>
 <nav><a href="/">Anasayfa</a> <a href="/blog">Blog</a></nav>

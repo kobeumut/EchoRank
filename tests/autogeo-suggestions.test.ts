@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import { AUTOGEO_RULE_TYPES, SUGGESTION_STATUSES } from "@/lib/constants";
 import { autoGeoReportSchema, createUnifiedDiff } from "@/lib/services/autogeo";
@@ -9,8 +9,10 @@ import { startAudit } from "@/lib/services/audit";
 import * as result from "@/app/api/sites/[id]/audit/[auditId]/result/route";
 import * as route from "@/app/api/sites/[id]/autogeo/route";
 import * as itemRoute from "@/app/api/sites/[id]/autogeo/[suggestionId]/route";
+import * as applyRoute from "@/app/api/sites/[id]/autogeo/[suggestionId]/apply/route";
 import { ctx, req, resetDb } from "./helpers";
 
+// Engine output for a Turkish sample page (Turkish snippets are the input of these tests, not text of ours).
 const RAW = JSON.parse(readFileSync(path.resolve(__dirname, "fixtures/autogeo-report.json"), "utf8"));
 const AUDIT = JSON.parse(readFileSync(path.resolve(__dirname, "fixtures/geo-audit-result.json"), "utf8"));
 const REPORT = autoGeoReportSchema.parse(RAW);
@@ -46,6 +48,7 @@ describe("suggestion extraction", () => {
       expect(d.diffMarkdown).toMatch(/^--- a\//);
     }
     // insertions keep their anchor heading, so applying = replace original with suggested
+    // ("Teknik özellikler" = "Technical specifications": heading of the Turkish sample page in the fixture)
     const insert = drafts.find((d) => d.ruleType === "answer_capsule" && d.originalSnippet === "## Teknik özellikler")!;
     expect(insert.suggestedSnippet).toMatch(/^## Teknik özellikler\n\nTeknik özellikler: Basınç/);
   });
@@ -117,7 +120,7 @@ describe("GET/POST /api/sites/[id]/autogeo + PATCH /autogeo/[suggestionId]", () 
     const rewritten = {
       ...RAW,
       pages: RAW.pages.map((p: { url: string; improvements: object[] }) =>
-        p.url === WEAK ? { ...p, improvements: [{ ...p.improvements[0], before_markdown: "Yeni paragraf.", after_markdown: "Yeni paragraf, %42 artış." }] } : p),
+        p.url === WEAK ? { ...p, improvements: [{ ...p.improvements[0], before_markdown: "New paragraph.", after_markdown: "New paragraph, up 42%." }] } : p),
     };
     const third = (await post(s.id, { report: rewritten })).body;
     expect(third.created).toBe(1);
@@ -152,6 +155,27 @@ describe("GET/POST /api/sites/[id]/autogeo + PATCH /autogeo/[suggestionId]", () 
     expect(body.created).toBeGreaterThan(0);
     const rows = await prisma.autoGeoSuggestion.findMany({ where: { siteId: s.id } });
     expect(rows.every((r) => r.actionItemId && r.suggestedSnippet && r.diffMarkdown)).toBe(true);
+  });
+
+  describe("Apply to CMS delivery message", () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    it("is written in the request's language (English by default)", async () => {
+      vi.stubEnv("ALLOW_PRIVATE_NETWORK_TARGETS", "true"); // no DNS in tests
+      vi.stubGlobal("fetch", vi.fn(async () => new Response("ok", { status: 200 })));
+      const s = await prisma.site.create({
+        data: { url: "https://shop.example.com", title: "Shop", settings: { distribution: { syndication: { webhooks: [{ url: "https://cms.example.com/hook" }] } } } },
+      });
+      await post(s.id, { report: RAW });
+      const row = await prisma.autoGeoSuggestion.findFirstOrThrow({ where: { siteId: s.id } });
+      const apply = async (query = "") => {
+        const res = await applyRoute.POST(req(`/api/sites/${s.id}/autogeo/${row.id}/apply${query}`, { method: "POST" }), sctx(s.id, row.id));
+        return { status: res.status, body: await res.json() };
+      };
+      expect((await apply()).body.deliveries[0]).toMatchObject({ status: "sent", message: "Delivered" });
+      expect((await apply("?lang=tr")).body.deliveries[0]).toMatchObject({ status: "sent", message: "Teslim edildi" });
+      vi.unstubAllEnvs();
+    });
   });
 
   it("validates input and scopes suggestions to their site", async () => {

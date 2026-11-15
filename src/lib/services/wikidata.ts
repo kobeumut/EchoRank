@@ -61,8 +61,12 @@ const CLAIM_PROPS = ["P31", "P856", "P69", "P101", "P106", "P108", "P512", ...SA
 
 // ---------------------------------------------------------------- text helpers
 
+// Turkish (and a few accented Latin) letters folded to ASCII so "Arçelik" matches "Arcelik" when reconciling entity names:
+// language data for Turkish names, not UI text.
 const TR_FOLD: Record<string, string> = { ç: "c", ğ: "g", ı: "i", ö: "o", ş: "s", ü: "u", Ç: "c", Ğ: "g", İ: "i", Ö: "o", Ş: "s", Ü: "u", â: "a", î: "i", û: "u" };
 const LEGAL_SUFFIX = /\b(a\.?\s?s|ltd|sti|san|tic|ve|inc|llc|gmbh|corp|corporation|co|company|plc|ag|sa|srl|bv|limited|holding)\b\.?/g;
+// Name-matching stop words: English ("the", "and", "of" …) plus the Turkish conjunction/particles "ve" (and), "ile" (with),
+// "bir" (a), "icin" (for), "de"/"da" (also).
 const STOP = new Set(["the", "and", "of", "a", "an", "ve", "ile", "bir", "icin", "for", "in", "de", "da"]);
 
 export function fold(text: string): string {

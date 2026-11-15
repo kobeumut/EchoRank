@@ -1,8 +1,9 @@
 "use client";
 
 import { Fragment, useMemo } from "react";
-import { annotate, diffStats, sideBySideDiff, SIGNAL_LABELS, type DiffRow, type DiffSeg, type Piece, type SignalTag } from "@/lib/dashboard/autogeo-studio";
+import { annotate, diffStats, sideBySideDiff, signalLabel, SIGNAL_TAGS, type DiffRow, type DiffSeg, type Piece, type SignalTag } from "@/lib/dashboard/autogeo-studio";
 import { cx } from "./ui";
+import { useFormat } from "./use-format";
 
 export type DiffMode = "split" | "unified";
 
@@ -28,12 +29,13 @@ export const TAG_SWATCH: Record<SignalTag, string> = {
 };
 
 function Pieces({ segs }: { segs: DiffSeg[] }) {
+  const { t } = useFormat();
   const pieces = useMemo(() => annotate(segs), [segs]);
   if (!pieces.length) return <span className="select-none text-zinc-300 dark:text-zinc-700">⏎</span>;
   return (
     <>
       {pieces.map((p, i) => (
-        <span key={i} className={cx(KIND_CLASS[p.kind], p.tag && TAG_CLASS[p.tag])} title={p.tag ? SIGNAL_LABELS[p.tag] : undefined}>
+        <span key={i} className={cx(KIND_CLASS[p.kind], p.tag && TAG_CLASS[p.tag])} title={p.tag ? signalLabel(t, p.tag) : undefined}>
           {p.text}
         </span>
       ))}
@@ -52,17 +54,18 @@ const gutter = "select-none px-2 text-right font-mono text-[10px] leading-6 text
 const cell = "min-w-0 whitespace-pre-wrap break-words px-3 py-0.5 text-[13px] leading-6 text-zinc-800 dark:text-zinc-200";
 
 export function SignalLegend({ className }: { className?: string }) {
+  const { t, intlLocale } = useFormat();
   return (
-    <ul className={cx("flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-zinc-500", className)} aria-label="Renk açıklaması">
+    <ul className={cx("flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-zinc-500", className)} aria-label={t("studio.diff.legend")}>
       <li className="flex items-center gap-1">
-        <span className="rounded-sm bg-red-200 px-1 text-red-950 line-through dark:bg-red-900/60 dark:text-red-100">abc</span> çıkarılan
+        <span className="rounded-sm bg-red-200 px-1 text-red-950 line-through dark:bg-red-900/60 dark:text-red-100">abc</span> {t("studio.diff.removed")}
       </li>
       <li className="flex items-center gap-1">
-        <span className="rounded-sm bg-emerald-200 px-1 text-emerald-950 dark:bg-emerald-800/60 dark:text-emerald-50">abc</span> eklenen
+        <span className="rounded-sm bg-emerald-200 px-1 text-emerald-950 dark:bg-emerald-800/60 dark:text-emerald-50">abc</span> {t("studio.diff.added")}
       </li>
-      {(Object.keys(SIGNAL_LABELS) as SignalTag[]).map((t) => (
-        <li key={t} className="flex items-center gap-1">
-          <span className={cx("px-1 text-zinc-700 dark:text-zinc-200", TAG_SWATCH[t])}>12</span> {SIGNAL_LABELS[t].toLowerCase()}
+      {SIGNAL_TAGS.map((tag) => (
+        <li key={tag} className="flex items-center gap-1">
+          <span className={cx("px-1 text-zinc-700 dark:text-zinc-200", TAG_SWATCH[tag])}>12</span> {signalLabel(t, tag).toLocaleLowerCase(intlLocale)}
         </li>
       ))}
     </ul>
@@ -71,6 +74,7 @@ export function SignalLegend({ className }: { className?: string }) {
 
 /** Side-by-side (or unified) line diff with word-level changes and GEO signal highlighting. */
 export function DiffViewer({ original, suggested, mode, maxHeight = "28rem" }: { original: string; suggested: string; mode: DiffMode; maxHeight?: string }) {
+  const { t } = useFormat();
   const rows = useMemo(() => sideBySideDiff(original, suggested), [original, suggested]);
   const stats = useMemo(() => diffStats(rows), [rows]);
 
@@ -79,19 +83,19 @@ export function DiffViewer({ original, suggested, mode, maxHeight = "28rem" }: {
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50 px-3 py-1.5 text-[11px] dark:border-zinc-800 dark:bg-zinc-950">
         {mode === "split" ? (
           <div className="grid flex-1 grid-cols-2 gap-2 font-medium text-zinc-600 dark:text-zinc-400">
-            <span>Orijinal içerik</span>
-            <span>AI optimizasyonlu içerik</span>
+            <span>{t("studio.diff.original")}</span>
+            <span>{t("studio.diff.optimized")}</span>
           </div>
         ) : (
-          <span className="font-medium text-zinc-600 dark:text-zinc-400">Birleşik görünüm</span>
+          <span className="font-medium text-zinc-600 dark:text-zinc-400">{t("studio.diff.unifiedView")}</span>
         )}
         <span className="tabular-nums text-zinc-500">
-          <span className="text-emerald-700 dark:text-emerald-400">+{stats.addedWords}</span> / <span className="text-red-700 dark:text-red-400">−{stats.removedWords}</span> kelime
+          <span className="text-emerald-700 dark:text-emerald-400">+{stats.addedWords}</span> / <span className="text-red-700 dark:text-red-400">−{stats.removedWords}</span> {t("studio.diff.words")}
         </span>
       </div>
       <div className="overflow-auto bg-white dark:bg-zinc-950" style={{ maxHeight }}>
         {mode === "split" ? (
-          <div role="table" aria-label="Yan yana karşılaştırma" className="grid min-w-[40rem] grid-cols-[2.25rem_minmax(0,1fr)_2.25rem_minmax(0,1fr)]">
+          <div role="table" aria-label={t("studio.diff.splitAria")} className="grid min-w-[40rem] grid-cols-[2.25rem_minmax(0,1fr)_2.25rem_minmax(0,1fr)]">
             {rows.map((r, i) => (
               <Fragment key={i}>
                 <div role="cell" className={cx(gutter, ROW_BG[r.type].left)}>
@@ -110,7 +114,7 @@ export function DiffViewer({ original, suggested, mode, maxHeight = "28rem" }: {
             ))}
           </div>
         ) : (
-          <div role="table" aria-label="Birleşik karşılaştırma" className="grid grid-cols-[2.25rem_1.25rem_minmax(0,1fr)]">
+          <div role="table" aria-label={t("studio.diff.unifiedAria")} className="grid grid-cols-[2.25rem_1.25rem_minmax(0,1fr)]">
             {rows.flatMap((r, i) => {
               const out = [];
               if (r.type === "same") out.push({ key: `${i}s`, sign: " ", no: r.left!.no, segs: r.left!.segs, bg: "" });

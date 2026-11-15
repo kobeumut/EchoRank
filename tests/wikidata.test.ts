@@ -1,3 +1,6 @@
+// The Turkish names here ("Kahve Dükkanı", "Ayşe Yılmaz", "Boğaziçi Üniversitesi" …) are deliberate test data: entity
+// reconciliation must match Turkish names across diacritics (ç ğ ı ö ş ü), Turkish legal suffixes ("A.Ş.") and Turkish
+// Wikipedia/Wikidata labels, so the fixtures model a Turkish-language site.
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import { buildJsonLd, validateJsonLd } from "@/lib/jsonld";

@@ -1,6 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useT } from "@/lib/i18n/provider";
+import { setApiTranslator } from "./api";
 
 type Toast = { id: number; kind: "success" | "error" | "info"; message: string };
 type ToastApi = { push: (kind: Toast["kind"], message: string) => void };
@@ -18,32 +20,37 @@ const ICONS: Record<Toast["kind"], string> = { success: "✓", error: "!", info:
 let nextId = 1;
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const t = useT();
   const [toasts, setToasts] = useState<Toast[]>([]);
+  // Lets the non-hook helpers in ./api (apiFetch / errorMessage) produce messages in the active locale.
+  useEffect(() => {
+    setApiTranslator(t);
+  }, [t]);
   const push = useCallback((kind: Toast["kind"], message: string) => {
     const id = nextId++;
-    setToasts((t) => [...t.slice(-3), { id, kind, message }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), kind === "error" ? 7000 : 4000);
+    setToasts((list) => [...list.slice(-3), { id, kind, message }]);
+    setTimeout(() => setToasts((list) => list.filter((x) => x.id !== id)), kind === "error" ? 7000 : 4000);
   }, []);
   const api = useMemo(() => ({ push }), [push]);
   return (
     <ToastContext.Provider value={api}>
       {children}
       <div aria-live="polite" className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2">
-        {toasts.map((t) => (
+        {toasts.map((toast) => (
           <div
-            key={t.id}
-            role={t.kind === "error" ? "alert" : "status"}
-            className={`pointer-events-auto flex items-start gap-2 rounded-lg border px-3 py-2 text-sm shadow-lg ${STYLES[t.kind]}`}
+            key={toast.id}
+            role={toast.kind === "error" ? "alert" : "status"}
+            className={`pointer-events-auto flex items-start gap-2 rounded-lg border px-3 py-2 text-sm shadow-lg ${STYLES[toast.kind]}`}
           >
             <span aria-hidden className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-current text-[10px] font-bold">
-              {ICONS[t.kind]}
+              {ICONS[toast.kind]}
             </span>
-            <span className="min-w-0 break-words">{t.message}</span>
+            <span className="min-w-0 break-words">{toast.message}</span>
             <button
               type="button"
-              aria-label="Kapat"
+              aria-label={t("shared.close")}
               className="ml-auto opacity-60 hover:opacity-100"
-              onClick={() => setToasts((all) => all.filter((x) => x.id !== t.id))}
+              onClick={() => setToasts((all) => all.filter((x) => x.id !== toast.id))}
             >
               ×
             </button>

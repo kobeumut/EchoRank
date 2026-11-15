@@ -1,12 +1,11 @@
 import { lookup } from "node:dns/promises";
-import { BlockList, isIP } from "node:net";
+import { isIP } from "node:net";
+import { isPrivateAddress } from "../distribution/net";
 import { request as httpsRequest } from "node:https";
 import { request as httpRequest } from "node:http";
 
-const blocked = new BlockList();
-for (const [address, prefix] of [ ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12], ["192.0.0.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["224.0.0.0", 4], ["240.0.0.0", 4] ] as const) blocked.addSubnet(address, prefix, "ipv4");
-for (const [address, prefix] of [["::", 128], ["::1", 128], ["fc00::", 7], ["fe80::", 10], ["ff00::", 8], ["2001:db8::", 32]] as const) blocked.addSubnet(address, prefix, "ipv6");
-export const isBlockedReportAddress = (ip: string) => !isIP(ip) || blocked.check(ip, isIP(ip) === 6 ? "ipv6" : "ipv4");
+/** True for non-IP strings and every private / reserved / mapped address (shared with distribution/net.ts). */
+export const isBlockedReportAddress = (ip: string) => isPrivateAddress(ip);
 
 /** DNS-pinned connection: no redirect following, private/mapped IPs, credentials, or unbounded bodies. */
 export async function publicRequest(raw: string, body?: string) {

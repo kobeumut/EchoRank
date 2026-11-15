@@ -1,5 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db";
+import { DEFAULT_LOCALE, type Locale } from "../i18n/config";
+import { serverT } from "../i18n/request";
 import { getSiteOrThrow } from "../services/sites";
 
 const DAY = 86_400_000;
@@ -7,8 +9,13 @@ const rate = (hits: number, total: number) => total ? Math.round(hits / total * 
 const diff = (a: number | null, b: number | null) => a === null || b === null ? null : a - b;
 export type Step = { name: string; status: "ok" | "failed" | "skipped"; detail: string };
 
-/** Immutable evidence, equal adjacent UTC windows; never treat missing observations as zero. */
-export async function buildSnapshot(siteId: string, days: number, until = new Date(), steps: Step[] = []) {
+/**
+ * Immutable evidence, equal adjacent UTC windows; never treat missing observations as zero.
+ * The prose (summary, alerts, caveats) is written in `locale` and stored with the snapshot as `locale`, so the
+ * HTML/PDF renderers later show the whole report in the language it was generated in.
+ */
+export async function buildSnapshot(siteId: string, days: number, until = new Date(), steps: Step[] = [], locale: Locale = DEFAULT_LOCALE) {
+  const t = serverT(locale);
   const site = await getSiteOrThrow(siteId);
   const since = new Date(until.getTime() - days * DAY);
   const before = new Date(since.getTime() - days * DAY);
@@ -52,16 +59,17 @@ export async function buildSnapshot(siteId: string, days: number, until = new Da
   const nowCandidates = candidateRates(matched.map((key) => cur.get(key)!));
   const oldCandidates = candidateRates(matched.map((key) => prev.get(key)!));
   const alerts: string[] = [];
-  if (scores.delta.geo !== null && scores.delta.geo <= -10) alerts.push(`GEO score dropped ${-scores.delta.geo} points since the pre-period audit.`);
-  if (scores.delta.eeat !== null && scores.delta.eeat <= -10) alerts.push(`E-E-A-T proxy dropped ${-scores.delta.eeat} points.`);
-  if (matched.length >= 5 && change !== null && change <= -20) alerts.push(`Citation rate dropped ${-change} percentage points on ${matched.length} matched model/query pairs.`);
+  if (scores.delta.geo !== null && scores.delta.geo <= -10) alerts.push(t("reports.alert.geoDrop", { points: -scores.delta.geo }));
+  if (scores.delta.eeat !== null && scores.delta.eeat <= -10) alerts.push(t("reports.alert.eeatDrop", { points: -scores.delta.eeat }));
+  if (matched.length >= 5 && change !== null && change <= -20) alerts.push(t("reports.alert.citationDrop", { points: -change, pairs: matched.length }));
   if (matched.length >= 5) for (const [domain, value] of nowCandidates) {
     const delta = value - (oldCandidates.get(domain) ?? 0);
-    if (delta >= 20) alerts.push(`Other-source candidate ${domain} rose ${delta} percentage points (not a verified competitor).`);
+    if (delta >= 20) alerts.push(t("reports.alert.candidateRise", { domain, points: delta }));
   }
+  const changeParams = { points: change === null ? 0 : Math.abs(change), previous: previousRate, current: currentRate, pairs: matched.length };
   const summary = change === null
-    ? "Insufficient comparable observations to calculate AI visibility change."
-    : `AI citation visibility ${change >= 0 ? "increased" : "decreased"} by ${Math.abs(change)} percentage points (${previousRate}% to ${currentRate}%) on ${matched.length} matched model/query pairs.`;
+    ? t("reports.summary.insufficient")
+    : change >= 0 ? t("reports.summary.increased", changeParams) : t("reports.summary.decreased", changeParams);
   const history = [...new Set([...audits.map((a) => a.createdAt.toISOString().slice(0, 10)), ...current.map((c) => c.checkedAt.toISOString().slice(0, 10))])].sort().map((date) => {
     const a = audits.filter((a) => a.createdAt.toISOString().startsWith(date)).at(-1);
     const rows = current.filter((c) => c.checkedAt.toISOString().startsWith(date));
@@ -69,11 +77,11 @@ export async function buildSnapshot(siteId: string, days: number, until = new Da
   });
   const action = (a: (typeof open)[number]) => ({ id: a.id, title: a.title, status: a.status, targetUrl: a.targetUrl });
   return {
-    version: 1, site: { id: site.id, title: site.title, url: site.url },
+    version: 1, locale, site: { id: site.id, title: site.title, url: site.url },
     period: { days, since: since.toISOString(), until: until.toISOString() }, summary, scores,
     visibility: { checks: current.length, citations: cited(current), previousChecks: previous.length, previousCitations: cited(previous), citationRate: rate(cited(current), current.length), matchedPairs: matched.length, currentRate, previousRate, change },
     history, alerts, steps, actions: { openCount, resolvedCount, open: open.map(action), resolved: resolved.map(action) },
-    caveats: "Citation evidence is provider-reported; E-E-A-T is a rule-based trust proxy, not factual verification. Other-source domains are only competitor candidates. Comparisons require matching model/query pairs; provider model/configuration changes can still affect results. Scores are not carried forward when no audit ran in the period. Action lists show at most 100 items per section.",
+    caveats: t("reports.caveats"),
   };
 }
 export type ReportSnapshot = Awaited<ReturnType<typeof buildSnapshot>>;

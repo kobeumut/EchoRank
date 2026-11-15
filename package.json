@@ -1,6 +1,28 @@
 {
   "name": "ai-visibility",
   "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted GEO & SEO platform: track how AI answer engines cite your site, score AI-crawler readiness and E-E-A-T, build an entity knowledge graph and distribute updates to search indexes.",
+  "keywords": [
+    "geo",
+    "generative-engine-optimization",
+    "seo",
+    "ai-visibility",
+    "llm",
+    "knowledge-graph",
+    "llms-txt",
+    "indexnow",
+    "schema-org",
+    "nextjs"
+  ],
+  "homepage": "https://github.com/kobeumut/ai-visibility#readme",
+  "bugs": {
+    "url": "https://github.com/kobeumut/ai-visibility/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kobeumut/ai-visibility.git"
+  },
   "author": "Umut ADALI <kobeumut@gmail.com>",
   "license": "CC-BY-NC-SA-4.0",
   "scripts": {

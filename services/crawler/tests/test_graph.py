@@ -1,3 +1,4 @@
+"""Knowledge graph built from the Turkish sample site (UTF-8 content must survive the export unescaped)."""
 import json
 
 from fixtures import BASE

@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { Site } from "@prisma/client";
 import { getDistributionSettings, getIntegration, INTEGRATION_KEYS, setIntegration } from "./config";
-import { assertPublicHttpUrl, OUTBOUND_TIMEOUT_MS, readSnippet } from "./net";
+import { assertPublicHttpUrl, fetchPublic, OUTBOUND_TIMEOUT_MS, readSnippet } from "./net";
 
 // IndexNow (https://www.indexnow.org/documentation): one POST notifies every participating
 // engine (Bing, Yandex, Seznam, Naver, ...). ChatGPT search is grounded on Bing's index, so this
@@ -20,7 +20,7 @@ export function generateIndexNowKey() {
   return randomBytes(16).toString("hex");
 }
 
-/** Per-site key, falling back to the INDEXNOW_KEY env var (single-site deployments). */
+/** Per-site key; single-site deployments can set the INDEXNOW_KEY environment variable instead. */
 export function getIndexNowKey(site: Site): string | undefined {
   const key = getIntegration(site, INTEGRATION_KEYS.indexnowKey) ?? (process.env.INDEXNOW_KEY || undefined);
   return key && isValidIndexNowKey(key) ? key : undefined;
@@ -55,7 +55,7 @@ export async function verifyKeyFile(site: Site, key: string) {
   const { keyLocation } = describeKeyFile(site, key);
   await assertPublicHttpUrl(keyLocation);
   try {
-    const res = await fetch(keyLocation, { redirect: "follow", signal: AbortSignal.timeout(OUTBOUND_TIMEOUT_MS) });
+    const res = await fetchPublic(keyLocation, { signal: AbortSignal.timeout(OUTBOUND_TIMEOUT_MS) }); // every redirect hop is re-checked
     const body = (await readSnippet(res, 1_000)).replace(/^﻿/, "").trim();
     const valid = res.ok && body === key;
     return {
@@ -102,10 +102,12 @@ export async function submitIndexNow(site: Site, urls: string[], key: string): P
     const batch = urls.slice(i, i + INDEXNOW_MAX_URLS);
     const body = JSON.stringify({ host, key, ...(keyLocation ? { keyLocation } : {}), urlList: batch });
     try {
+      await assertPublicHttpUrl(endpoint); // the endpoint may come from per-site settings or the environment
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json; charset=utf-8" },
         body,
+        redirect: "error", // the body carries the IndexNow key: never replay it to a redirect target
         signal: AbortSignal.timeout(OUTBOUND_TIMEOUT_MS),
       });
       const ok = res.status === 200 || res.status === 202;

@@ -2,13 +2,16 @@
 
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY, type Simulation, type SimulationLinkDatum, type SimulationNodeDatum } from "d3-force";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ENTITY_LABELS } from "@/lib/dashboard/format";
-import { graphIssues, ISSUE_LABELS, issueCounts, type IssueKind } from "@/lib/dashboard/graph-insights";
+import { foldCase } from "@/lib/dashboard/highlight";
+import { graphIssues, ISSUE_KINDS, issueCounts, issueLabel, type IssueKind } from "@/lib/dashboard/graph-insights";
+import type { Translator } from "@/lib/i18n/translate";
 import { useApi } from "./api";
 import { EnrichmentTable, JsonLdModal, QidBadge, RECONCILABLE, ReconcileModal, WikidataSection, type ReconcileTarget } from "./entity-enrichment";
+import { rich } from "./rich-text";
 import { useSite } from "./site-shell";
 import type { EnrichmentList, EntityEnrichment, GraphNode, GraphPayload } from "./types";
 import { Badge, Button, Card, cx, EmptyState, ErrorState, inputBase, Skeleton } from "./ui";
+import { useFormat } from "./use-format";
 
 /** Fixed type → categorical slot (color follows the entity type, never its rank). Concept folds to muted gray. */
 const TYPE_SLOT: Record<string, string> = {
@@ -24,16 +27,12 @@ const TYPE_SLOT: Record<string, string> = {
   Article: "--series-8",
 };
 const TYPE_ORDER = ["Page", "Product", "Category", "FAQ", "Question", "Organization", "Author", "Person", "Brand", "Article", "Concept"];
-const RELATION_LABELS: Record<string, string> = {
-  links_to: "bağlantı verir",
-  has_category: "kategorisi",
-  contains_product: "ürün içerir",
-  written_by: "yazarı",
-  mentions_entity: "bahseder",
-  answers_question: "soruyu yanıtlar",
-  same_as: "aynı varlık",
-  part_of: "parçası",
-};
+/** Localised relation name (`graph.relation.<type>`); unknown relation types are shown as-is. */
+function relationLabel(t: Translator, type: string) {
+  const key = `graph.relation.${type}`;
+  const text = t(key);
+  return text === key ? type : text;
+}
 
 type SimNode = SimulationNodeDatum & { id: string; data: GraphNode; r: number; issues: IssueKind[] };
 type SimLink = SimulationLinkDatum<SimNode> & { type: string };
@@ -67,6 +66,7 @@ function NodeDetails({
   enrichment: EntityEnrichment | undefined;
   onReconcile: () => void;
 }) {
+  const { t, label } = useFormat();
   const byId = useMemo(() => new Map(payload.nodes.map((n) => [n.id, n])), [payload.nodes]);
   const out = payload.edges.filter((e) => e.source === node.id);
   const inc = payload.edges.filter((e) => e.target === node.id);
@@ -78,7 +78,7 @@ function NodeDetails({
       if (!other) return null;
       return (
         <li key={e.id} className="flex items-baseline gap-1.5 text-xs">
-          <span className="shrink-0 text-zinc-400">{dir === "out" ? "→" : "←"} {RELATION_LABELS[e.type] ?? e.type}</span>
+          <span className="shrink-0 text-zinc-400">{dir === "out" ? "→" : "←"} {relationLabel(t, e.type)}</span>
           <button type="button" className="truncate text-left text-indigo-600 hover:underline dark:text-indigo-400" onClick={() => onSelect(other.id)}>
             {other.label}
           </button>
@@ -90,7 +90,7 @@ function NodeDetails({
       <div>
         <div className="flex items-center gap-2">
           <span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: typeColor(node.type) }} />
-          <span className="text-xs text-zinc-500">{ENTITY_LABELS[node.type] ?? node.type}</span>
+          <span className="text-xs text-zinc-500">{label("entity", node.type)}</span>
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <span className="font-semibold break-words text-zinc-900 dark:text-zinc-100">{node.label}</span>
@@ -107,17 +107,17 @@ function NodeDetails({
         <div className="flex flex-wrap gap-1">
           {issues.map((i) => (
             <Badge key={i} tone="critical" icon>
-              {ISSUE_LABELS[i]}
+              {issueLabel(t, i)}
             </Badge>
           ))}
         </div>
       )}
       <div className="flex gap-4 text-xs text-zinc-500">
         <span>
-          Gelen: <b className="tabular-nums text-zinc-800 dark:text-zinc-200">{inc.length}</b>
+          {t("graph.panel.incoming")} <b className="tabular-nums text-zinc-800 dark:text-zinc-200">{inc.length}</b>
         </span>
         <span>
-          Giden: <b className="tabular-nums text-zinc-800 dark:text-zinc-200">{out.length}</b>
+          {t("graph.panel.outgoing")} <b className="tabular-nums text-zinc-800 dark:text-zinc-200">{out.length}</b>
         </span>
       </div>
       {shown.length > 0 && (
@@ -134,7 +134,7 @@ function NodeDetails({
       )}
       {(out.length > 0 || inc.length > 0) && (
         <div>
-          <div className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-500">İlişkiler</div>
+          <div className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-500">{t("graph.panel.relations")}</div>
           <ul className="max-h-48 space-y-1 overflow-auto">
             {rel(out, "out")}
             {rel(inc, "in")}
@@ -146,6 +146,7 @@ function NodeDetails({
 }
 
 export function GraphExplorer() {
+  const { t, label } = useFormat();
   const { siteId, version } = useSite();
   const graph = useApi<GraphPayload>(`/api/sites/${siteId}/graph?limit=2000`, { version });
   const enrich = useApi<EnrichmentList>(`/api/sites/${siteId}/entities/reconcile?limit=500`, { version });
@@ -192,13 +193,14 @@ export function GraphExplorer() {
     });
   }, [data, hiddenTypes, issueFilter, issues, wikiFilter, verifiedIds]);
 
-  const q = search.trim().toLocaleLowerCase("tr");
-  const matches = useMemo(() => (q ? new Set(visibleNodes.filter((n) => n.label.toLocaleLowerCase("tr").includes(q) || n.url?.toLowerCase().includes(q)).map((n) => n.id)) : null), [q, visibleNodes]);
+  // Turkish-aware case folding (see foldCase) so searches match in both English and Turkish labels.
+  const q = foldCase(search.trim());
+  const matches = useMemo(() => (q ? new Set(visibleNodes.filter((n) => foldCase(n.label).includes(q) || n.url?.toLowerCase().includes(q)).map((n) => n.id)) : null), [q, visibleNodes]);
   const selectedNode = data?.nodes.find((n) => n.id === selected) ?? null;
 
   if (graph.loading)
     return (
-      <div className="grid gap-4 lg:grid-cols-[1fr_320px]" role="status" aria-label="Yükleniyor">
+      <div className="grid gap-4 lg:grid-cols-[1fr_320px]" role="status" aria-label={t("graph.loading")}>
         <Skeleton className="h-[560px]" />
         <Skeleton className="h-[560px]" />
       </div>
@@ -206,8 +208,8 @@ export function GraphExplorer() {
   if (graph.error) return <ErrorState error={graph.error} onRetry={() => void graph.reload()} />;
   if (!data?.nodes.length)
     return (
-      <EmptyState icon="🕸" title="Bilgi grafı henüz oluşmadı">
-        Graf; analiz sırasında site taranınca varlıklar (ürün, kategori, SSS, yazar, kurum…) ve aralarındaki ilişkilerden oluşturulur. Bir analiz başlatın.
+      <EmptyState icon="🕸" title={t("graph.empty.title")}>
+        {t("graph.empty.hint")}
       </EmptyState>
     );
 
@@ -215,17 +217,21 @@ export function GraphExplorer() {
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Stat label="Varlık" value={data.stats.totalEntities} hint={data.stats.truncated ? `${data.stats.returnedEntities} gösteriliyor` : undefined} />
-        <Stat label="İlişki" value={data.stats.edges} />
-        <Stat label="Yetim sayfa" value={counts.orphan_page} tone={counts.orphan_page ? "bad" : "ok"} />
-        <Stat label="Bağlantısız düğüm" value={counts.isolated} tone={counts.isolated ? "bad" : "ok"} />
-        <Stat label="Schema’sız sayfa" value={counts.page_without_schema} tone={counts.page_without_schema ? "bad" : "ok"} />
-        <Stat label="Wikidata doğrulanmış" value={verifiedIds.size} hint={enrich.data ? `${enrich.data.total} uzlaştırılabilir varlıktan` : enrich.loading ? "yükleniyor…" : undefined} />
+        <Stat label={t("graph.stat.entities")} value={data.stats.totalEntities} hint={data.stats.truncated ? t("graph.stat.shown", { count: data.stats.returnedEntities }) : undefined} />
+        <Stat label={t("graph.stat.relations")} value={data.stats.edges} />
+        <Stat label={t("graph.stat.orphanPages")} value={counts.orphan_page} tone={counts.orphan_page ? "bad" : "ok"} />
+        <Stat label={t("graph.stat.isolated")} value={counts.isolated} tone={counts.isolated ? "bad" : "ok"} />
+        <Stat label={t("graph.stat.noSchema")} value={counts.page_without_schema} tone={counts.page_without_schema ? "bad" : "ok"} />
+        <Stat
+          label={t("graph.stat.wikidataVerified")}
+          value={verifiedIds.size}
+          hint={enrich.data ? t("graph.stat.fromReconcilable", { count: enrich.data.total }) : enrich.loading ? t("graph.stat.loading") : undefined}
+        />
       </div>
 
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
-        <input type="search" placeholder="Düğüm ara…" value={search} onChange={(e) => setSearch(e.target.value)} className={`${inputBase} w-48 py-1.5 text-xs`} aria-label="Düğüm ara" />
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Varlık türleri">
+        <input type="search" placeholder={t("graph.toolbar.searchPlaceholder")} value={search} onChange={(e) => setSearch(e.target.value)} className={`${inputBase} w-48 py-1.5 text-xs`} aria-label={t("graph.toolbar.searchLabel")} />
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("graph.toolbar.entityTypes")}>
           {typesPresent.map(([type, count]) => {
             const on = !hiddenTypes.has(type);
             return (
@@ -247,30 +253,30 @@ export function GraphExplorer() {
                 )}
               >
                 <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: on ? typeColor(type) : "transparent", border: on ? undefined : "1px solid currentColor" }} />
-                {ENTITY_LABELS[type] ?? type}
+                {label("entity", type)}
                 <span className="tabular-nums text-zinc-400">{count}</span>
               </button>
             );
           })}
         </div>
         <select
-          aria-label="Sorun filtresi"
+          aria-label={t("graph.toolbar.issueFilter")}
           value={issueFilter ?? ""}
           onChange={(e) => setIssueFilter((e.target.value || null) as IssueKind | "any" | null)}
           className={`${inputBase} ml-auto w-auto py-1.5 text-xs`}
         >
-          <option value="">Tüm düğümler</option>
-          <option value="any">Sadece kopuk / eksik düğümler ({problemNodes.length})</option>
-          {(Object.keys(ISSUE_LABELS) as IssueKind[]).map((k) => (
+          <option value="">{t("graph.toolbar.allNodes")}</option>
+          <option value="any">{t("graph.toolbar.onlyBroken", { count: problemNodes.length })}</option>
+          {ISSUE_KINDS.map((k) => (
             <option key={k} value={k} disabled={!counts[k]}>
-              {ISSUE_LABELS[k]} ({counts[k]})
+              {issueLabel(t, k)} ({counts[k]})
             </option>
           ))}
         </select>
-        <select aria-label="Wikidata filtresi" value={wikiFilter} onChange={(e) => setWikiFilter(e.target.value as typeof wikiFilter)} className={`${inputBase} w-auto py-1.5 text-xs`}>
-          <option value="">Wikidata: tümü</option>
-          <option value="verified">Wikidata doğrulanmış ({verifiedIds.size})</option>
-          <option value="unverified">Doğrulanmamış varlıklar</option>
+        <select aria-label={t("graph.toolbar.wikidataFilter")} value={wikiFilter} onChange={(e) => setWikiFilter(e.target.value as typeof wikiFilter)} className={`${inputBase} w-auto py-1.5 text-xs`}>
+          <option value="">{t("graph.toolbar.wikidataAll")}</option>
+          <option value="verified">{t("graph.toolbar.wikidataVerified", { count: verifiedIds.size })}</option>
+          <option value="unverified">{t("graph.toolbar.wikidataUnverified")}</option>
         </select>
         <Button size="sm" onClick={() => setJsonLdOpen(true)}>
           {"{ }"} JSON-LD @graph
@@ -279,7 +285,7 @@ export function GraphExplorer() {
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <GraphCanvas nodes={visibleNodes} payload={data} issues={issues} verified={verifiedIds} selected={selected} matches={matches} onSelect={setSelected} />
-        <Card title={selectedNode ? "Düğüm detayı" : "Graf hakkında"}>
+        <Card title={selectedNode ? t("graph.panel.nodeDetails") : t("graph.panel.about")}>
           {selectedNode ? (
             <>
               <NodeDetails
@@ -291,23 +297,21 @@ export function GraphExplorer() {
                 onReconcile={() => setReconcileTarget({ id: selectedNode.id, name: selectedNode.label, type: selectedNode.type })}
               />
               <Button size="sm" variant="ghost" className="mt-3" onClick={() => setSelected(null)}>
-                Seçimi temizle
+                {t("graph.panel.clearSelection")}
               </Button>
             </>
           ) : (
             <div className="space-y-3 text-sm text-zinc-600 dark:text-zinc-400">
-              <p>Graphify motorunun çıkardığı varlıklar ve ilişkiler. Düğüm boyutu bağlantı sayısını gösterir; kırmızı halka sorunlu düğümleri işaretler.</p>
+              <p>{t("graph.panel.intro")}</p>
               <ul className="list-disc space-y-1 pl-5 text-xs">
-                <li>Sürükleyerek gezinin, tekerlekle yakınlaştırın.</li>
-                <li>Düğüme tıklayın: detay ve komşuları görünür.</li>
-                <li>Düğümleri sürükleyip yeniden konumlandırabilirsiniz.</li>
-                <li>
-                  Yeşil <b>W</b> rozeti, Wikidata QID&apos;si doğrulanmış varlıkları gösterir.
-                </li>
+                <li>{t("graph.panel.tipNavigate")}</li>
+                <li>{t("graph.panel.tipClick")}</li>
+                <li>{t("graph.panel.tipDrag")}</li>
+                <li>{rich(t("graph.panel.tipBadge"), { badge: <b>W</b> })}</li>
               </ul>
               {data.stats.truncated && (
                 <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-                  Büyük graf: {data.stats.totalEntities} varlıktan ilk {data.stats.returnedEntities} tanesi gösteriliyor.
+                  {t("graph.panel.truncated", { total: data.stats.totalEntities, returned: data.stats.returnedEntities })}
                 </p>
               )}
             </div>
@@ -316,11 +320,11 @@ export function GraphExplorer() {
       </div>
 
       <Card
-        title="Wikidata varlık zenginleştirme"
-        subtitle="Kurum, marka, kişi, ürün ve kavramların Wikidata QID ve Wikipedia eşleşmeleri — doğrulananlar JSON-LD sameAs olarak yayınlanır"
+        title={t("graph.enrich.title")}
+        subtitle={t("graph.enrich.subtitle")}
         action={
           <Button size="sm" variant="ghost" onClick={() => setJsonLdOpen(true)}>
-            JSON-LD önizle
+            {t("graph.enrich.previewJsonLd")}
           </Button>
         }
       >
@@ -338,17 +342,17 @@ export function GraphExplorer() {
         />
       </Card>
 
-      <Card title="Kopuk ve eksik düğümler" subtitle="AI motorlarının siteyi bütünlüklü anlaması için bağlanması / zenginleştirilmesi gereken varlıklar">
+      <Card title={t("graph.problems.title")} subtitle={t("graph.problems.subtitle")}>
         {problemNodes.length === 0 ? (
-          <p className="text-sm text-zinc-500">Sorunlu düğüm bulunamadı. 🎉</p>
+          <p className="text-sm text-zinc-500">{t("graph.problems.none")}</p>
         ) : (
           <div className="max-h-96 overflow-auto">
             <table className="w-full text-left text-sm">
               <thead className="sticky top-0 bg-white text-xs text-zinc-500 dark:bg-zinc-900">
                 <tr>
-                  <th className="py-2 pr-3 font-medium">Varlık</th>
-                  <th className="py-2 pr-3 font-medium">Tür</th>
-                  <th className="py-2 font-medium">Sorun</th>
+                  <th className="py-2 pr-3 font-medium">{t("graph.problems.colEntity")}</th>
+                  <th className="py-2 pr-3 font-medium">{t("graph.problems.colType")}</th>
+                  <th className="py-2 font-medium">{t("graph.problems.colIssue")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -359,12 +363,12 @@ export function GraphExplorer() {
                         {n.label}
                       </button>
                     </td>
-                    <td className="py-2 pr-3 text-xs text-zinc-500">{ENTITY_LABELS[n.type] ?? n.type}</td>
+                    <td className="py-2 pr-3 text-xs text-zinc-500">{label("entity", n.type)}</td>
                     <td className="py-2">
                       <div className="flex flex-wrap gap-1">
                         {issues.get(n.id)!.map((i) => (
                           <Badge key={i} tone="critical">
-                            {ISSUE_LABELS[i]}
+                            {issueLabel(t, i)}
                           </Badge>
                         ))}
                       </div>
@@ -390,12 +394,13 @@ export function GraphExplorer() {
 }
 
 function Stat({ label, value, hint, tone }: { label: string; value: number; hint?: string; tone?: "ok" | "bad" }) {
+  const { t } = useFormat();
   return (
     <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
       <div className="text-xs text-zinc-500">{label}</div>
       <div className="mt-0.5 flex items-baseline gap-2">
         <span className="text-2xl font-semibold tabular-nums">{value}</span>
-        {tone === "bad" && <span className="text-xs text-red-600 dark:text-red-400">✕ düzeltilmeli</span>}
+        {tone === "bad" && <span className="text-xs text-red-600 dark:text-red-400">{t("graph.stat.needsFix")}</span>}
         {tone === "ok" && <span className="text-xs text-[#006300] dark:text-[#0ca30c]">✓</span>}
       </div>
       {hint && <div className="text-xs text-zinc-400">{hint}</div>}
@@ -422,6 +427,7 @@ function GraphCanvas({
   matches: Set<string> | null;
   onSelect: (id: string | null) => void;
 }) {
+  const { t, label } = useFormat();
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const simRef = useRef<Simulation<SimNode, SimLink> | null>(null);
@@ -754,19 +760,19 @@ function GraphCanvas({
   return (
     <div className="relative overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
       <div ref={wrapRef} className="h-[560px] w-full touch-none">
-        <canvas ref={canvasRef} className="block cursor-grab" role="img" aria-label={`Bilgi grafı: ${nodes.length} düğüm. Erişilebilir liste aşağıdaki tabloda.`} />
+        <canvas ref={canvasRef} className="block cursor-grab" role="img" aria-label={t("graph.canvas.aria", { count: nodes.length })} />
       </div>
-      {nodes.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-sm text-zinc-500">Filtreye uyan düğüm yok.</div>}
+      {nodes.length === 0 && <div className="absolute inset-0 flex items-center justify-center text-sm text-zinc-500">{t("graph.canvas.noMatch")}</div>}
       <div className="absolute right-3 top-3 flex flex-col gap-1">
-        <Button size="sm" aria-label="Yakınlaştır" onClick={() => zoom(1.3)}>
+        <Button size="sm" aria-label={t("graph.canvas.zoomIn")} onClick={() => zoom(1.3)}>
           +
         </Button>
-        <Button size="sm" aria-label="Uzaklaştır" onClick={() => zoom(1 / 1.3)}>
+        <Button size="sm" aria-label={t("graph.canvas.zoomOut")} onClick={() => zoom(1 / 1.3)}>
           −
         </Button>
         <Button
           size="sm"
-          aria-label="Sığdır"
+          aria-label={t("graph.canvas.fit")}
           onClick={() => {
             userMoved.current = false;
             fit();
@@ -776,7 +782,7 @@ function GraphCanvas({
         </Button>
       </div>
       <div className="absolute bottom-3 left-3 rounded-md bg-white/85 px-2 py-1 text-[11px] text-zinc-500 backdrop-blur dark:bg-zinc-900/85">
-        {nodes.length} düğüm · <span className="text-[#d03b3b]">◯</span> sorunlu · <span className="font-bold text-[#0ca30c]">W</span> Wikidata doğrulanmış
+        {t("graph.canvas.legendNodes", { count: nodes.length })} · <span className="text-[#d03b3b]">◯</span> {t("graph.canvas.legendProblem")} · <span className="font-bold text-[#0ca30c]">W</span> {t("graph.canvas.legendVerified")}
       </div>
       {tooltip && (
         <div
@@ -785,12 +791,12 @@ function GraphCanvas({
         >
           <div className="font-medium text-zinc-900 dark:text-zinc-100">{tooltip.node.data.label}</div>
           <div className="text-zinc-500">
-            {ENTITY_LABELS[tooltip.node.data.type] ?? tooltip.node.data.type} · {tooltip.node.data.inDegree} gelen / {tooltip.node.data.outDegree} giden
+            {label("entity", tooltip.node.data.type)} · {t("graph.canvas.degree", { in: tooltip.node.data.inDegree, out: tooltip.node.data.outDegree })}
           </div>
-          {verified.has(tooltip.node.id) && <div className="mt-0.5 text-[#006300] dark:text-[#0ca30c]">✓ Wikidata doğrulanmış</div>}
+          {verified.has(tooltip.node.id) && <div className="mt-0.5 text-[#006300] dark:text-[#0ca30c]">{t("graph.canvas.verified")}</div>}
           {tooltip.node.issues.map((i) => (
             <div key={i} className="mt-0.5 text-red-600 dark:text-red-400">
-              ✕ {ISSUE_LABELS[i]}
+              ✕ {issueLabel(t, i)}
             </div>
           ))}
         </div>

@@ -23,7 +23,7 @@ export function inlineMarkdown(text: string): string {
       if (/^`[^`]+`$/.test(part)) return `<code>${escapeHtml(part.slice(1, -1))}</code>`;
       let out = "";
       let last = 0;
-      // [label](href) — the label may contain brackets one level deep ("[Kaynak, Yıl]").
+      // [label](href) — the label may contain brackets one level deep ("[Source, Year]").
       const linkRe = /\[((?:[^\[\]]|\[[^\[\]]*\])+)\]\(([^()\s]+(?:\([^()\s]*\))?)(?:\s+"[^"]*")?\)/g;
       for (const m of part.matchAll(linkRe)) {
         out += emphasis(escapeHtml(part.slice(last, m.index)));
@@ -109,7 +109,7 @@ export function markdownToHtml(md: string): string {
     if (/^\s*>/.test(line)) {
       const quote: string[] = [];
       while (i < lines.length && /^\s*>/.test(lines[i])) quote.push(lines[i++].replace(/^\s*>\s?/, ""));
-      // "— Ad Soyad, Unvan" as the last line becomes the <footer><cite> attribution.
+      // "— Full Name, Title" as the last line becomes the <footer><cite> attribution.
       const lastIdx = quote.length - 1;
       const attribution = lastIdx > 0 && /^\s*(—|--|-)\s*\S/.test(quote[lastIdx]) ? quote[lastIdx].replace(/^\s*(—|--|-)\s*/, "") : null;
       const textLines = (attribution ? quote.slice(0, lastIdx) : quote).filter((l) => l.trim());

@@ -1,4 +1,4 @@
-"""GEO / SEO / E-E-A-T scoring and "Ne Yapılmalı?" action engine.
+"""GEO / SEO / E-E-A-T scoring and the "What should be done?" action engine.
 
     index = await index_site(url)                       # crawl + knowledge graph (stage 1)
     signals = await collect_site_signals(url)           # llms.txt, HTTPS/HSTS, AI user-agent probes

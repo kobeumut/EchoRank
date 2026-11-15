@@ -5,7 +5,7 @@ import * as route from "@/app/api/sites/[id]/simulation/bots/route";
 import { ctx, req, resetDb } from "./helpers";
 
 const BASE = "https://shop.example.com";
-const ARTICLE = `<html><head><title>Espresso</title><script>window.x=1</script></head><body><main><h1>Espresso rehberi</h1><p>${"Espresso, basınçla demlenen yoğun bir kahvedir. ".repeat(20)}</p></main></body></html>`;
+const ARTICLE = `<html><head><title>Espresso</title><script>window.x=1</script></head><body><main><h1>Espresso guide</h1><p>${"Espresso is a dense coffee brewed under pressure. ".repeat(20)}</p></main></body></html>`;
 const SHELL = `<html><head><script src="/static/app.4f1.js"></script></head><body><div id="root"></div><noscript>Enable JavaScript</noscript></body></html>`;
 const CF = `<html><head><title>Just a moment...</title></head><body><div id="cf-wrapper">Checking your browser</div><script src="/cdn-cgi/challenge-platform/h/b/orchestrate/jsch/v1"></script></body></html>`;
 const html = (body: string, status = 200, headers: Record<string, string> = {}) =>
@@ -34,8 +34,8 @@ beforeEach(async () => {
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 afterAll(() => prisma.$disconnect());
 
-const post = async (siteId: string, body?: unknown) => {
-  const res = await route.POST(req(`/api/sites/${siteId}/simulation/bots`, { method: "POST", body }), ctx(siteId));
+const post = async (siteId: string, body?: unknown, qs = "") => {
+  const res = await route.POST(req(`/api/sites/${siteId}/simulation/bots${qs}`, { method: "POST", body }), ctx(siteId));
   return { status: res.status, body: await res.json() };
 };
 const get = async (siteId: string, qs = "") => {
@@ -66,7 +66,7 @@ describe("response analysis", () => {
     const ssr = analyzeResponse(200, new Headers({ "content-type": "text/html" }), ARTICLE);
     expect(ssr.isCsrShell).toBe(false);
     expect(ssr.tokenCount).toBe(Math.ceil(visibleText(ARTICLE).length / 4));
-    expect(visibleText(ARTICLE)).not.toMatch(/window\.x|Espresso rehberi.*<|<title>/);
+    expect(visibleText(ARTICLE)).not.toMatch(/window\.x|Espresso guide.*<|<title>/);
   });
 
   it("keeps requests on the tracked site", () => {
@@ -124,6 +124,25 @@ describe("GET/POST /api/sites/[id]/simulation/bots", () => {
     expect(body.urls).toEqual([`${BASE}/`, `${BASE}/blog/espresso`]);
     expect(body.bots).toEqual(["GPTBot", "ClaudeBot", "PerplexityBot", "Google-Extended", "Applebot-Extended"]);
     expect(body.records).toHaveLength(10);
+  });
+
+  it("stores request-level error text in the request's language (English by default)", async () => {
+    const site = await prisma.site.create({ data: { url: BASE, title: "Shop" } });
+    const failWith = (error: Error) => vi.stubGlobal("fetch", vi.fn(async () => { throw error; }));
+    const input = { urls: ["/"], bots: ["GPTBot"], includeBaseline: false };
+    const errorOf = async (qs = "") => (await post(site.id, input, qs)).body.records[0].diagnostics.error;
+
+    failWith(Object.assign(new Error("aborted"), { name: "TimeoutError" }));
+    expect(await errorOf()).toBe("Timed out");
+    expect(await errorOf("?lang=tr")).toBe("zaman aşımı");
+
+    failWith(new Error("socket hang up"));
+    expect(await errorOf()).toBe("Request failed: socket hang up");
+    expect(await errorOf("?lang=tr")).toBe("İstek başarısız: socket hang up");
+    const { body } = await post(site.id, input, "?lang=tr");
+    expect(body.records[0]).toMatchObject({ isBlocked: true, blockedBy: "network" });
+    // machine codes stay language-independent, only the error text follows the locale
+    expect(body.records[0].diagnostics.reasons).toEqual(["blocked_by_network", "İstek başarısız: socket hang up"]);
   });
 
   it("refuses private-network redirects and off-site URLs", async () => {

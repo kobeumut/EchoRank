@@ -1,8 +1,11 @@
-""""Ne Yapılmalı?" — turns failed checks into prioritized action cards with copy-paste fixes.
+"""The "What should be done?" action engine — turns failed checks into prioritized action cards with copy-paste fixes.
 
 Each rule inspects pillar facts and emits zero or more ``ActionCard``s. Impact is derived from the
 estimated GEO-score gain of fixing the underlying check (never lower than the rule's base impact);
 priority = impact × reach / effort.
+
+All human-readable text (titles, descriptions, evidence, snippet instructions) comes from the ``actions`` message
+catalog in the language of ``ctx.lang``; ``rule_id``, ``category``, ``impact`` and ``effort`` are language-neutral.
 """
 from __future__ import annotations
 
@@ -63,6 +66,7 @@ class ActionCard:
 class Rules:
     def __init__(self, ctx: AuditContext, pillars: dict[str, Pillar]):
         self.ctx = ctx
+        self.t = ctx.t
         self.p = pillars
         self.cards: list[ActionCard] = []
 
@@ -118,13 +122,12 @@ def site_unreachable(r: Rules) -> None:
         return
     f = r.p["ai_access"].facts
     errors = f.get("fetch_errors") or []
+    t = r.t
     r.emit("ai_access", "render_mode", base_impact="high", effort="medium", category="crawler", blocker=True,
-           rule_id="crawler.site_unreachable", title="Site otomatik istemcilere hiç içerik döndürmüyor",
-           description=("Tarama sırasında hiçbir sayfa alınamadı. AI crawler'ları da aynı yanıtı alır; bu durumda site "
-                        "hiçbir cevap motorunda kaynak olarak görünemez. Bot koruması (Cloudflare/Akamai/Imperva), IP/ülke "
-                        "engeli veya rate-limit kurallarında doğrulanmış AI botlarına izin verin; ardından denetimi tekrarlayın."),
+           rule_id="crawler.site_unreachable", title=t("actions.rule.site_unreachable.title"),
+           description=t("actions.rule.site_unreachable.description"),
            target_url=r.ctx.origin + "/", evidence=[f"{e['url']}: {e['error']}" for e in errors[:5]],
-           snippet=Snippet("text", sn.waf_fix(), None, "Bot koruma katmanınızda AI botları için istisna tanımlayın."))
+           snippet=Snippet("text", sn.waf_fix(lang=r.ctx.lang), None, t("actions.rule.site_unreachable.instructions")))
 
 @rule
 def ai_bots_blocked(r: Rules) -> None:
@@ -132,26 +135,26 @@ def ai_bots_blocked(r: Rules) -> None:
     bad = [b for b in f["bots"] if b["status"] != "allowed"]
     if not bad:
         return
+    t = r.t
     if f.get("robots_status") and f["robots_status"] >= 500:
-        desc = (f"/robots.txt HTTP {f['robots_status']} döndürüyor; RFC 9309'a göre botlar bu durumda tüm siteyi "
-                "yasaklı sayar. robots.txt'yi 200 ile sunun.")
+        desc = t("actions.rule.ai_bots.desc_http_error", status=f["robots_status"])
     else:
         search = [b["token"] for b in bad if b["purpose"] in ("search", "user")]
-        desc = ("ChatGPT, Claude, Perplexity gibi cevap motorları engellenen sayfaları okuyamaz, dolayısıyla "
-                "kaynak olarak gösteremez. ")
+        parts = [t("actions.rule.ai_bots.desc_base")]
         if search:
-            desc += f"Arama/cevap botları ({', '.join(search)}) mutlaka açılmalı. "
-        desc += "Eğitim botlarını (GPTBot, Google-Extended, CCBot) kapalı tutmak bilinçli bir politika olabilir."
+            parts.append(t("actions.rule.ai_bots.desc_search", bots=", ".join(search)))
+        parts.append(t("actions.rule.ai_bots.desc_training"))
+        desc = " ".join(parts)
     answer_bots = [b for b in f["bots"] if b["purpose"] in ("search", "user")]
     r.emit("ai_access", "robots_ai_bots", base_impact="high", effort="low", category="crawler",
            blocker=bool(answer_bots) and all(b["status"] == "blocked" for b in answer_bots),
            rule_id="crawler.robots_ai_bots",
-           title=f"robots.txt'de {len(bad)} AI botunun erişimini açın", description=desc,
+           title=t("actions.rule.ai_bots.title", count=len(bad)), description=desc,
            evidence=[f"{b['token']} ({b['vendor']}): {b['reason']}" for b in bad],
            affected_urls=sorted({p for b in bad for p in b["blocked_paths"]}),
            target_url=r.ctx.origin + "/robots.txt",
            snippet=Snippet("robots", sn.robots_txt_fix(r.ctx, [b["token"] for b in bad]), "robots.txt",
-                              "Mevcut robots.txt dosyanızın en üstüne ekleyin; engelleyen 'Disallow: /' satırlarını kaldırın."))
+                           t("actions.rule.ai_bots.instructions")))
 
 
 _SIM_ACCESS_FIXES = ("cloudflare_waf_skip", "nginx_allow", "apache_allow", "aws_waf_allow")
@@ -172,7 +175,8 @@ def waf_blocks_ai(r: Rules) -> None:
     sim_blocked = _sim_blocks(r)
     if not f["waf_blocked"] and not sim_blocked:
         return
-    snippet = Snippet("text", sn.waf_fix(), None, "Cloudflare/nginx yapılandırmanıza uygulayın.")
+    t = r.t
+    snippet = Snippet("text", sn.waf_fix(lang=r.ctx.lang), None, t("actions.rule.waf.instructions"))
     evidence: list[str] = []
     if sim_blocked:
         sim = r.ctx.bot_simulation
@@ -181,14 +185,12 @@ def waf_blocks_ai(r: Rules) -> None:
                        key=lambda x: not x["recommended"])
         if fixes:
             snippet = Snippet("text", "\n\n".join(f"### {x['title']}\n{x['code']}" for x in fixes), None,
-                              "Önerilen (tespit edilen CDN/WAF) reçeteyi uygulayın, ardından simülasyonu tekrarlayın. "
-                              + " ".join(sim.caveats[:1]))
+                              " ".join([t("actions.rule.waf.instructions_simulated"), *sim.caveats[:1]]))
     blocked = set(f["waf_blocked"]) | {res.token for res in sim_blocked}
     r.emit("ai_access", "waf_ua_block", base_impact="high", effort="medium", category="crawler",
            blocker=len(blocked) >= 3,
-           rule_id="crawler.waf_ua_block", title="CDN/WAF'ın AI botlarını engellemesini kaldırın",
-           description=("robots.txt izin verse de sunucu/CDN AI user-agent'larına 403/429 veya challenge sayfası "
-                        "döndürüyor. Cloudflare'in 'Block AI bots' özelliği veya bot koruması genellikle sebeptir."),
+           rule_id="crawler.waf_ua_block", title=t("actions.rule.waf.title"),
+           description=t("actions.rule.waf.description"),
            target_url=r.ctx.origin + "/", evidence=evidence,
            affected_urls=sorted({res.url for res in sim_blocked}), snippet=snippet)
 
@@ -200,9 +202,8 @@ def bot_content_parity(r: Rules) -> None:
     if not finding:
         return
     r.emit("ai_access", "bot_simulation", base_impact="medium", effort="medium", category="crawler",
-           rule_id="crawler.bot_content_parity", title="AI botlarına tarayıcıyla aynı içeriği sunun",
-           description=("Canlı simülasyonda AI botları tarayıcının aldığı içeriğin yarısından azını aldı (UA'ya göre "
-                        "farklı şablon, kısaltılmış sayfa veya engel sayfası). Botlara tam HTML'i sunun."),
+           rule_id="crawler.bot_content_parity", title=r.t("actions.rule.content_parity.title"),
+           description=r.t("actions.rule.content_parity.description"),
            affected_urls=finding.urls, evidence=[finding.detail])
 
 
@@ -216,12 +217,12 @@ def ai_token_bloat(r: Rules) -> None:
     urls = sorted({u for x in found for u in x.urls})
     view = next((p.ai_view for p in sim.pages if p.url in urls and p.ai_view), None)
     tokens = view["tokens"] if view else {}
+    t = r.t
     r.emit("ai_access", "bot_simulation", base_impact="low", effort="medium", category="technical",
-           rule_id="technical.ai_token_bloat", title=f"{len(urls)} sayfada AI token yükünü azaltın",
-           description=("Şişkin DOM ve gömülü JSON durum verisi, AI tarayıcılarının indirip işlediği token miktarını "
-                        "artırır; büyük yanıtlar kesilebilir." + (
-                            f" Örnek: {tokens.get('html_tokens')} HTML token'ının {tokens.get('text_tokens')}'i "
-                            f"okunabilir metin." if tokens else "")),
+           rule_id="technical.ai_token_bloat", title=t("actions.rule.token_bloat.title", count=len(urls)),
+           description=(t("actions.rule.token_bloat.description") + (
+               t("actions.rule.token_bloat.example", html_tokens=tokens.get("html_tokens"),
+                 text_tokens=tokens.get("text_tokens")) if tokens else "")),
            affected_urls=urls, evidence=[x.detail for x in found],
            snippet=Snippet("text", fix["code"], None, fix["instructions"]) if fix else None)
 
@@ -233,10 +234,10 @@ def restrictive_directives(r: Rules) -> None:
         return
     examples = [d for ds in f["directive_pages"].values() for d in ds]
     r.emit("ai_access", "robots_directives", base_impact="high", effort="low", category="crawler",
-           rule_id="crawler.noindex_noai", title="Önemli sayfalardaki noindex/noai yönergelerini kaldırın",
-           description="Bu yönergeler sayfanın AI cevaplarında ve arama indeksinde kullanılmasını engeller.",
+           rule_id="crawler.noindex_noai", title=r.t("actions.rule.directives.title"),
+           description=r.t("actions.rule.directives.description"),
            affected_urls=sorted(f["directive_pages"]), evidence=examples[:5],
-           snippet=Snippet("html", sn.directive_fix(examples)))
+           snippet=Snippet("html", sn.directive_fix(examples, lang=r.ctx.lang)))
 
 
 @rule
@@ -250,11 +251,10 @@ def client_side_rendering(r: Rules) -> None:
     r.emit("ai_access", "render_mode", base_impact="high" if csr else "medium", effort="high", category="technical",
            blocker=bool(render and render.score < 30),
            rule_id="technical.server_side_rendering",
-           title=f"{len(weak)} sayfayı sunucu tarafında render edin (SSR/SSG)",
-           description=("GPTBot, ClaudeBot ve PerplexityBot JavaScript çalıştırmaz; içerik ilk HTML yanıtında yoksa "
-                        "sayfa onlar için boştur. Next.js/Nuxt SSR-ISR'a geçin veya botlara prerender sunun."),
+           title=r.t("actions.rule.ssr.title", count=len(weak)),
+           description=r.t("actions.rule.ssr.description"),
            affected_urls=weak, evidence=[f"{u}: {f['render'][u]['reason']}" for u in weak[:5]],
-           snippet=Snippet("tsx", sn.ssr_fix(weak[0]), "app/[slug]/page.tsx"))
+           snippet=Snippet("tsx", sn.ssr_fix(weak[0], lang=r.ctx.lang), "app/[slug]/page.tsx"))
 
 
 # ---------------- readability / schema ----------------
@@ -265,28 +265,28 @@ def missing_llms_txt(r: Rules) -> None:
         return
     lt = r.p["llm_readability"].facts.get("llms_txt") or {}
     exists = lt.get("status") == 200
+    t = r.t
     r.emit("llm_readability", "llms_txt", base_impact="medium", effort="low", category="technical",
            rule_id="technical.llms_txt",
-           title="/llms.txt dosyasını düzeltin" if exists else "/llms.txt bağlam dosyası oluşturun",
-           description=("llms.txt, LLM'lere sitenin özetini ve en önemli sayfalarını Markdown olarak sunar. Aşağıdaki "
-                        "dosya taranan sayfalardan (PageRank sırasıyla) otomatik üretildi."),
+           title=t("actions.rule.llms_txt.title_fix" if exists else "actions.rule.llms_txt.title_create"),
+           description=t("actions.rule.llms_txt.description"),
            target_url=r.ctx.origin + "/llms.txt", evidence=lt.get("issues") or [],
-           snippet=Snippet("markdown", sn.llms_txt(r.ctx), "llms.txt",
-                              "Site köküne text/plain (UTF-8) olarak yayınlayın: https://alanadiniz/llms.txt"))
+           snippet=Snippet("markdown", sn.llms_txt(r.ctx), "llms.txt", t("actions.rule.llms_txt.instructions")))
 
 
 @rule
 def faq_schema_missing(r: Rules) -> None:
     f = r.p["llm_readability"].facts
+    t = r.t
     for url in f["faq_schema_missing"][:3]:
         pairs = f["qa_by_page"].get(url, [])
         r.emit("llm_readability", "schema_coverage", base_impact="medium", effort="low", category="schema",
                fix_fraction=0.2, rule_id="schema.faq_page",
-               title="Sayfadaki soru-cevapları FAQPage şemasıyla işaretleyin",
-               description=(f"Bu sayfada {len(pairs)} soru-cevap var ama FAQPage şeması yok. Şema, cevap motorlarının "
-                            "soruyu ve hap cevabı doğrudan eşleştirmesini sağlar."),
-               target_url=url, affected_urls=[url], evidence=[f"Soru: {q['question']}" for q in pairs[:3]],
-               snippet=Snippet("json-ld", sn.faq_jsonld(pairs), None, "<head> içine ekleyin."))
+               title=t("actions.rule.faq_schema.title"),
+               description=t("actions.rule.faq_schema.description", count=len(pairs)),
+               target_url=url, affected_urls=[url],
+               evidence=[t("actions.rule.faq_schema.evidence_question", question=q["question"]) for q in pairs[:3]],
+               snippet=Snippet("json-ld", sn.faq_jsonld(pairs), None, t("actions.rule.faq_schema.instructions")))
 
 
 @rule
@@ -300,11 +300,10 @@ def no_direct_answers(r: Rules) -> None:
     if not targets:
         return
     r.emit("llm_readability", "direct_answers", base_impact="high", effort="medium", category="content",
-           rule_id="content.direct_answers", title="Önemli sayfalara doğrudan cevap (SSS) blokları ekleyin",
-           description=("AI motorları 'X nedir / ne kadar / hangisi' sorularına kısa, net cevap veren bölümleri alıntılar. "
-                        "Her önemli sayfaya 3-5 soru ve 40-60 kelimelik cevaplar ekleyin, ardından FAQPage şeması koyun."),
+           rule_id="content.direct_answers", title=r.t("actions.rule.direct_answers.title"),
+           description=r.t("actions.rule.direct_answers.description"),
            affected_urls=[p.url for p in targets],
-           snippet=Snippet("html", sn.qa_block_template(targets[0])))
+           snippet=Snippet("html", sn.qa_block_template(targets[0], lang=r.ctx.lang)))
 
 
 @rule
@@ -313,22 +312,22 @@ def organization_schema(r: Rules) -> None:
     ef = r.p["eeat"].facts
     if rf["has_organization_schema"] and len(ef["same_as"]) >= 2 and ef["has_logo"]:
         return
+    t = r.t
     missing = []
     if not rf["has_organization_schema"]:
-        missing.append("Organization şeması yok")
+        missing.append(t("actions.rule.organization.missing_schema"))
     if len(ef["same_as"]) < 2:
-        missing.append(f"sameAs bağlantısı {len(ef['same_as'])} (en az 2 önerilir: LinkedIn, Wikidata, sosyal medya)")
+        missing.append(t("actions.rule.organization.missing_same_as", count=len(ef["same_as"])))
     if not ef["has_logo"]:
-        missing.append("logo yok")
+        missing.append(t("actions.rule.organization.missing_logo"))
     r.emit("eeat", "authoritativeness", base_impact="high" if not rf["has_organization_schema"] else "medium",
            effort="low", category="schema", rule_id="schema.organization", fix_fraction=0.5,
-           title=("Ana sayfaya Organization şeması ekleyin" if not rf["has_organization_schema"]
-                  else "Organization şemasını sameAs/logo ile tamamlayın"),
-           description=("Organization şeması markanızı bilgi grafındaki bir varlığa bağlar; sameAs ile Wikidata/LinkedIn "
-                        "profilleri LLM'lerin markayı doğrulamasını sağlar."),
+           title=t("actions.rule.organization.title_add" if not rf["has_organization_schema"]
+                   else "actions.rule.organization.title_complete"),
+           description=t("actions.rule.organization.description"),
            target_url=r.ctx.origin + "/", evidence=missing,
            snippet=Snippet("json-ld", sn.organization_jsonld(r.ctx, ef["same_as"], ef["contact"]), None,
-                              "Ana sayfanın <head> bölümüne ekleyin, TODO alanlarını doldurun."))
+                           t("actions.rule.organization.instructions")))
 
 
 def _pages_missing_family(r: Rules, page_type: PageType, family: str) -> list:
@@ -341,25 +340,27 @@ def product_schema(r: Rules) -> None:
     missing = _pages_missing_family(r, PageType.PRODUCT, "Product")
     incomplete = [v for v in r.p["llm_readability"].facts["validations"]
                   if v["family"] == "Product" and (v["missing_required"] or v["errors"] or len(v["missing_recommended"]) > 3)]
+    t = r.t
     if missing:
         r.emit("llm_readability", "schema_coverage", base_impact="high", effort="low", category="schema",
                fix_fraction=0.4, rule_id="schema.product",
-               title=f"{len(missing)} ürün sayfasına Product şeması ekleyin",
-               description=("Fiyat, stok, marka ve SKU bilgisinin yapılandırılmış olması ürünün AI alışveriş cevaplarında "
-                            "(ChatGPT Shopping, Perplexity, Gemini) önerilmesinin ön koşuludur."),
+               title=t("actions.rule.product_schema.title", count=len(missing)),
+               description=t("actions.rule.product_schema.description"),
                affected_urls=[p.url for p in missing],
                snippet=Snippet("json-ld", sn.product_jsonld(r.ctx, missing[0]), None,
-                                  "Her ürün sayfasında ürün verisinden dinamik üretin."))
+                               t("actions.rule.product_schema.instructions")))
     if incomplete:
         v = incomplete[0]
         page = next((p for p in r.ctx.pages if p.url == v["url"]), None)
         r.emit("llm_readability", "schema_validity", base_impact="medium", effort="low", category="schema",
                fix_fraction=0.5, rule_id="schema.product_incomplete",
-               title=f"{len(incomplete)} Product şemasındaki eksik alanları tamamlayın",
-               description="Eksik/hatalı alanlar zengin sonuç ve AI ürün kartı uygunluğunu düşürür.",
+               title=t("actions.rule.product_incomplete.title", count=len(incomplete)),
+               description=t("actions.rule.product_incomplete.description"),
                affected_urls=[x["url"] for x in incomplete],
-               evidence=[f"{x['url']}: eksik {', '.join(x['missing_required'] + x['missing_recommended'][:4])}"
-                         + (f"; hata: {'; '.join(x['errors'])}" if x["errors"] else "") for x in incomplete[:5]],
+               evidence=[t("actions.rule.product_incomplete.evidence_missing", url=x["url"],
+                           fields=", ".join(x["missing_required"] + x["missing_recommended"][:4]))
+                         + (t("actions.rule.product_incomplete.evidence_errors", errors="; ".join(x["errors"]))
+                            if x["errors"] else "") for x in incomplete[:5]],
                snippet=Snippet("json-ld", sn.product_jsonld(r.ctx, page), None) if page else None)
 
 
@@ -371,14 +372,15 @@ def article_schema_author(r: Rules) -> None:
     if not targets:
         return
     page = next(p for p in r.ctx.pages if p.url == targets[0])
+    t = r.t
     r.emit("eeat", "experience_expertise", base_impact="high", effort="medium", category="authority",
            rule_id="authority.article_author",
-           title=f"{len(targets)} makaleye yazar bilgisi ve Article şeması ekleyin",
-           description=("Kimin yazdığı belli olmayan içerik E-E-A-T açısından zayıftır. Görünür bir yazar kutusu "
-                        "(ad, unvan, uzmanlık, profil sayfası) ve author bilgisi içeren Article şeması ekleyin."),
+           title=t("actions.rule.article_author.title", count=len(targets)),
+           description=t("actions.rule.article_author.description"),
            affected_urls=targets,
-           evidence=[f"Yazarsız makale: {u}" for u in ef["articles_without_author"][:3]]
-           + [f"Article şeması yok: {p.url}" for p in no_schema[:3]],
+           evidence=[t("actions.rule.article_author.evidence_no_author", url=u)
+                     for u in ef["articles_without_author"][:3]]
+           + [t("actions.rule.article_author.evidence_no_schema", url=p.url) for p in no_schema[:3]],
            snippet=Snippet("json-ld", sn.article_jsonld(r.ctx, page)))
 
 
@@ -389,8 +391,9 @@ def breadcrumbs(r: Rules) -> None:
         return
     page = next(p for p in r.ctx.pages if p.url == missing[0])
     r.emit("llm_readability", "schema_coverage", base_impact="medium", effort="low", category="schema",
-           fix_fraction=0.2, rule_id="schema.breadcrumb", title=f"{len(missing)} alt sayfaya BreadcrumbList ekleyin",
-           description="Breadcrumb şeması sayfanın site hiyerarşisindeki yerini (kategori → ürün) modele açıkça anlatır.",
+           fix_fraction=0.2, rule_id="schema.breadcrumb",
+           title=r.t("actions.rule.breadcrumb.title", count=len(missing)),
+           description=r.t("actions.rule.breadcrumb.description"),
            affected_urls=missing, snippet=Snippet("json-ld", sn.breadcrumb_jsonld(r.ctx, page)))
 
 
@@ -402,14 +405,14 @@ def low_density(r: Rules) -> None:
         return
     page = next(p for p in r.ctx.pages if p.url == low[0])
     d = f["density"][low[0]]
+    t = r.t
     r.emit("llm_readability", "information_density", base_impact="medium", effort="medium", category="content",
-           rule_id="content.information_density", title=f"{len(low)} sayfada bilgi yoğunluğunu artırın",
-           description=("Dolgu metin yerine tablo, madde işareti ve somut rakamlar kullanın; LLM'ler yapılandırılmış ve "
-                        "sayısal içeriği daha sık alıntılar."),
+           rule_id="content.information_density", title=t("actions.rule.low_density.title", count=len(low)),
+           description=t("actions.rule.low_density.description"),
            affected_urls=low,
-           evidence=[f"{low[0]}: {d['words']} kelime, {d['tables']} tablo, {d['lists']} liste, "
-                     f"{d['numbers_per_100w']} veri/100 kelime, paragraf ort. {d['avg_paragraph_words']} kelime"],
-           snippet=Snippet("html", sn.density_template(page)))
+           evidence=[t("actions.rule.low_density.evidence", url=low[0], words=d["words"], tables=d["tables"],
+                       lists=d["lists"], numbers=d["numbers_per_100w"], paragraph=d["avg_paragraph_words"])],
+           snippet=Snippet("html", sn.density_template(page, lang=r.ctx.lang)))
 
 
 # ---------------- E-E-A-T / trust ----------------
@@ -419,12 +422,14 @@ def policy_pages(r: Rules) -> None:
     f = r.p["eeat"].facts
     if not f["missing_policies"]:
         return
+    t = r.t
+    titles = [sn.policy_info(t, k)[0] for k in f["missing_policies"]]
     r.emit("eeat", "trust", base_impact="high" if f["is_ecommerce"] else "medium", effort="medium",
            category="authority", rule_id="authority.policy_pages", fix_fraction=0.3,
-           title="Eksik güven sayfalarını yayınlayın: " + ", ".join(sn.POLICY_TITLES[k][0] for k in f["missing_policies"]),
-           description=("Gizlilik, kullanım koşulları ve (e-ticarette) iade/kargo politikaları hem yasal zorunluluk "
-                        "(KVKK, Mesafeli Sözleşmeler Yönetmeliği) hem de güven sinyalidir."),
-           target_url=r.ctx.origin + "/", evidence=[f"Bulunamadı: {sn.POLICY_TITLES[k][0]}" for k in f["missing_policies"]],
+           title=t("actions.rule.policy_pages.title", pages=", ".join(titles)),
+           description=t("actions.rule.policy_pages.description"),
+           target_url=r.ctx.origin + "/",
+           evidence=[t("actions.rule.policy_pages.evidence_missing", title=title) for title in titles],
            snippet=Snippet("html", sn.policy_pages_fix(r.ctx, f["missing_policies"])))
 
 
@@ -432,15 +437,16 @@ def policy_pages(r: Rules) -> None:
 def contact_info(r: Rules) -> None:
     f = r.p["eeat"].facts
     c = f["contact"]
-    missing = [n for k, n in (("phones", "telefon"), ("emails", "e-posta"), ("addresses", "fiziksel adres")) if not c[k]]
+    t = r.t
+    missing = [t(f"actions.rule.contact.kind_{k}") for k in ("phones", "emails", "addresses") if not c[k]]
     if not missing and f["contact_pages"]:
         return
     r.emit("eeat", "trust", base_impact="medium", effort="low", category="authority", rule_id="authority.contact_info",
-           fix_fraction=0.25, title="Doğrulanabilir iletişim bilgilerini ekleyin",
-           description=("Telefon, e-posta ve açık adresin hem görünür hem de şemada bulunması işletmenin gerçek olduğunu "
-                        "doğrular; LLM'ler 'güvenilir mi?' sorularında bu sinyallere bakar."),
+           fix_fraction=0.25, title=t("actions.rule.contact.title"),
+           description=t("actions.rule.contact.description"),
            target_url=(f["contact_pages"] or [r.ctx.origin + "/"])[0],
-           evidence=[f"Eksik: {', '.join(missing)}"] + ([] if f["contact_pages"] else ["İletişim sayfası bulunamadı"]),
+           evidence=[t("actions.rule.contact.evidence_missing", items=", ".join(missing))]
+           + ([] if f["contact_pages"] else [t("actions.rule.contact.evidence_no_page")]),
            snippet=Snippet("html", sn.contact_fix(r.ctx, c)))
 
 
@@ -449,14 +455,16 @@ def https_hsts(r: Rules) -> None:
     f = r.p["eeat"].facts
     if f["https"] and f["hsts"] and f.get("http_redirects_to_https") is not False:
         return
-    issues = ([] if f["https"] else ["Site HTTPS üzerinden sunulmuyor"]) + \
-             ([] if f["hsts"] else ["Strict-Transport-Security başlığı yok"]) + \
-             (["HTTP → HTTPS yönlendirmesi yok"] if f.get("http_redirects_to_https") is False else [])
+    t = r.t
+    issues = ([] if f["https"] else [t("actions.rule.https.issue_not_https")]) + \
+             ([] if f["hsts"] else [t("actions.rule.https.issue_no_hsts")]) + \
+             ([t("actions.rule.https.issue_no_redirect")] if f.get("http_redirects_to_https") is False else [])
     r.emit("eeat", "trust", base_impact="high" if not f["https"] else "low", effort="low", category="technical",
            rule_id="technical.https_hsts", fix_fraction=0.25,
-           title="SSL/HTTPS'i zorunlu kılın" if not f["https"] else "HSTS başlığı ve HTTPS yönlendirmesi ekleyin",
-           description="Şifreli bağlantı temel güven sinyalidir; tarayıcılar ve arama motorları HTTP sitelerini işaretler.",
-           target_url=r.ctx.origin + "/", evidence=issues, snippet=Snippet("nginx", sn.hsts_fix(r.ctx.origin)))
+           title=t("actions.rule.https.title_enforce" if not f["https"] else "actions.rule.https.title_hsts"),
+           description=t("actions.rule.https.description"),
+           target_url=r.ctx.origin + "/", evidence=issues,
+           snippet=Snippet("nginx", sn.hsts_fix(r.ctx.origin, lang=r.ctx.lang)))
 
 
 @rule
@@ -468,11 +476,11 @@ def unsourced_claims(r: Rules) -> None:
     examples = [c for u in pages for c in f["claim_examples"].get(u, [])]
     r.emit("eeat", "factual_consistency", base_impact="medium", effort="medium", category="content",
            rule_id="content.cite_sources", fix_fraction=0.5,
-           title=f"{len(pages)} sayfadaki kaynaksız iddialara atıf ekleyin",
-           description=("İstatistik ve 'araştırmalara göre' türü iddialar kaynaksız olduğunda LLM'ler içeriği spekülatif "
-                        "sayar. Birincil kaynağa (resmî istatistik, DOI'li makale, standart) bağlantı verin."),
-           affected_urls=pages, evidence=[f"İddia: “{e[:140]}”" for e in examples[:3]],
-           snippet=Snippet("html", sn.citation_fix(examples)))
+           title=r.t("actions.rule.unsourced.title", count=len(pages)),
+           description=r.t("actions.rule.unsourced.description"),
+           affected_urls=pages,
+           evidence=[r.t("actions.rule.unsourced.evidence_claim", claim=e[:140]) for e in examples[:3]],
+           snippet=Snippet("html", sn.citation_fix(examples, lang=r.ctx.lang)))
 
 
 @rule
@@ -483,13 +491,10 @@ def spam_signals(r: Rules) -> None:
         return
     r.emit("eeat", "factual_consistency", base_impact="medium", effort="low", category="content",
            rule_id="content.spam_signals", fix_fraction=0.3,
-           title=f"{len(spam)} sayfadaki spam/abartı sinyallerini temizleyin",
-           description=("'En iyi', '%100 garanti', 'mucize' gibi doğrulanamaz ifadeler ve anahtar kelime tekrarı içeriği "
-                        "reklam/spam olarak sınıflandırtır. Ölçülebilir, kaynaklı ifadelerle değiştirin."),
+           title=r.t("actions.rule.spam.title", count=len(spam)),
+           description=r.t("actions.rule.spam.description"),
            affected_urls=sorted(spam), evidence=[f"{u}: {'; '.join(v)}" for u, v in list(spam.items())[:5]],
-           snippet=Snippet("text", "Önce: \"Piyasanın en iyi, %100 garantili kahve makinesi!\"\n"
-                                      "Sonra: \"15 bar basınç, 25 saniyede espresso; 2 yıl üretici garantisi "
-                                      "(TSE belgeli).\""))
+           snippet=Snippet("text", r.t("actions.rule.spam.example")))
 
 
 @rule
@@ -499,12 +504,11 @@ def data_conflicts(r: Rules) -> None:
         return
     ev = [f"'{c['product']}': " + ", ".join(f"{u} → {p}" for u, p in c["prices"].items()) for c in f["price_conflicts"][:3]]
     if len(f["organization_names"]) > 2:
-        ev.append("Kurum adı varyasyonları: " + ", ".join(f["organization_names"]))
+        ev.append(r.t("actions.rule.conflicts.evidence_org_names", names=", ".join(f["organization_names"])))
     r.emit("eeat", "factual_consistency", base_impact="high", effort="medium", category="content",
            rule_id="content.data_consistency", fix_fraction=0.3,
-           title="Sayfalar arası çelişkili verileri tekilleştirin",
-           description=("Aynı ürün için farklı fiyatlar veya farklı kurum adları, modellerin hangi bilginin doğru "
-                        "olduğuna karar verememesine ve sitenizi kaynak göstermemesine yol açar. Tek veri kaynağından üretin."),
+           title=r.t("actions.rule.conflicts.title"),
+           description=r.t("actions.rule.conflicts.description"),
            affected_urls=sorted({u for c in f["price_conflicts"] for u in c["prices"]}), evidence=ev)
 
 
@@ -517,8 +521,8 @@ def meta_descriptions(r: Rules) -> None:
         return
     pages = [p for p in r.ctx.pages if p.url in set(urls)]
     r.emit("technical_seo", "meta_description", base_impact="low", effort="low", category="technical",
-           rule_id="technical.meta_description", title=f"{len(urls)} sayfaya meta description yazın",
-           description="Meta description, AI arama sonuçlarında ve llms.txt'de sayfa özeti olarak kullanılır.",
+           rule_id="technical.meta_description", title=r.t("actions.rule.meta_description.title", count=len(urls)),
+           description=r.t("actions.rule.meta_description.description"),
            affected_urls=urls, snippet=Snippet("html", sn.meta_description_fix(pages)))
 
 
@@ -527,13 +531,15 @@ def broken_pages(r: Rules) -> None:
     broken = r.p["technical_seo"].facts["broken"]
     if not broken:
         return
+    t = r.t
     r.emit("technical_seo", "broken_pages", base_impact="medium", effort="low", category="technical",
-           rule_id="technical.broken_pages", title=f"{len(broken)} kırık URL'yi düzeltin veya yönlendirin",
-           description="Kırık iç linkler tarama bütçesini harcar ve botların önemli sayfalara ulaşmasını engeller.",
-           affected_urls=[b["url"] for b in broken], evidence=[f"{b['url']} → {b['status'] or b['error']}" for b in broken[:5]],
-           snippet=Snippet("nginx", "\n".join(f"rewrite ^{urlsplit(b['url']).path}$ /hedef-sayfa permanent;  # TODO hedef URL"
-                                                for b in broken[:5]), None,
-                              "Kalıcı olarak kaldırılan sayfaları en yakın içerikli sayfaya 301 ile yönlendirin."))
+           rule_id="technical.broken_pages", title=t("actions.rule.broken_pages.title", count=len(broken)),
+           description=t("actions.rule.broken_pages.description"),
+           affected_urls=[b["url"] for b in broken],
+           evidence=[f"{b['url']} → {b['status'] or b['error']}" for b in broken[:5]],
+           snippet=Snippet("nginx", "\n".join(t("actions.rule.broken_pages.redirect_line", path=urlsplit(b["url"]).path)
+                                              for b in broken[:5]), None,
+                           t("actions.rule.broken_pages.instructions")))
 
 
 @rule
@@ -544,8 +550,8 @@ def thin_content(r: Rules) -> None:
     if not thin:
         return
     r.emit("technical_seo", "thin_content", base_impact="medium", effort="high", category="content",
-           rule_id="content.thin_content", title=f"{len(thin)} ince içerikli sayfayı genişletin",
-           description="150 kelimenin altındaki sayfalar cevap motorları için yeterli bağlam sağlamaz.",
+           rule_id="content.thin_content", title=r.t("actions.rule.thin_content.title", count=len(thin)),
+           description=r.t("actions.rule.thin_content.description"),
            affected_urls=thin)
 
 

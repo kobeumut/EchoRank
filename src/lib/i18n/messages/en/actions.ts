@@ -1,0 +1,45 @@
+// Namespace "actions" — English (source of truth; every key must also exist in ../tr/actions.ts).
+// "What to Do?" page: prioritized action cards with status workflow.
+export const actions = {
+  "actions.title": "What to Do?",
+  "actions.subtitle": "Actions prioritized by impact × scope / effort. Copy the code blocks, apply them to your site, then re-check.",
+  "actions.recheckAll": "Re-check All",
+  "actions.recheckRunning": "Check running…",
+
+  "actions.filter.status": "Status",
+  "actions.filter.priority": "Priority",
+  "actions.filter.category": "Category",
+  "actions.filter.all": "All",
+  "actions.filter.open": "Open",
+  "actions.filter.resolved": "Resolved",
+  "actions.filter.dismissed": "Dismissed",
+  "actions.filter.allCategories": "All categories",
+  "actions.filter.onlySnippets": "Only items with a ready-made code snippet",
+
+  "actions.card.expectedGain": "≈ +{gain} GEO points",
+  "actions.card.evidence": "Finding",
+  "actions.card.hideUrls": "Hide affected pages",
+  "actions.card.showUrls_one": "Show {count} affected page",
+  "actions.card.showUrls_other": "Show {count} affected pages",
+  "actions.card.markResolved": "✓ Mark as Resolved",
+  "actions.card.markInProgress": "I'm working on it",
+  "actions.card.markOpen": "Mark as open",
+  "actions.card.dismiss": "Dismiss",
+  "actions.card.recheck": "↻ Re-check",
+  "actions.card.recheckHint": "A new audit verifies the fix; if the problem persists the action is reopened.",
+  "actions.card.reopen": "Reopen",
+  "actions.card.undo": "Undo",
+  "actions.card.resolvedOn": "Resolved: {date}",
+  "actions.card.updatedOn": "Updated: {date}",
+
+  "actions.toast.resolved": "Marked as resolved. Start a new audit with “Re-check” to verify.",
+  "actions.toast.inProgress": "Marked as in progress.",
+  "actions.toast.dismissed": "Action dismissed; it will not be recreated in later audits.",
+  "actions.toast.reopened": "Action reopened.",
+  "actions.toast.updated": "Updated.",
+
+  "actions.empty.noOpen": "No open actions",
+  "actions.empty.noOpenHint": "All recommendations are resolved, or no audit has been run yet. You can re-check the site with a new audit.",
+  "actions.empty.noMatch": "No actions match this filter",
+  "actions.empty.noMatchHint": "Try changing the filters.",
+} satisfies Record<string, string>;

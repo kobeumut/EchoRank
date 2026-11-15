@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ..crawler import CrawlConfig
+from ..i18n import DEFAULT_LANG, get_translator, normalize_lang
 from ..pipeline import IndexResult, index_site
 from .access import analyze_access
 from .actions import ActionCard, generate_actions
@@ -37,6 +38,7 @@ class AuditReport:
     autogeo: AutoGeoSiteReport | None = None  # content-level citation readiness (does not change geo_score)
     bot_simulation: BotSimulationReport | None = None  # live AI crawler simulation (WAF / render / tokens)
     generated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    lang: str = DEFAULT_LANG  # language of the generated text (summary, check details, action cards)
 
     @property
     def metrics(self) -> dict[str, Any]:
@@ -63,12 +65,13 @@ class AuditReport:
     def summary(self) -> str:
         weakest = sorted(self.pillars.values(), key=lambda p: p.score)[0]
         high = [a for a in self.actions if a.impact == "high"]
-        s = (f"GEO skoru {self.geo_score}/100 ({grade(self.geo_score)}). AI erişim "
-             f"{self.pillars['ai_access'].score}, LLM okunabilirlik {self.pillars['llm_readability'].score}, "
-             f"E-E-A-T {self.eeat_score}, teknik SEO {self.seo_score}. En zayıf alan: {weakest.label}. "
-             f"{len(self.actions)} aksiyon önerisi ({len(high)} yüksek etkili).")
+        t = get_translator(self.lang)
+        s = t("engine.summary", geo=self.geo_score, grade=grade(self.geo_score),
+              ai_access=self.pillars["ai_access"].score, readability=self.pillars["llm_readability"].score,
+              eeat=self.eeat_score, seo=self.seo_score, weakest=weakest.label, count=len(self.actions),
+              high=len(high))
         if self.caps:
-            s += " Skor sınırlandı: " + "; ".join(self.caps)
+            s += t("engine.summary.caps_prefix") + "; ".join(self.caps)
         return s
 
     def to_dict(self) -> dict[str, Any]:
@@ -103,9 +106,12 @@ def _camel(s: str) -> str:
 
 
 def score_index(index: IndexResult, signals: SiteSignals | None = None,
-                bot_simulation: BotSimulationReport | None = None) -> AuditReport:
+                bot_simulation: BotSimulationReport | None = None, *, lang: str = DEFAULT_LANG) -> AuditReport:
+    """Score a crawl; ``lang`` selects the language of every human-readable text in the report."""
+    lang = normalize_lang(lang)
     ctx = AuditContext(crawl=index.crawl, graph=index.graph, gaps=index.gaps, signals=signals,
-                       bot_simulation=bot_simulation)
+                       bot_simulation=bot_simulation, lang=lang)
+    t = ctx.t
     pillars = {p.key: p for p in (analyze_access(ctx), analyze_readability(ctx), analyze_eeat(ctx), analyze_seo(ctx))}
     raw = sum(p.score * p.weight for p in pillars.values()) / sum(p.weight for p in pillars.values())
     geo = round(raw)
@@ -117,37 +123,39 @@ def score_index(index: IndexResult, signals: SiteSignals | None = None,
     answer_bots = [b for b in bots if b["purpose"] in ("search", "user")]
     if answer_bots and all(b["status"] == "blocked" for b in answer_bots):
         geo = min(geo, 35)
-        caps.append("tüm AI arama/cevap botları robots.txt ile engelli (üst sınır 35)")
+        caps.append(t("engine.cap.answer_bots_blocked"))
     elif access.facts["waf_blocked"] and len(access.facts["waf_blocked"]) >= 3:
         geo = min(geo, 45)
-        caps.append("WAF/CDN AI botlarını engelliyor (üst sınır 45)")
+        caps.append(t("engine.cap.waf_blocks"))
     render = access.check("render_mode")
     if render and render.score < 30 and ctx.pages:
         geo = min(geo, 40)
-        caps.append("önemli sayfalar istemci tarafında (CSR) render ediliyor (üst sınır 40)")
+        caps.append(t("engine.cap.csr"))
     if not ctx.pages:
         geo = 0
-        caps.append("hiç sayfa alınamadı")
+        caps.append(t("engine.cap.no_pages"))
 
     actions = generate_actions(ctx, pillars)
-    autogeo = analyze_pages(ctx.pages) if ctx.pages else None
+    autogeo = analyze_pages(ctx.pages, lang=lang) if ctx.pages else None
     return AuditReport(site=index.crawl.start_url, geo_score=geo, seo_score=pillars["technical_seo"].score,
                        eeat_score=pillars["eeat"].score, pillars=pillars, actions=actions, caps=caps, signals=signals,
-                       autogeo=autogeo, bot_simulation=bot_simulation)
+                       autogeo=autogeo, bot_simulation=bot_simulation, lang=lang)
 
 
 async def audit_site(url: str, config: CrawlConfig | None = None, probe_user_agents: bool = True,
-                     client=None, **crawler_kwargs) -> tuple[IndexResult, AuditReport]:
-    """Crawl + graph + site signals + scoring in one call."""
+                     client=None, *, lang: str = DEFAULT_LANG, **crawler_kwargs) -> tuple[IndexResult, AuditReport]:
+    """Crawl + graph + site signals + scoring in one call (human-readable output in ``lang``)."""
     cfg = config or CrawlConfig()
     index = await index_site(url, config, client=client, **crawler_kwargs)
     signals = await collect_site_signals(index.crawl.start_url, client=client, probe_user_agents=probe_user_agents,
-                                         timeout=cfg.timeout)
-    sim = await run_bot_simulation(index, cfg, client) if probe_user_agents and index.crawl.ok_pages else None
-    return index, score_index(index, signals, sim)
+                                         timeout=cfg.timeout, lang=lang)
+    sim = await run_bot_simulation(index, cfg, client, lang=lang) if probe_user_agents and index.crawl.ok_pages \
+        else None
+    return index, score_index(index, signals, sim, lang=lang)
 
 
-async def run_bot_simulation(index: IndexResult, cfg: CrawlConfig, client=None) -> BotSimulationReport | None:
+async def run_bot_simulation(index: IndexResult, cfg: CrawlConfig, client=None, *,
+                             lang: str = DEFAULT_LANG) -> BotSimulationReport | None:
     """Live AI-bot fetches of the homepage + key pages; never fails the audit."""
     ctx = AuditContext(crawl=index.crawl, graph=index.graph, gaps=index.gaps)
     urls = [index.crawl.start_url] + [p.url for p in sorted(ctx.key_pages, key=lambda p: (p.depth, p.url))]
@@ -155,7 +163,7 @@ async def run_bot_simulation(index: IndexResult, cfg: CrawlConfig, client=None) 
     try:
         return await simulate_bots(list(dict.fromkeys(urls))[:BOTSIM_MAX_PAGES], client=client,
                                    robots_txt=index.crawl.robots_txt, robots_status=index.crawl.robots_status,
-                                   timeout=cfg.timeout, delay=1 / rps if rps > 0 else 0)
+                                   timeout=cfg.timeout, delay=1 / rps if rps > 0 else 0, lang=lang)
     except Exception as exc:  # noqa: BLE001 — diagnostics must not break scoring
         log.warning("bot simulation failed: %s", exc)
         return None

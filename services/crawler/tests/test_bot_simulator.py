@@ -1,6 +1,7 @@
 """Live AI crawler simulator: WAF / challenge detection, render integrity, token weight, fix recipes."""
 import gzip
 import json
+import re
 from typing import Callable
 
 import httpx
@@ -55,7 +56,7 @@ async def test_ssr_site_is_fully_accessible_and_gets_preventive_rules():
     assert cf["preventive"] and all(f'"{c}"' in cf["code"] for c in ("GPTBot", "ClaudeBot", "PerplexityBot",
                                                                      "Googlebot", "Applebot"))
     assert any(f["id"] == "nginx_allow" for f in report.fixes) and any(f["id"] == "apache_allow" for f in report.fixes)
-    assert any("robots.txt jetonudur" in c for c in report.caveats)
+    assert any("robots.txt tokens only" in c for c in report.caveats)
 
 
 async def test_bots_send_official_user_agents_without_cookies():
@@ -89,7 +90,7 @@ async def test_cloudflare_challenge_and_block_are_silent_blocks():
     r = by_token(report.pages[0])
     assert r["GPTBot"].outcome == "challenge" and r["GPTBot"].protection.vendor == "cloudflare"
     assert r["GPTBot"].protection.name == "Cloudflare Managed Challenge"
-    assert r["PerplexityBot"].outcome == "blocked" and r["PerplexityBot"].protection.name == "Cloudflare WAF engeli"
+    assert r["PerplexityBot"].outcome == "blocked" and r["PerplexityBot"].protection.name == "Cloudflare WAF block"
     assert all(r[t].silent_block for t in ("GPTBot", "ClaudeBot", "PerplexityBot"))
     assert r["Google-Extended"].accessible and not r["Google-Extended"].general
     assert set(report.blocked_bots()) == {"GPTBot", "ClaudeBot", "PerplexityBot"}
@@ -99,7 +100,7 @@ async def test_cloudflare_challenge_and_block_are_silent_blocks():
     codes = [f.code for f in report.findings]
     assert codes[:2] == ["waf_challenge", "waf_block"]
     block = next(f for f in report.findings if f.code == "waf_block")
-    assert "sessiz engel" in block.detail and block.bots == ["PerplexityBot"]
+    assert "silent block" in block.detail and block.bots == ["PerplexityBot"]
 
     cf = next(f for f in report.fixes if f["id"] == "cloudflare_waf_skip")
     assert cf["recommended"] and not cf["preventive"]
@@ -112,7 +113,7 @@ async def test_cloudflare_challenge_and_block_are_silent_blocks():
     assert '"~*(GPTBot|ClaudeBot|PerplexityBot)" 1;' in nginx["code"]
     apache = next(f for f in report.fixes if f["id"] == "apache_allow")
     assert 'SetEnvIfNoCase User-Agent "(GPTBot|ClaudeBot|PerplexityBot)" ai_bot' in apache["code"]
-    assert report.caveats and "IP aralıklarından" in report.caveats[0]
+    assert report.caveats and "IP ranges" in report.caveats[0]
 
 
 async def test_general_block_when_browser_is_refused_too():
@@ -148,7 +149,7 @@ async def test_content_parity_robots_disallow_and_dropped_connection():
     r = by_token(report.pages[0])
     assert r["ClaudeBot"].outcome == "degraded" and r["ClaudeBot"].parity < 0.5
     assert r["PerplexityBot"].outcome == "error" and r["PerplexityBot"].silent_block
-    assert "bağlantısı düşürülüyor" in r["PerplexityBot"].reason
+    assert "the connection is being dropped" in r["PerplexityBot"].reason
     assert r["GPTBot"].robots_allowed is False and r["GPTBot"].accessible and not r["GPTBot"].silent_block
     codes = {f.code for f in report.findings}
     assert {"content_parity", "robots_disallow", "waf_block"} <= codes
@@ -277,8 +278,12 @@ def test_bloat_detects_inline_state_markers():
     html = "<html><body><p>x</p><script>self.__next_f.push([1,\"" + "a" * 120_000 + "\"])</script>" \
            "<script type='application/ld+json'>{\"@type\":\"Thing\"}</script></body></html>"
     b = analyze_bloat(BeautifulSoup(html, "lxml"), html)
-    assert b["json_state"][0]["kind"] == "Next.js RSC yükü" and b["ld_json_bytes"] > 0
-    assert any("gömülü JSON" in i for i in b["issues"])
+    assert b["json_state"][0]["kind"] == "Next.js RSC payload" and b["ld_json_bytes"] > 0
+    assert any("Embedded JSON state" in i for i in b["issues"])
+    # Turkish locale: same measurements, localized labels
+    tr = analyze_bloat(BeautifulSoup(html, "lxml"), html, lang="tr")
+    assert tr["json_state"][0]["kind"] == "Next.js RSC yükü" and tr["json_state_bytes"] == b["json_state_bytes"]
+    assert any("gömülü JSON" in i for i in tr["issues"])
 
 
 # ---------------------------------------------------------------- recipes
@@ -311,8 +316,83 @@ def test_cli_json(capsys):
         router.route(host="botsim.example.com").mock(side_effect=site(handler))
         assert main([ORIGIN + "/", "--delay", "0", "--bots", "ClaudeBot", "--code"]) == 0
     text = capsys.readouterr().out
-    assert "AI BOT SİMÜLASYONU" in text and "ClaudeBot" in text and "### Cloudflare WAF" in text
+    assert "AI BOT SIMULATION" in text and "ClaudeBot" in text and "### Cloudflare WAF" in text
     assert main([ORIGIN + "/", "--bots", "NopeBot"]) == 2
+    capsys.readouterr()
+
+
+def test_cli_lang_tr_prints_turkish_report_and_errors(capsys):
+    from geo_crawler.scoring.bot_simulator import main
+
+    def handler(ua, req):
+        return httpx.Response(403, text=CF_BLOCK_1020, headers={**HTML, "server": "cloudflare"}) if "GPTBot" in ua \
+            else httpx.Response(200, text=SSR_PAGE, headers=HTML)
+
+    with respx.mock(assert_all_called=False) as router:
+        router.route(host="botsim.example.com").mock(side_effect=site(handler))
+        assert main([ORIGIN + "/", "--delay", "0", "--bots", "GPTBot,ClaudeBot", "--code", "--lang", "tr"]) == 1
+    text = capsys.readouterr().out
+    assert "AI BOT SİMÜLASYONU" in text and "BULGULAR" in text and "engellendi" in text and "robots: izinli" in text
+    assert "# Cloudflare → Security → WAF → Custom rules → Create rule (listenin EN ÜSTÜNE taşıyın)" in text
+    assert main([ORIGIN + "/", "--bots", "NopeBot", "--lang", "tr"]) == 2
+    assert "bilinmeyen bot: NopeBot" in capsys.readouterr().err
+    # an unsupported language falls back to English instead of failing
+    assert main([ORIGIN + "/", "--bots", "NopeBot", "--lang", "de"]) == 2
+    assert "unknown bot: NopeBot" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------- Turkish locale (ids and config stay language-neutral)
+
+def _blocked_handler(ua, req):
+    cf = {**HTML, "server": "cloudflare", "cf-ray": "8f1c2d3e4f5a6b7c-IST"}
+    if "GPTBot" in ua or "ClaudeBot" in ua:
+        return httpx.Response(403, text=CF_MANAGED_CHALLENGE, headers={**cf, "cf-mitigated": "challenge"})
+    if "PerplexityBot" in ua:
+        return httpx.Response(403, text=CF_BLOCK_1020, headers=cf)
+    return httpx.Response(200, text=SSR_PAGE, headers=cf)
+
+
+async def test_turkish_locale_translates_text_but_not_ids():
+    en = await run(_blocked_handler)
+    tr = await run(_blocked_handler, lang="tr")
+    assert [f.code for f in tr.findings] == [f.code for f in en.findings]
+    assert [f.severity for f in tr.findings] == [f.severity for f in en.findings]
+    assert [f["id"] for f in tr.fixes] == [f["id"] for f in en.fixes]
+    assert [(r.token, r.outcome) for r in tr.pages[0].results] == [(r.token, r.outcome) for r in en.pages[0].results]
+    assert en.findings[0].title == "2 AI bots are stuck on a challenge/CAPTCHA page"
+    assert tr.findings[0].title == "2 AI botu challenge/CAPTCHA sayfasına takılıyor"
+    assert en.findings[1].title == "1 AI bot is rejected by the server/WAF"
+    assert tr.findings[1].title == "1 AI botu sunucu/WAF tarafından reddediliyor"
+    assert "sessiz engel" in tr.findings[1].detail and "silent block" in en.findings[1].detail
+    waf_tr = next(r for r in tr.pages[0].results if r.token == "PerplexityBot")
+    assert waf_tr.protection.name == "Cloudflare WAF engeli" and waf_tr.to_dict()["label"] == "engellendi"
+    assert waf_tr.protection.kind == "block" and waf_tr.protection.vendor == "cloudflare"
+    assert "lang" not in waf_tr.to_dict()  # presentation detail, not part of the JSON output
+    assert next(r for r in tr.pages[0].results if r.token == "Google-Extended").note.startswith("Google-Extended yalnızca")
+    assert tr.caveats[0].startswith("Simülasyon AI sağlayıcılarının IP aralıklarından")
+
+    # the generated configuration is identical; only the comment lines change language
+    def config(code: str) -> list[str]:
+        lines = [ln for ln in code.splitlines() if not ln.lstrip().startswith(("#", "//"))]
+        return [re.sub(r"\s+# .*$", "", ln) for ln in lines]  # also drop trailing comments
+
+    for fid in ("cloudflare_waf_skip", "nginx_allow", "apache_allow"):
+        code_en = next(f["code"] for f in en.fixes if f["id"] == fid)
+        code_tr = next(f["code"] for f in tr.fixes if f["id"] == fid)
+        assert code_en != code_tr and config(code_en) == config(code_tr)
+    nginx_tr = next(f for f in tr.fixes if f["id"] == "nginx_allow")
+    assert "# rate limit anahtarı: AI botları için boş anahtar = limit uygulanmaz" in nginx_tr["code"]
+    assert "`nginx -t && nginx -s reload`" in nginx_tr["instructions"]
+    cf_tr = next(f for f in tr.fixes if f["id"] == "cloudflare_waf_skip")
+    assert json.loads(cf_tr["code"].split("rules[0]):\n", 1)[1])["action"] == "skip"  # same JSON tail
+
+
+def test_detect_protection_names_follow_the_locale():
+    assert detect_protection(403, {}, CF_BLOCK_1020, lang="tr").name == "Cloudflare WAF engeli"
+    assert detect_protection(403, {}, CF_BLOCK_1020).name == "Cloudflare WAF block"
+    assert detect_protection(403, {}, "<h1>no</h1>", lang="tr").name == "Sunucu/WAF HTTP 403 engeli"
+    assert detect_protection(403, {}, "<h1>no</h1>").name == "Server/WAF HTTP 403 block"
+    assert detect_protection(429, {"retry-after": "60"}, "").evidence == ["HTTP 429, Retry-After: 60"]
 
 
 # ---------------------------------------------------------------- audit integration
@@ -351,7 +431,7 @@ async def test_audit_ships_simulation_and_tailored_waf_action():
     assert waf.snippet.code.startswith("### Cloudflare WAF") and 'http.user_agent contains "GPTBot"' in waf.snippet.code
     assert "Googlebot" not in waf.snippet.code
     bloat = next(a for a in rep.actions if a.rule_id == "technical.ai_token_bloat")
-    assert bloat.affected_urls == [ORIGIN + "/urun/barista-pro-x"] and "gömülü JSON" in bloat.evidence[0]
+    assert bloat.affected_urls == [ORIGIN + "/urun/barista-pro-x"] and "Embedded JSON" in bloat.evidence[0]
     assert {"ruleId", "details"} <= set(bloat.to_action_item())
 
 

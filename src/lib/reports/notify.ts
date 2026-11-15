@@ -1,12 +1,18 @@
 import type { ScheduledReport } from "@prisma/client";
 import { z } from "zod";
 import { publicRequest } from "./outbound";
-import { renderReportHtml } from "./render";
+import type { Locale } from "../i18n/config";
+import { serverT } from "../i18n/request";
+import { renderReportHtml, reportLocale } from "./render";
 import type { ReportSnapshot } from "./snapshot";
 
+/** `detail` is an operator-facing diagnostic (persisted in ReportRun.deliveries), deliberately English and never localized. */
 export type Delivery = { channel: string; status: "sent" | "failed" | "skipped"; detail: string };
-/** Independent attempts; never let one channel suppress the other, never log destination secrets. */
-export async function deliverReport(schedule: ScheduledReport, runId: string, report: ReportSnapshot): Promise<Delivery[]> {
+/**
+ * Independent attempts; never let one channel suppress the other, never log destination secrets.
+ * The e-mail subject/body are written in `locale` (default: the language the snapshot was generated in).
+ */
+export async function deliverReport(schedule: ScheduledReport, runId: string, report: ReportSnapshot, locale: Locale = reportLocale(report)): Promise<Delivery[]> {
   const results: Delivery[] = [];
   const recipients = z.array(z.email()).max(50).safeParse(schedule.recipients ?? []);
   if (!recipients.success) results.push({ channel: "email", status: "failed", detail: "Invalid stored recipients" });
@@ -17,7 +23,7 @@ export async function deliverReport(schedule: ScheduledReport, runId: string, re
         const response = await fetch("https://api.resend.com/emails", {
           method: "POST", redirect: "error", signal: AbortSignal.timeout(15_000),
           headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, "content-type": "application/json", "Idempotency-Key": `report-${runId}` },
-          body: JSON.stringify({ from: process.env.REPORT_FROM_EMAIL, to: recipients.data, subject: `AI visibility: ${report.site.title}`, html: renderReportHtml(report) }),
+          body: JSON.stringify({ from: process.env.REPORT_FROM_EMAIL, to: recipients.data, subject: serverT(locale)("reports.email.subject", { site: report.site.title }), html: renderReportHtml(report, locale) }),
         });
         await response.body?.cancel();
         results.push({ channel: "email", status: response.ok ? "sent" : "failed", detail: `Resend HTTP ${response.status}` });

@@ -61,6 +61,7 @@ describe("citation and recommendation evidence", () => {
   });
 
   it("handles Unicode and punctuation without substring matches", () => {
+    // Turkish text on purpose: brand matching must be Unicode-aware (İ, ğ, ü, ı).
     expect(analyzeAnswer({ text: "İyi seçenek: Yağ Dünyası.", citations: [] }, { ...siteInput, title: "Yağ Dünyası" }).isMentioned).toBe(true);
     expect(analyzeAnswer({ text: "Use C++ today", citations: [] }, { ...siteInput, title: "C++" }).isMentioned).toBe(true);
   });
@@ -169,6 +170,8 @@ describe("visibility API with mocked live transports and real SQLite", () => {
     expect(listing.total).toBe(10);
     expect(listing.queries).toHaveLength(10);
     expect(listing.queries[0]).toBe("manual query");
+    // A site without a configured locale gets prompts in both languages, so Turkish templates ("nereden satın alınır?" =
+    // "where to buy?", "güvenilir mi?" = "is it reliable?") appear next to the English ones.
     expect(listing.queries).toEqual(expect.arrayContaining(["Olive oil nereden satın alınır?", "Which brands make the best natural oils?", "What is cold pressed?", "Acme güvenilir mi?"]));
     expect(listing.queries.join(" ")).not.toContain("Private competitor product");
     expect(listing.querySuggestions[1]).toMatchObject({ intent: "informational", language: "tr", difficulty: { level: expect.any(String) } });

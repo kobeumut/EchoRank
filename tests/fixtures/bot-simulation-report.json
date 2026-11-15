@@ -32,10 +32,10 @@
       "baseline": {
         "status": 200,
         "outcome": "ok",
-        "final_url": "https://botsim.example.com/",
         "words": 544,
-        "protection": null,
         "cdn": "cloudflare",
+        "final_url": "https://botsim.example.com/",
+        "protection": null,
         "ttfb_ms": 12,
         "total_ms": 12,
         "html_bytes": 4442,
@@ -123,9 +123,9 @@
           "protection": {
             "vendor": "cloudflare",
             "kind": "block",
-            "name": "Cloudflare WAF engeli",
+            "name": "Cloudflare WAF block",
             "evidence": [
-              "gövde: 'attention required! | cloudflare'"
+              "body: 'attention required! | cloudflare'"
             ]
           },
           "robots_allowed": true,
@@ -141,8 +141,8 @@
           "error": null,
           "note": "",
           "accessible": false,
-          "reason": "Cloudflare WAF engeli (HTTP 403)",
-          "label": "engellendi"
+          "reason": "Cloudflare WAF block (HTTP 403)",
+          "label": "blocked"
         },
         {
           "token": "Google-Extended",
@@ -159,17 +159,17 @@
           "silent_block": false,
           "general": false,
           "words": 544,
-          "parity": 1.0,
+          "parity": 1,
           "ttfb_ms": 15,
           "total_ms": 15,
           "html_bytes": 4442,
           "wire_bytes": 4442,
           "content_encoding": "",
           "error": null,
-          "note": "Google-Extended yalnızca robots.txt jetonudur; Google içeriği Googlebot ile alır.",
+          "note": "Google-Extended is a robots.txt token only; Google fetches content with Googlebot.",
           "accessible": true,
-          "reason": "HTTP 200, 544 kelime",
-          "label": "erişilebilir"
+          "reason": "HTTP 200, 544 words",
+          "label": "accessible"
         },
         {
           "token": "Applebot-Extended",
@@ -186,17 +186,17 @@
           "silent_block": false,
           "general": false,
           "words": 544,
-          "parity": 1.0,
+          "parity": 1,
           "ttfb_ms": 15,
           "total_ms": 15,
           "html_bytes": 4442,
           "wire_bytes": 4442,
           "content_encoding": "",
           "error": null,
-          "note": "Applebot-Extended yalnızca robots.txt jetonudur; Apple içeriği Applebot ile alır.",
+          "note": "Applebot-Extended is a robots.txt token only; Apple fetches content with Applebot.",
           "accessible": true,
-          "reason": "HTTP 200, 544 kelime",
-          "label": "erişilebilir"
+          "reason": "HTTP 200, 544 words",
+          "label": "accessible"
         }
       ],
       "ai_view": {
@@ -204,7 +204,7 @@
         "render": {
           "mode": "static",
           "score": 100,
-          "reason": "içerik ilk HTML yanıtında mevcut",
+          "reason": "Content is present in the first HTML response",
           "word_count": 533,
           "title": "Barista Pro X Espresso Makinesi",
           "h1": "Barista Pro X Espresso Makinesi",
@@ -222,23 +222,23 @@
           "signal_ratio": 0.913,
           "html_kb": 4.3,
           "transfer_kb": 4.3,
-          "content_encoding": null,
           "compressed": false,
+          "score": 100,
+          "content_encoding": null,
           "compression_ratio": null,
-          "truncated": false,
-          "score": 100
+          "truncated": false
         },
         "bloat": {
           "dom_nodes": 24,
-          "dom_depth": 5,
           "json_state_bytes": 0,
+          "issues": [],
+          "dom_depth": 5,
           "json_state": [],
           "ld_json_bytes": 74,
           "inline_script_bytes": 0,
           "inline_css_bytes": 0,
           "inline_svg_bytes": 0,
-          "data_uri_bytes": 0,
-          "issues": []
+          "data_uri_bytes": 0
         }
       }
     },
@@ -248,10 +248,10 @@
       "baseline": {
         "status": 200,
         "outcome": "ok",
-        "final_url": "https://botsim.example.com/uygulama",
         "words": 8,
-        "protection": null,
         "cdn": "cloudflare",
+        "final_url": "https://botsim.example.com/uygulama",
+        "protection": null,
         "ttfb_ms": 12,
         "total_ms": 12,
         "html_bytes": 344,
@@ -339,9 +339,9 @@
           "protection": {
             "vendor": "cloudflare",
             "kind": "block",
-            "name": "Cloudflare WAF engeli",
+            "name": "Cloudflare WAF block",
             "evidence": [
-              "gövde: 'attention required! | cloudflare'"
+              "body: 'attention required! | cloudflare'"
             ]
           },
           "robots_allowed": true,
@@ -357,8 +357,8 @@
           "error": null,
           "note": "",
           "accessible": false,
-          "reason": "Cloudflare WAF engeli (HTTP 403)",
-          "label": "engellendi"
+          "reason": "Cloudflare WAF block (HTTP 403)",
+          "label": "blocked"
         },
         {
           "token": "Google-Extended",
@@ -375,17 +375,17 @@
           "silent_block": false,
           "general": false,
           "words": 8,
-          "parity": 1.0,
+          "parity": 1,
           "ttfb_ms": 15,
           "total_ms": 15,
           "html_bytes": 344,
           "wire_bytes": 344,
           "content_encoding": "",
           "error": null,
-          "note": "Google-Extended yalnızca robots.txt jetonudur; Google içeriği Googlebot ile alır.",
+          "note": "Google-Extended is a robots.txt token only; Google fetches content with Googlebot.",
           "accessible": true,
-          "reason": "HTTP 200, 8 kelime",
-          "label": "erişilebilir"
+          "reason": "HTTP 200, 8 words",
+          "label": "accessible"
         },
         {
           "token": "Applebot-Extended",
@@ -402,17 +402,17 @@
           "silent_block": false,
           "general": false,
           "words": 8,
-          "parity": 1.0,
+          "parity": 1,
           "ttfb_ms": 15,
           "total_ms": 15,
           "html_bytes": 344,
           "wire_bytes": 344,
           "content_encoding": "",
           "error": null,
-          "note": "Applebot-Extended yalnızca robots.txt jetonudur; Apple içeriği Applebot ile alır.",
+          "note": "Applebot-Extended is a robots.txt token only; Apple fetches content with Applebot.",
           "accessible": true,
-          "reason": "HTTP 200, 8 kelime",
-          "label": "erişilebilir"
+          "reason": "HTTP 200, 8 words",
+          "label": "accessible"
         }
       ],
       "ai_view": {
@@ -420,7 +420,7 @@
         "render": {
           "mode": "csr_shell",
           "score": 0,
-          "reason": "#root kökü boş, sunucu HTML'inde yalnızca 0 kelime var; içerik JavaScript ile yükleniyor",
+          "reason": "The #root mount point is empty and the server HTML has only 0 words; content is loaded with JavaScript",
           "word_count": 0,
           "title": "Kahve Dükkanı",
           "h1": "",
@@ -432,32 +432,32 @@
           "script_tags": 3,
           "external_scripts": 3,
           "noscript_requires_js": true,
-          "text_ratio": 0.0
+          "text_ratio": 0
         },
         "tokens": {
           "method": "estimate:cl100k_base",
           "html_tokens": 114,
           "text_tokens": 0,
-          "signal_ratio": 0.0,
+          "signal_ratio": 0,
           "html_kb": 0.3,
           "transfer_kb": 0.3,
-          "content_encoding": null,
           "compressed": false,
+          "score": 0,
+          "content_encoding": null,
           "compression_ratio": null,
-          "truncated": false,
-          "score": 0
+          "truncated": false
         },
         "bloat": {
           "dom_nodes": 9,
-          "dom_depth": 3,
           "json_state_bytes": 0,
+          "issues": [],
+          "dom_depth": 3,
           "json_state": [],
           "ld_json_bytes": 0,
           "inline_script_bytes": 0,
           "inline_css_bytes": 0,
           "inline_svg_bytes": 0,
-          "data_uri_bytes": 0,
-          "issues": []
+          "data_uri_bytes": 0
         }
       }
     },
@@ -467,10 +467,10 @@
       "baseline": {
         "status": 200,
         "outcome": "ok",
-        "final_url": "https://botsim.example.com/urun/barista-pro-x",
         "words": 1444,
-        "protection": null,
         "cdn": "cloudflare",
+        "final_url": "https://botsim.example.com/urun/barista-pro-x",
+        "protection": null,
         "ttfb_ms": 12,
         "total_ms": 12,
         "html_bytes": 216987,
@@ -558,9 +558,9 @@
           "protection": {
             "vendor": "cloudflare",
             "kind": "block",
-            "name": "Cloudflare WAF engeli",
+            "name": "Cloudflare WAF block",
             "evidence": [
-              "gövde: 'attention required! | cloudflare'"
+              "body: 'attention required! | cloudflare'"
             ]
           },
           "robots_allowed": true,
@@ -576,8 +576,8 @@
           "error": null,
           "note": "",
           "accessible": false,
-          "reason": "Cloudflare WAF engeli (HTTP 403)",
-          "label": "engellendi"
+          "reason": "Cloudflare WAF block (HTTP 403)",
+          "label": "blocked"
         },
         {
           "token": "Google-Extended",
@@ -594,17 +594,17 @@
           "silent_block": false,
           "general": false,
           "words": 1444,
-          "parity": 1.0,
+          "parity": 1,
           "ttfb_ms": 15,
           "total_ms": 15,
           "html_bytes": 216987,
           "wire_bytes": 216987,
           "content_encoding": "",
           "error": null,
-          "note": "Google-Extended yalnızca robots.txt jetonudur; Google içeriği Googlebot ile alır.",
+          "note": "Google-Extended is a robots.txt token only; Google fetches content with Googlebot.",
           "accessible": true,
-          "reason": "HTTP 200, 1444 kelime",
-          "label": "erişilebilir"
+          "reason": "HTTP 200, 1444 words",
+          "label": "accessible"
         },
         {
           "token": "Applebot-Extended",
@@ -621,17 +621,17 @@
           "silent_block": false,
           "general": false,
           "words": 1444,
-          "parity": 1.0,
+          "parity": 1,
           "ttfb_ms": 15,
           "total_ms": 15,
           "html_bytes": 216987,
           "wire_bytes": 216987,
           "content_encoding": "",
           "error": null,
-          "note": "Applebot-Extended yalnızca robots.txt jetonudur; Apple içeriği Applebot ile alır.",
+          "note": "Applebot-Extended is a robots.txt token only; Apple fetches content with Applebot.",
           "accessible": true,
-          "reason": "HTTP 200, 1444 kelime",
-          "label": "erişilebilir"
+          "reason": "HTTP 200, 1444 words",
+          "label": "accessible"
         }
       ],
       "ai_view": {
@@ -639,7 +639,7 @@
         "render": {
           "mode": "ssr_hydrated",
           "score": 100,
-          "reason": "SSR/SSG (nextjs) — içerik ilk HTML'de mevcut",
+          "reason": "SSR/SSG (nextjs) — content is present in the first HTML",
           "word_count": 1433,
           "title": "Barista Pro X Espresso Makinesi",
           "h1": "Barista Pro X Espresso Makinesi",
@@ -659,16 +659,20 @@
           "signal_ratio": 0.0501,
           "html_kb": 211.9,
           "transfer_kb": 211.9,
-          "content_encoding": null,
           "compressed": false,
+          "score": 67,
+          "content_encoding": null,
           "compression_ratio": null,
-          "truncated": false,
-          "score": 67
+          "truncated": false
         },
         "bloat": {
           "dom_nodes": 1825,
-          "dom_depth": 5,
           "json_state_bytes": 179295,
+          "issues": [
+            "DOM has 1825 nodes (>1500)",
+            "Embedded JSON state data is 175 KB (82%, largest: __NEXT_DATA__)"
+          ],
+          "dom_depth": 5,
           "json_state": [
             {
               "kind": "__NEXT_DATA__",
@@ -679,11 +683,7 @@
           "inline_script_bytes": 0,
           "inline_css_bytes": 0,
           "inline_svg_bytes": 0,
-          "data_uri_bytes": 0,
-          "issues": [
-            "DOM 1825 düğüm (>1500)",
-            "gömülü JSON durum verisi 175 KB (%82, en büyüğü __NEXT_DATA__)"
-          ]
+          "data_uri_bytes": 0
         }
       }
     }
@@ -692,8 +692,8 @@
     {
       "code": "waf_challenge",
       "severity": "critical",
-      "title": "2 AI botu challenge/CAPTCHA sayfasına takılıyor",
-      "detail": "Cloudflare Managed Challenge: AI tarayıcıları JavaScript çalıştıramaz ve CAPTCHA çözemez; içerik yerine doğrulama sayfası alıyorlar.",
+      "title": "2 AI bots are stuck on a challenge/CAPTCHA page",
+      "detail": "Cloudflare Managed Challenge: AI crawlers cannot run JavaScript or solve CAPTCHAs; they receive the verification page instead of your content.",
       "bots": [
         "GPTBot",
         "ClaudeBot"
@@ -707,8 +707,8 @@
     {
       "code": "waf_block",
       "severity": "critical",
-      "title": "1 AI botu sunucu/WAF tarafından reddediliyor",
-      "detail": "Cloudflare WAF engeli (HTTP 403). robots.txt PerplexityBot için izin verdiği hâlde (sessiz engel).",
+      "title": "1 AI bot is rejected by the server/WAF",
+      "detail": "Cloudflare WAF block (HTTP 403). robots.txt allows PerplexityBot, yet the request is rejected (silent block).",
       "bots": [
         "PerplexityBot"
       ],
@@ -721,8 +721,8 @@
     {
       "code": "csr_shell",
       "severity": "critical",
-      "title": "1 sayfa AI botlarına boş JS kabuğu döndürüyor",
-      "detail": "#root kökü boş, sunucu HTML'inde yalnızca 0 kelime var; içerik JavaScript ile yükleniyor. AI tarayıcıları JavaScript çalıştırmaz; SSR/SSG veya prerender gerekli.",
+      "title": "1 page returns an empty JS shell to AI bots",
+      "detail": "The #root mount point is empty and the server HTML has only 0 words; content is loaded with JavaScript. AI crawlers do not run JavaScript; SSR/SSG or prerendering is required.",
       "bots": [],
       "urls": [
         "https://botsim.example.com/uygulama"
@@ -731,8 +731,8 @@
     {
       "code": "robots_disallow",
       "severity": "warning",
-      "title": "1 AI botu robots.txt ile engelli",
-      "detail": "Bu botlar robots.txt'ye uyar ve canlı erişim açık olsa bile sayfayı almaz.",
+      "title": "1 AI bot is blocked by robots.txt",
+      "detail": "These bots obey robots.txt and will not fetch the page even when live access is open.",
       "bots": [
         "Applebot-Extended"
       ],
@@ -745,8 +745,8 @@
     {
       "code": "token_bloat",
       "severity": "warning",
-      "title": "1 sayfada şişkin DOM / gömülü veri",
-      "detail": "DOM 1825 düğüm (>1500); gömülü JSON durum verisi 175 KB (%82, en büyüğü __NEXT_DATA__)",
+      "title": "1 page has a bloated DOM / embedded data",
+      "detail": "DOM has 1825 nodes (>1500); Embedded JSON state data is 175 KB (82%, largest: __NEXT_DATA__)",
       "bots": [],
       "urls": [
         "https://botsim.example.com/urun/barista-pro-x"
@@ -755,8 +755,8 @@
     {
       "code": "no_compression",
       "severity": "info",
-      "title": "HTML yanıtı sıkıştırılmadan gönderiliyor",
-      "detail": "gzip/brotli açın; büyük sayfalar AI getiricilerinde zaman aşımına uğrayabilir.",
+      "title": "The HTML response is sent uncompressed",
+      "detail": "Enable gzip/brotli; large pages may time out in AI fetchers.",
       "bots": [],
       "urls": [
         "https://botsim.example.com/urun/barista-pro-x"
@@ -767,56 +767,56 @@
     {
       "id": "cloudflare_waf_skip",
       "platform": "cloudflare",
-      "title": "Cloudflare WAF: AI botları için Skip kuralı",
+      "title": "Cloudflare WAF: Skip rule for AI bots",
       "language": "text",
-      "code": "# Cloudflare → Security → WAF → Custom rules → Create rule (listenin EN ÜSTÜNE taşıyın)\n# Rule name: Allow AI crawlers (GEO)\n# Expression (Edit expression):\n(http.user_agent contains \"GPTBot\") or (http.user_agent contains \"ClaudeBot\") or (http.user_agent contains \"PerplexityBot\") or (cf.verified_bot_category in {\"AI Crawler\" \"AI Search\" \"AI Assistant\"})\n# Action: Skip → All remaining custom rules, Rate limiting rules, Managed rules, Super Bot Fight Mode rules\n#         + \"Log matching requests\" açık\n\n# Yalnızca doğrulanmış botlar (UA taklidine kapalı, önerilen sıkı sürüm):\n(cf.verified_bot_category in {\"AI Crawler\" \"AI Search\" \"AI Assistant\"}) or (cf.client.bot)\n\n# Ayrıca: Security → Bots → \"Block AI bots\" = Off, \"AI Labyrinth\" = Off;\n# AI Crawl Control → ilgili crawler'lar = Allow. (Ücretsiz plandaki Bot Fight Mode Skip ile atlanamaz → kapatın.)\n\n# Rulesets API (PUT /zones/{zone_id}/rulesets/phases/http_request_firewall_custom/entrypoint → rules[0]):\n{\n  \"description\": \"Allow AI crawlers (GEO)\",\n  \"expression\": \"(http.user_agent contains \\\"GPTBot\\\") or (http.user_agent contains \\\"ClaudeBot\\\") or (http.user_agent contains \\\"PerplexityBot\\\") or (cf.verified_bot_category in {\\\"AI Crawler\\\" \\\"AI Search\\\" \\\"AI Assistant\\\"})\",\n  \"action\": \"skip\",\n  \"action_parameters\": {\n    \"ruleset\": \"current\",\n    \"phases\": [\n      \"http_ratelimit\",\n      \"http_request_firewall_managed\",\n      \"http_request_sbfm\"\n    ],\n    \"products\": [\n      \"bic\",\n      \"hot\",\n      \"rateLimit\",\n      \"securityLevel\",\n      \"uaBlock\",\n      \"waf\",\n      \"zoneLockdown\"\n    ]\n  },\n  \"logging\": {\n    \"enabled\": true\n  }\n}",
-      "instructions": "Kuralı mevcut engelleme kurallarının üstüne yerleştirin; Security Events'te 'Skip' olarak görünmelidir.",
+      "code": "# Cloudflare → Security → WAF → Custom rules → Create rule (move it to the TOP of the list)\n# Rule name: Allow AI crawlers (GEO)\n# Expression (Edit expression):\n(http.user_agent contains \"GPTBot\") or (http.user_agent contains \"ClaudeBot\") or (http.user_agent contains \"PerplexityBot\") or (cf.verified_bot_category in {\"AI Crawler\" \"AI Search\" \"AI Assistant\"})\n# Action: Skip → All remaining custom rules, Rate limiting rules, Managed rules, Super Bot Fight Mode rules\n#         + \"Log matching requests\" enabled\n\n# Verified bots only (immune to UA spoofing, recommended strict version):\n(cf.verified_bot_category in {\"AI Crawler\" \"AI Search\" \"AI Assistant\"}) or (cf.client.bot)\n\n# Also: Security → Bots → \"Block AI bots\" = Off, \"AI Labyrinth\" = Off;\n# AI Crawl Control → the relevant crawlers = Allow. (Bot Fight Mode on the free plan cannot be bypassed with Skip → turn it off.)\n\n# Rulesets API (PUT /zones/{zone_id}/rulesets/phases/http_request_firewall_custom/entrypoint → rules[0]):\n{\n  \"description\": \"Allow AI crawlers (GEO)\",\n  \"expression\": \"(http.user_agent contains \\\"GPTBot\\\") or (http.user_agent contains \\\"ClaudeBot\\\") or (http.user_agent contains \\\"PerplexityBot\\\") or (cf.verified_bot_category in {\\\"AI Crawler\\\" \\\"AI Search\\\" \\\"AI Assistant\\\"})\",\n  \"action\": \"skip\",\n  \"action_parameters\": {\n    \"ruleset\": \"current\",\n    \"phases\": [\n      \"http_ratelimit\",\n      \"http_request_firewall_managed\",\n      \"http_request_sbfm\"\n    ],\n    \"products\": [\n      \"bic\",\n      \"hot\",\n      \"rateLimit\",\n      \"securityLevel\",\n      \"uaBlock\",\n      \"waf\",\n      \"zoneLockdown\"\n    ]\n  },\n  \"logging\": {\n    \"enabled\": true\n  }\n}",
+      "instructions": "Place the rule above your existing blocking rules; it should show up as 'Skip' in Security Events.",
       "recommended": true,
       "preventive": false
     },
     {
       "id": "nginx_allow",
       "platform": "nginx",
-      "title": "nginx: AI botlarını UA engeli ve rate limit'ten muaf tutun",
+      "title": "nginx: exempt AI bots from the UA block and rate limit",
       "language": "nginx",
-      "code": "# http { } bloğu (örn. /etc/nginx/conf.d/ai-bots.conf)\nmap $http_user_agent $is_ai_bot {\n    default 0;\n    \"~*(GPTBot|ClaudeBot|PerplexityBot)\" 1;   # \"GPTBot\" \"ClaudeBot\" \"PerplexityBot\"\n}\n# rate limit anahtarı: AI botları için boş anahtar = limit uygulanmaz\nmap $is_ai_bot $ai_limit_key {\n    0 $binary_remote_addr;\n    1 \"\";\n}\nlimit_req_zone $ai_limit_key zone=perip:10m rate=10r/s;\n\n# server { } bloğu — mevcut UA engelinizi AI botları dışında bırakın:\nset $block_ua 0;\nif ($http_user_agent ~* \"(bot|crawl|spider|scrape)\") { set $block_ua 1; }   # ← mevcut kuralınız\nif ($is_ai_bot = 1) { set $block_ua 0; }\nif ($block_ua = 1) { return 403; }",
-      "instructions": "Mevcut 'deny'/'return 403' ve limit_req kurallarınızı bu değişkenlerle koşullandırıp `nginx -t && nginx -s reload` çalıştırın.",
+      "code": "# http { } block (e.g. /etc/nginx/conf.d/ai-bots.conf)\nmap $http_user_agent $is_ai_bot {\n    default 0;\n    \"~*(GPTBot|ClaudeBot|PerplexityBot)\" 1;   # \"GPTBot\" \"ClaudeBot\" \"PerplexityBot\"\n}\n# rate-limit key: an empty key for AI bots = the limit is not applied\nmap $is_ai_bot $ai_limit_key {\n    0 $binary_remote_addr;\n    1 \"\";\n}\nlimit_req_zone $ai_limit_key zone=perip:10m rate=10r/s;\n\n# server { } block — exempt AI bots from your existing UA block:\nset $block_ua 0;\nif ($http_user_agent ~* \"(bot|crawl|spider|scrape)\") { set $block_ua 1; }   # ← your existing rule\nif ($is_ai_bot = 1) { set $block_ua 0; }\nif ($block_ua = 1) { return 403; }",
+      "instructions": "Make your existing 'deny'/'return 403' and limit_req rules conditional on these variables, then run `nginx -t && nginx -s reload`.",
       "recommended": false,
       "preventive": false
     },
     {
       "id": "apache_allow",
       "platform": "apache",
-      "title": "Apache / LiteSpeed (.htaccess) ve ModSecurity istisnası",
+      "title": "Apache / LiteSpeed (.htaccess) and ModSecurity exception",
       "language": "apache",
-      "code": "# .htaccess veya <VirtualHost> — AI botlarını işaretle\nSetEnvIfNoCase User-Agent \"(GPTBot|ClaudeBot|PerplexityBot)\" ai_bot\n\n# 1) AI botlarını engelleyen RewriteRule'ları kaldırın veya istisna ekleyin:\nRewriteEngine On\nRewriteCond %{ENV:ai_bot} !^1$\nRewriteCond %{HTTP_USER_AGENT} (bot|crawl|spider|scrape) [NC]\nRewriteRule .* - [F,L]\n\n# 2) Apache 2.4 erişim kuralı (Require not env bad_bot vb. kullanıyorsanız):\n<RequireAny>\n    Require env ai_bot\n    Require all granted\n</RequireAny>\n\n# 3) ModSecurity / OWASP CRS tarayıcı tespitinden muaf tutun:\n<IfModule mod_security2.c>\n    SecRule REQUEST_HEADERS:User-Agent \"@rx (?i)(GPTBot|ClaudeBot|PerplexityBot)\" \\\n        \"id:1009001,phase:1,pass,nolog,ctl:ruleRemoveByTag=attack-reputation-scanner\"\n</IfModule>",
-      "instructions": "Değişiklikten sonra `apachectl configtest && apachectl graceful` çalıştırın.",
+      "code": "# .htaccess or <VirtualHost> — mark AI bots\nSetEnvIfNoCase User-Agent \"(GPTBot|ClaudeBot|PerplexityBot)\" ai_bot\n\n# 1) Remove the RewriteRules that block AI bots or add an exception:\nRewriteEngine On\nRewriteCond %{ENV:ai_bot} !^1$\nRewriteCond %{HTTP_USER_AGENT} (bot|crawl|spider|scrape) [NC]\nRewriteRule .* - [F,L]\n\n# 2) Apache 2.4 access rule (if you use Require not env bad_bot etc.):\n<RequireAny>\n    Require env ai_bot\n    Require all granted\n</RequireAny>\n\n# 3) Exempt them from ModSecurity / OWASP CRS scanner detection:\n<IfModule mod_security2.c>\n    SecRule REQUEST_HEADERS:User-Agent \"@rx (?i)(GPTBot|ClaudeBot|PerplexityBot)\" \\\n        \"id:1009001,phase:1,pass,nolog,ctl:ruleRemoveByTag=attack-reputation-scanner\"\n</IfModule>",
+      "instructions": "After the change run `apachectl configtest && apachectl graceful`.",
       "recommended": false,
       "preventive": false
     },
     {
       "id": "ssr_render",
       "platform": "nextjs",
-      "title": "İçeriği sunucu tarafında render edin (SSR/SSG/prerender)",
+      "title": "Render the content on the server (SSR/SSG/prerender)",
       "language": "tsx",
-      "code": "// AI botları JavaScript çalıştırmaz; https://botsim.example.com/uygulama ilk HTML'de içerik döndürmeli.\n// Next.js (App Router) — sayfayı Server Component olarak render edin:\n// app/urun/[slug]/page.tsx\nexport const revalidate = 3600; // ISR: saatte bir statik yeniden üretim\n\nexport default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {\n  const { slug } = await params;\n  const product = await getProduct(slug); // sunucuda veri çek (useEffect + fetch DEĞİL)\n  return (\n    <article>\n      <h1>{product.name}</h1>\n      <p>{product.summary}</p>\n      <ProductSpecsTable specs={product.specs} />\n    </article>\n  );\n}\n\n// React SPA (Vite/CRA) için geçiş mümkün değilse: prerender (ör. prerender.io / rendertron)\n// nginx: bot UA'larını prerender servisine yönlendirin\n// if ($http_user_agent ~* \"GPTBot|ClaudeBot|PerplexityBot|OAI-SearchBot|ChatGPT-User|bingbot\") {\n//     rewrite .* /render?url=$scheme://$host$request_uri break;\n//     proxy_pass http://prerender:3000;\n// }",
-      "instructions": "Next.js/Nuxt/SvelteKit'te SSR veya statik üretim; saf React SPA için prerender (örn. Rendertron, prerender.io) ya da framework'e geçiş.",
+      "code": "// AI bots do not run JavaScript; https://botsim.example.com/uygulama must return its content in the first HTML.\n// Next.js (App Router) — render the page as a Server Component:\n// app/product/[slug]/page.tsx\nexport const revalidate = 3600; // ISR: static regeneration once an hour\n\nexport default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {\n  const { slug } = await params;\n  const product = await getProduct(slug); // fetch the data on the server (NOT useEffect + fetch)\n  return (\n    <article>\n      <h1>{product.name}</h1>\n      <p>{product.summary}</p>\n      <ProductSpecsTable specs={product.specs} />\n    </article>\n  );\n}\n\n// If a React SPA (Vite/CRA) cannot be migrated: prerender (e.g. prerender.io / rendertron)\n// nginx: route bot UAs to the prerender service\n// if ($http_user_agent ~* \"GPTBot|ClaudeBot|PerplexityBot|OAI-SearchBot|ChatGPT-User|bingbot\") {\n//     rewrite .* /render?url=$scheme://$host$request_uri break;\n//     proxy_pass http://prerender:3000;\n// }",
+      "instructions": "Use SSR or static generation in Next.js/Nuxt/SvelteKit; for a plain React SPA use prerendering (e.g. Rendertron, prerender.io) or move to a framework.",
       "recommended": false,
       "preventive": false
     },
     {
       "id": "token_diet",
       "platform": "web",
-      "title": "AI token yükünü azaltın (DOM ve gömülü JSON)",
+      "title": "Reduce the AI token load (DOM and embedded JSON)",
       "language": "text",
-      "code": "# Gömülü durum verisi (__NEXT_DATA__ / RSC / __NUXT__):\n#  - getServerSideProps / loader / Server Component'ten yalnızca sayfanın kullandığı alanları döndürün\n#  - Büyük listeleri sayfalayın; ürün açıklamalarını hem HTML'de hem JSON'da iki kez göndermeyin\n# DOM:\n#  - Gizli mega menü / mobil menü kopyalarını ilk HTML'den çıkarıp etkileşimde yükleyin\n#  - Satır içi SVG ikonlarını <use href=\"/sprite.svg#icon\"> ile tekrar kullanın; base64 görselleri dosyaya taşıyın\n# Aktarım:\n#  - gzip/brotli açık olmalı (nginx: gzip on; gzip_types text/html application/json;)",
-      "instructions": "Hedef: metin token'ı / HTML token'ı oranı ≥ %10, HTML < 500 KB.",
+      "code": "# Embedded state data (__NEXT_DATA__ / RSC / __NUXT__):\n#  - Return only the fields the page uses from getServerSideProps / loader / Server Component\n#  - Paginate big lists; do not send product descriptions twice, in the HTML and in the JSON\n# DOM:\n#  - Remove hidden mega-menu / mobile-menu copies from the first HTML and load them on interaction\n#  - Reuse inline SVG icons with <use href=\"/sprite.svg#icon\">; move base64 images to files\n# Transfer:\n#  - gzip/brotli must be enabled (nginx: gzip on; gzip_types text/html application/json;)",
+      "instructions": "Target: text tokens / HTML tokens ratio ≥ 10%, HTML < 500 KB.",
       "recommended": false,
       "preventive": false
     }
   ],
   "caveats": [
-    "Simülasyon AI sağlayıcılarının IP aralıklarından değil, bu sunucudan yapıldı. WAF botları IP ile doğruluyorsa (örn. Cloudflare verified bots) gerçek botların sonucu farklı olabilir; WAF olay kayıtlarında (Security Events) doğrulayın.",
-    "Google-Extended ve Applebot-Extended yalnızca robots.txt jetonudur; canlı istek Googlebot/Applebot kimliğiyle yapıldı."
+    "The simulation was run from this server, not from the AI providers' IP ranges. If your WAF verifies bots by IP (e.g. Cloudflare verified bots), the results for the real bots may differ; verify in the WAF event logs (Security Events).",
+    "Google-Extended and Applebot-Extended are robots.txt tokens only; the live request was made with the Googlebot/Applebot identity."
   ]
 }

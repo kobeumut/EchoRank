@@ -1,6 +1,7 @@
 import type { CrawlSession, GeoAudit, Site } from "@prisma/client";
 import { prisma } from "../db";
 import { HttpError } from "../http";
+import { DEFAULT_LOCALE, type Locale } from "../i18n/config";
 import type { StartAuditInput } from "../validation";
 import { onCrawlCompleted } from "../distribution";
 import { getSiteOrThrow } from "./sites";
@@ -10,6 +11,8 @@ export interface AuditJob {
   site: Site;
   crawlSession: CrawlSession;
   audit: GeoAudit;
+  /** Language of the text the scoring engine generates (labels, findings, action cards); English when absent. */
+  locale?: Locale;
 }
 
 /**
@@ -30,7 +33,8 @@ export function getAuditRunner() {
 
 const ACTIVE_CRAWL = ["queued", "running"];
 
-export async function startAudit(siteId: string, input: StartAuditInput, reportRunId?: string): Promise<AuditJob> {
+/** `locale` is the language of the request (or site) that triggered the audit; it is passed on to the scoring engine as `--lang`. */
+export async function startAudit(siteId: string, input: StartAuditInput, reportRunId?: string, locale: Locale = DEFAULT_LOCALE): Promise<AuditJob> {
   const site = await getSiteOrThrow(siteId);
   const settings = (site.settings ?? {}) as { maxPages?: number; maxDepth?: number };
 
@@ -54,7 +58,7 @@ export async function startAudit(siteId: string, input: StartAuditInput, reportR
     });
     // Link ownership atomically: a crashed report can recover its crawl without touching manual jobs.
     if (reportRunId) await tx.reportRun.update({ where: { id: reportRunId }, data: { auditId: audit.id, crawlSessionId: crawlSession.id } });
-    return { site, crawlSession, audit };
+    return { site, crawlSession, audit, locale };
   });
 }
 
