@@ -2,7 +2,7 @@
 // and PostgreSQL) and validated at the API boundary with zod.
 
 export const CRAWL_STATUSES = ["queued", "running", "completed", "failed", "cancelled"] as const;
-export const AUDIT_STATUSES = ["pending", "running", "completed", "failed"] as const;
+export const AUDIT_STATUSES = ["pending", "running", "completed", "failed", "cancelled"] as const;
 export const CRAWL_TRIGGERS = ["manual", "scheduled", "api"] as const;
 
 export const ENTITY_TYPES = [

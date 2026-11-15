@@ -465,3 +465,30 @@ def test_cli_lang_tr_text_report_and_json(fake_site, tmp_path, capsys):
     assert audit_main([BASE + "/", "-o", str(tmp_path / "a2.json"), "--rps", "0", "--no-ua-probe", "--lang", "de",
                        "--wikidata-lang", "tr"]) == 0
     assert json.loads((tmp_path / "a2.json").read_text())["summary"].startswith("GEO score")  # unknown -> English
+
+
+# ---------------------------------------------------------------- progress reporting (platform progress bar)
+
+async def test_audit_site_reports_stages_in_order_and_crawl_progress(fake_site):
+    stages: list[str] = []
+    pages: list[tuple[int, int]] = []
+    await audit_site(BASE + "/", CFG, on_stage=stages.append, on_page=lambda _p, done, total: pages.append((done, total)))
+    assert stages == ["crawl", "graph", "signals", "bots", "scoring"]
+    assert pages and [d for d, _ in pages] == sorted(d for d, _ in pages)
+    assert all(0 < done <= total <= CFG.max_pages for done, total in pages)
+
+
+def test_audit_cli_progress_flag_prints_machine_readable_lines(fake_site, tmp_path, capsys):
+    rc = audit_main([BASE, "-o", str(tmp_path / "a.json"), "--rps", "0", "--depth", "2", "--max-pages", "20", "--progress"])
+    assert rc == 0
+    lines = [ln for ln in capsys.readouterr().err.splitlines() if ln.startswith("GEO_PROGRESS ")]
+    events = [json.loads(ln.removeprefix("GEO_PROGRESS ")) for ln in lines]
+    assert events[0] == {"stage": "crawl", "done": 0, "total": 20}
+    assert [e["stage"] for e in events if "done" not in e] == ["graph", "signals", "bots", "scoring"]
+    crawl = [e for e in events if e["stage"] == "crawl" and e["done"]]
+    assert crawl and crawl[-1]["done"] <= crawl[-1]["total"] <= 20
+
+
+def test_audit_cli_is_silent_without_progress_flag(fake_site, tmp_path, capsys):
+    audit_main([BASE, "-o", str(tmp_path / "a.json"), "--rps", "0", "--depth", "1", "--max-pages", "5"])
+    assert "GEO_PROGRESS" not in capsys.readouterr().err

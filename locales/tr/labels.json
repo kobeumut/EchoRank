@@ -55,5 +55,8 @@
   "labels.time.monthsAgo_one": "{count} ay önce",
   "labels.time.monthsAgo_other": "{count} ay önce",
   "labels.time.yearsAgo_one": "{count} yıl önce",
-  "labels.time.yearsAgo_other": "{count} yıl önce"
+  "labels.time.yearsAgo_other": "{count} yıl önce",
+  "labels.duration.seconds": "{s} sn",
+  "labels.duration.minutes": "{m} dk {s} sn",
+  "labels.duration.hours": "{h} sa {m} dk"
 }

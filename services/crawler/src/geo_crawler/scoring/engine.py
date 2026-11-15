@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from ..crawler import CrawlConfig
 from ..i18n import DEFAULT_LANG, get_translator, normalize_lang
@@ -143,14 +143,24 @@ def score_index(index: IndexResult, signals: SiteSignals | None = None,
 
 
 async def audit_site(url: str, config: CrawlConfig | None = None, probe_user_agents: bool = True,
-                     client=None, *, lang: str = DEFAULT_LANG, **crawler_kwargs) -> tuple[IndexResult, AuditReport]:
-    """Crawl + graph + site signals + scoring in one call (human-readable output in ``lang``)."""
+                     client=None, on_stage: Callable[[str], None] | None = None, *, lang: str = DEFAULT_LANG,
+                     **crawler_kwargs) -> tuple[IndexResult, AuditReport]:
+    """Crawl + graph + site signals + scoring in one call (human-readable output in ``lang``).
+
+    `on_stage` is told which phase starts: crawl, graph, signals, bots, scoring (page-level crawl progress
+    goes through the crawler's `on_page` callback).
+    """
     cfg = config or CrawlConfig()
-    index = await index_site(url, config, client=client, **crawler_kwargs)
+    stage = on_stage or (lambda _name: None)
+    stage("crawl")
+    index = await index_site(url, config, client=client, on_stage=on_stage, **crawler_kwargs)
+    stage("signals")
     signals = await collect_site_signals(index.crawl.start_url, client=client, probe_user_agents=probe_user_agents,
                                          timeout=cfg.timeout, lang=lang)
+    stage("bots")
     sim = await run_bot_simulation(index, cfg, client, lang=lang) if probe_user_agents and index.crawl.ok_pages \
         else None
+    stage("scoring")
     return index, score_index(index, signals, sim, lang=lang)
 
 

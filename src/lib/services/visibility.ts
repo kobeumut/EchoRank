@@ -4,7 +4,9 @@ import { prisma } from "../db";
 import { HttpError } from "../http";
 import { DEFAULT_LOCALE, type Locale } from "../i18n/config";
 import { analyzeAnswer, analyzeBrandSentiment, auditBrandClaims, visibilityAnalysisSettings, VISIBILITY_MODELS, type VisibilityModel } from "../visibility-analysis";
-import { askSearchProvider, providerConfig, ProviderError } from "../visibility-providers";
+import { cliMaxCalls } from "../visibility-cli";
+import { askSearchProvider, defaultTransportMode, providerAvailability, providerConfig, ProviderError, TRANSPORT_MODES } from "../visibility-providers";
+import { getCliModels } from "./app-settings";
 import { getSiteOrThrow } from "./sites";
 import { getSomAnalysis } from "./som-analysis";
 import { classifyIntent, generateSiteQueries, QUERY_INTENTS, QUERY_LANGUAGES, type GeneratedQuery, type QueryIntent, type QueryLanguage } from "./query-generator";
@@ -16,6 +18,8 @@ export const visibilityInput = z.object({
   languages: z.array(z.enum(QUERY_LANGUAGES)).min(1).max(2).optional(),
   models: z.array(z.enum(VISIBILITY_MODELS)).min(1).max(4).default([...VISIBILITY_MODELS]),
   refresh: z.boolean().default(false),
+  /** Overrides `LLM_TRANSPORT`: `api` keys, `cli` (claude / codex / agy), or `auto` (API when a key is set, else CLI). */
+  transport: z.enum(TRANSPORT_MODES).optional(),
 }).strict().default({ models: [...VISIBILITY_MODELS], refresh: false });
 export const visibilityQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
@@ -42,13 +46,25 @@ export async function suggestQueries(siteId: string) {
 
 export async function listVisibility(siteId: string, options: z.infer<typeof visibilityQuery>, locale: Locale = DEFAULT_LOCALE) {
   await getSiteOrThrow(siteId);
-  const [items, total, queries, analysis] = await Promise.all([
+  const [items, total, queries, analysis, cliModels] = await Promise.all([
     prisma.llmVisibilityRecord.findMany({ where: { siteId }, orderBy: [{ checkedAt: "desc" }, { id: "desc" }], take: options.limit, skip: options.offset }),
     prisma.llmVisibilityRecord.count({ where: { siteId } }),
     suggestQueryDetails(siteId, { limit: 40 }),
     getSomAnalysis(siteId, options.days, locale),
+    getCliModels(),
   ]);
-  return { items, total, queries: queries.slice(0, MAX_AUTO_QUERIES).map((g) => g.text), querySuggestions: queries, analysis };
+  return {
+    items, total, queries: queries.slice(0, MAX_AUTO_QUERIES).map((g) => g.text), querySuggestions: queries, analysis,
+    providers: providerAvailability(cliModels), defaultTransport: defaultTransportMode(), limits: { cliMaxCalls: cliMaxCalls() },
+  };
+}
+
+/** Models this run would bill to an API key (the rest go through a CLI or are skipped as not configured). */
+export function paidModels(input: z.infer<typeof visibilityInput>): VisibilityModel[] {
+  const mode = input.transport ?? defaultTransportMode();
+  return [...new Set(input.models)].filter((model) => {
+    try { return providerConfig(model, mode).transport === "api"; } catch { return false; }
+  });
 }
 
 // ponytail: one batch per Node process, two requests at a time. Use a shared queue before multi-replica deployment.
@@ -64,16 +80,25 @@ export async function runVisibility(siteId: string, input: z.infer<typeof visibi
   const grounded = generated.some((g) => g.source === "manual" || g.targets.some((t) => t.kind !== "site" && t.kind !== "competitor"));
   const queries = [...new Set(input.queries ?? (grounded ? generated.map((g) => g.text) : []))];
   if (!queries.length) throw new HttpError(400, "Provide queries, targetKeywords, or crawl products/categories first");
+  const mode = input.transport ?? defaultTransportMode();
+  const models = [...new Set(input.models)];
+  const tasks = queries.flatMap((query) => models.map((model) => ({ query, model })));
+  const cliModels = await getCliModels();
+  const configs = new Map(models.map((model) => {
+    try { return [model, providerConfig(model, mode, cliModels)] as const; } catch { return [model, null] as const; }
+  }));
+  // Agent CLIs answer in 15–50 s, so a batch stays inside the route's duration only up to this many calls.
+  const cliCalls = tasks.filter((t) => configs.get(t.model)?.transport === "cli").length;
+  if (cliCalls > cliMaxCalls()) throw new HttpError(400, `CLI transport allows at most ${cliMaxCalls()} checks per run (${cliCalls} requested); select fewer queries or models`);
   if (running) throw new HttpError(409, "A visibility batch is already running; retry after it completes");
   running = true;
   try {
-    const tasks = queries.flatMap((query) => [...new Set(input.models)].map((model) => ({ query, model })));
     const items: Awaited<ReturnType<typeof check>>[] = [];
     async function check({ query, model }: { query: string; model: VisibilityModel }) {
-      let configured: ReturnType<typeof providerConfig>;
-      try { configured = providerConfig(model); }
-      catch { return { query, model, error: "not_configured" as const }; }
-      const cacheKey = createHash("sha256").update(JSON.stringify(["visibility-v2", site.settings, site.url, site.title, query, model, configured.model])).digest("hex");
+      const configured = configs.get(model);
+      if (!configured) return { query, model, error: "not_configured" as const };
+      // `modelId` is the API model or `cli:<name>[:model]`, so API and CLI answers never share a cache entry.
+      const cacheKey = createHash("sha256").update(JSON.stringify(["visibility-v2", site.settings, site.url, site.title, query, model, configured.modelId])).digest("hex");
       if (!input.refresh) {
         const cached = await prisma.llmVisibilityRecord.findFirst({
           where: { siteId, query, model, checkedAt: { gte: new Date(Date.now() - CACHE_MS) } },
@@ -85,7 +110,7 @@ export async function runVisibility(siteId: string, input: z.infer<typeof visibi
         }
       }
       let answer;
-      try { answer = await askSearchProvider(model, query); }
+      try { answer = await askSearchProvider(model, query, mode, cliModels); }
       catch (error) {
         return { query, model, error: error instanceof ProviderError ? error.code : "provider_error" };
       }
@@ -97,7 +122,7 @@ export async function runVisibility(siteId: string, input: z.infer<typeof visibi
         siteId, model, query, citationStatus: analysis.citationStatus,
         position: analysis.position, excerpt: analysis.excerpt,
         responseMeta: {
-          version: 2, cacheKey, modelId: configured.model,
+          version: 2, cacheKey, modelId: configured.modelId, transport: configured.transport,
           answerText: answer.text.slice(0, 16_000), answerTruncated: answer.text.length > 16_000,
           sentiment: analyzeBrandSentiment(answer.text, site, config.competitors.map((c) => c.title)),
           hallucinations: auditBrandClaims(answer.text, config.facts, new Date(), config.competitors.map((c) => c.title)),
@@ -124,7 +149,7 @@ export async function runVisibility(siteId: string, input: z.infer<typeof visibi
     return {
       items, attempted: tasks.length, successful: successful.length, failed: tasks.length - successful.length,
       citationRate: successful.length ? Math.round(cited / successful.length * 100) : null,
-      perModel: Object.fromEntries([...new Set(input.models)].map((model) => {
+      perModel: Object.fromEntries(models.map((model) => {
         const checks = successful.filter((i) => i.model === model);
         return [model, { successful: checks.length, citationRate: checks.length ? Math.round(checks.filter((i) => i.record?.citationStatus === "cited").length / checks.length * 100) : null }];
       })),

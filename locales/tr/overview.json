@@ -54,5 +54,7 @@
   "overview.audits.status.completed": "Tamamlandı",
   "overview.audits.status.failed": "Başarısız",
   "overview.audits.status.pending": "Kuyrukta",
-  "overview.audits.status.running": "Sürüyor"
+  "overview.audits.status.running": "Sürüyor",
+  "overview.empty.cancelled": "Son analiz iptal edildi",
+  "overview.audits.status.cancelled": "İptal edildi"
 }

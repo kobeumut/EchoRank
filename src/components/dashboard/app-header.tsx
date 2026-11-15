@@ -49,6 +49,11 @@ export function AppHeaderFallback() {
   );
 }
 
+const NAV = [
+  { href: "/", labelKey: "common.nav.sites" },
+  { href: "/settings", labelKey: "common.nav.settings" },
+];
+
 export function AppHeader() {
   const t = useT();
   const pathname = usePathname();
@@ -68,12 +73,15 @@ export function AppHeader() {
           <span className="hidden sm:inline">EchoRank</span>
         </Link>
         <nav className="flex items-center gap-1 text-sm">
-          <Link
-            href="/"
-            className={`rounded-md px-2.5 py-1.5 ${pathname === "/" ? "bg-zinc-100 font-medium text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100" : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"}`}
-          >
-            {t("common.nav.sites")}
-          </Link>
+          {NAV.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`rounded-md px-2.5 py-1.5 ${pathname === item.href ? "bg-zinc-100 font-medium text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100" : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"}`}
+            >
+              {t(item.labelKey)}
+            </Link>
+          ))}
         </nav>
         <div className="ml-auto flex items-center gap-1">
           <LanguageSwitcher />

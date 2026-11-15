@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Suspense, type ReactNode } from "react";
 import { AppHeader, AppHeaderFallback } from "@/components/dashboard/app-header";
+import { ChatNotifier } from "@/components/dashboard/chat-notifier";
 import { ToastProvider } from "@/components/dashboard/toast";
 import { DEFAULT_LOCALE } from "@/lib/i18n/config";
 import { I18nProvider } from "@/lib/i18n/provider";
@@ -40,6 +41,7 @@ async function LocalizedApp({ children }: { children: ReactNode }) {
   return (
     <I18nProvider locale={locale} messages={getMessages(locale)}>
       <ToastProvider>
+        <ChatNotifier />
         <AppHeader />
         <div className="flex-1">{children}</div>
         <footer className="border-t border-zinc-200 px-6 py-4 text-center text-xs text-zinc-500 dark:border-zinc-800">

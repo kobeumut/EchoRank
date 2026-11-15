@@ -1,0 +1,23 @@
+{
+  "settings.title": "Ayarlar",
+  "settings.subtitle": "Sunucu genelinde geçerli LLM bağlantı ayarları.",
+  "settings.cli.title": "CLI modelleri",
+  "settings.cli.subtitle": "Bağlantı türü CLI olduğunda (anahtarsız, abonelik girişiyle) her CLI'ın hangi modelle yanıt vereceği. LLM görünürlük testleri ve site asistanı bu seçimi kullanır; boş bırakılırsa .env'deki *_CLI_MODEL, o da yoksa CLI'ın varsayılanı geçerlidir.",
+  "settings.cli.refresh": "Listeyi yenile",
+  "settings.cli.note": "Model değişince önbellek anahtarı da değişir; aynı sorgu yeni modelle 24 saatlik önbelleğe takılmadan yeniden sorulur. Perplexity'nin CLI'ı yoktur, yalnızca API anahtarıyla çalışır.",
+  "settings.cli.save": "Kaydet",
+  "settings.cli.cancel": "Vazgeç",
+  "settings.cli.saved": "CLI model ayarları kaydedildi.",
+  "settings.cli.saveFailed": "Kaydedilemedi.",
+  "settings.cli.installed": "Kurulu",
+  "settings.cli.notFound": "Bulunamadı",
+  "settings.cli.answers": "“{column}” sütununu yanıtlar",
+  "settings.cli.model": "Model",
+  "settings.cli.listError": "Model listesi CLI'dan alınamadı; model adını elle girebilirsiniz.",
+  "settings.cli.agyHint": "Gemini sütununun gerçekten Gemini olması için bir Gemini modeli seçin.",
+  "settings.cli.defaultEnv": "Varsayılan (.env: {model})",
+  "settings.cli.defaultCli": "Varsayılan (CLI'ın kendi modeli)",
+  "settings.cli.custom": "Diğer (elle gir)…",
+  "settings.cli.customPlaceholder": "model adı, ör. claude-opus-5-5",
+  "settings.cli.customLabel": "{title} model adı"
+}

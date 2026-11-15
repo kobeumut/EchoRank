@@ -1,5 +1,8 @@
 import { ActionsView } from "@/components/dashboard/actions-view";
 
+// SiteShell renders pages only after its client-side site fetch, so there is no static shell to validate.
+export const instant = false;
+
 export default function ActionsPage() {
   return <ActionsView />;
 }

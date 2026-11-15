@@ -38,7 +38,7 @@ function Toggle({ checked, onChange, label, disabled }: { checked: boolean; onCh
 
 function ReadyRow({ ok, label, children }: { ok: boolean; label: string; children?: React.ReactNode }) {
   return (
-    <li className="flex items-start gap-2 text-sm">
+    <div className="flex items-start gap-2 text-sm">
       <span aria-hidden className={ok ? "text-[#0ca30c]" : "text-[#d03b3b]"}>
         {ok ? "✓" : "✕"}
       </span>
@@ -46,7 +46,7 @@ function ReadyRow({ ok, label, children }: { ok: boolean; label: string; childre
         <span className="text-zinc-800 dark:text-zinc-200">{label}</span>
         {children && <div className="text-xs text-zinc-500">{children}</div>}
       </div>
-    </li>
+    </div>
   );
 }
 

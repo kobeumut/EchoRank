@@ -81,7 +81,7 @@ export function SiteOverview() {
     return (
       <EmptyState
         icon="📊"
-        title={auditActive ? t("overview.empty.running") : latestAudit?.status === "failed" ? t("overview.empty.failed") : t("overview.empty.none")}
+        title={auditActive ? t("overview.empty.running") : latestAudit?.status === "failed" ? t("overview.empty.failed") : latestAudit?.status === "cancelled" ? t("overview.empty.cancelled") : t("overview.empty.none")}
         action={
           !auditActive && (
             <Button variant="primary" onClick={() => void startAudit()} loading={startingAudit}>
@@ -246,6 +246,7 @@ const AUDIT_STATUS: Record<string, { labelKey: string; tone: "good" | "critical"
   failed: { labelKey: "overview.audits.status.failed", tone: "critical" },
   pending: { labelKey: "overview.audits.status.pending", tone: "neutral" },
   running: { labelKey: "overview.audits.status.running", tone: "neutral" },
+  cancelled: { labelKey: "overview.audits.status.cancelled", tone: "neutral" },
 };
 
 function AuditHistory() {

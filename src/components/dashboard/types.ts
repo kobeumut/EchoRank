@@ -16,7 +16,18 @@ export type SiteSummary = {
 };
 export type SiteList = { items: SiteSummary[]; total: number };
 
-export type CrawlState = { id: string; status: string; pagesCrawled: number; pagesFailed: number; startedAt: string | null; finishedAt: string | null };
+export type CrawlState = {
+  id: string;
+  status: string;
+  pagesCrawled: number;
+  pagesFailed: number;
+  /** Estimated 0-100 while running, the engine's current stage, and the crawl size known so far. */
+  progress?: number;
+  stage?: string | null;
+  pagesTotal?: number | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
 export type AuditRow = {
   id: string;
   status: string;
@@ -30,6 +41,9 @@ export type AuditRow = {
   crawlSession: CrawlState | null;
   _count: { actionItems: number };
 };
+
+/** GET /audit: `runner` = this server executes audits itself (false: a queued audit waits for an external worker). */
+export type AuditList = { items: AuditRow[]; runner?: boolean };
 
 export type ModelStats = { cited: number; mentioned: number; none: number; total: number; visibilityRate: number; citationRate: number };
 export type SiteReport = {
@@ -104,7 +118,18 @@ export type QuerySuggestion = {
   difficulty: { score: number; level: "low" | "medium" | "high" };
   volume: { score: number; level: "low" | "medium" | "high" };
 };
-export type VisibilityList = { items: VisibilityRecord[]; total: number; queries: string[]; querySuggestions?: QuerySuggestion[] };
+export type TransportMode = "auto" | "api" | "cli";
+/** What each transport mode would use for a model right now (`null` = unavailable). */
+export type ProviderStatus = { model: string; cli: "claude" | "codex" | "agy" | null; cliModel?: string | null; resolved: Record<TransportMode, "api" | "cli" | null> };
+export type VisibilityList = {
+  items: VisibilityRecord[];
+  total: number;
+  queries: string[];
+  querySuggestions?: QuerySuggestion[];
+  providers?: ProviderStatus[];
+  defaultTransport?: TransportMode;
+  limits?: { cliMaxCalls: number };
+};
 export type VisibilityRunResult = {
   items: { query: string; model: string; cached?: boolean; error?: string; record?: VisibilityRecord }[];
   attempted: number;

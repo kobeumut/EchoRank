@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import fixture from "./fixtures/geo-audit-result.json";
 import { aggregateCompetitors } from "@/lib/dashboard/competitors";
-import { labelFor, scoreLabel, scoreTone, tierFor, timeAgo } from "@/lib/dashboard/format";
+import { auditProgressView, STUCK_QUEUE_MS } from "@/lib/dashboard/audit-progress";
+import { formatDuration, labelFor, scoreLabel, scoreTone, tierFor, timeAgo } from "@/lib/dashboard/format";
 import { graphIssues, ISSUE_KINDS, issueCounts, issueLabel } from "@/lib/dashboard/graph-insights";
 import { foldCase, highlightSegments, siteTerms } from "@/lib/dashboard/highlight";
 import { aiAccessScore, readPillars } from "@/lib/dashboard/pillars";
@@ -149,5 +150,42 @@ describe("pillars", () => {
     expect(aiAccessScore({ crawlerAccess: 100 })).toBe(100);
     expect(readPillars(null, tEn)).toEqual([]);
     expect(aiAccessScore(undefined)).toBeNull();
+  });
+});
+
+describe("audit progress view", () => {
+  const T0 = Date.parse("2026-11-08T12:00:00Z");
+  const base = { status: "pending", createdAt: "2026-11-08T11:59:00Z" };
+  const crawl = (over: object = {}) => ({ status: "queued", progress: 0, stage: null, pagesCrawled: 0, pagesTotal: null, startedAt: null, ...over });
+
+  it("says nothing is running when the server has no runner (the stuck-in-queue case)", () => {
+    expect(auditProgressView({ ...base, crawlSession: crawl() }, false, T0)).toEqual({ kind: "no-runner", waitingMs: 60_000 });
+  });
+
+  it("treats a queued audit with a runner as starting, and as stuck after a minute", () => {
+    expect(auditProgressView({ ...base, createdAt: "2026-11-08T11:59:45Z", crawlSession: crawl() }, true, T0)).toEqual({ kind: "starting", waitingMs: 15_000, stuck: false });
+    expect(auditProgressView({ ...base, crawlSession: crawl() }, true, T0 + STUCK_QUEUE_MS)).toMatchObject({ kind: "starting", stuck: true });
+    // An older server that sends no `runner` flag is never reported as "nothing runs".
+    expect(auditProgressView({ ...base, crawlSession: crawl() }, undefined, T0).kind).toBe("starting");
+  });
+
+  it("shows the estimated percentage, stage, crawl counts and elapsed time while running", () => {
+    const running = { status: "running", createdAt: base.createdAt, crawlSession: crawl({ status: "running", stage: "crawl", progress: 31, pagesCrawled: 25, pagesTotal: 50, startedAt: "2026-11-08T11:59:30Z" }) };
+    expect(auditProgressView(running, true, T0)).toEqual({ kind: "running", percent: 31, labelKey: "sites.audit.stage.crawl", pages: { done: 25, total: 50 }, elapsedMs: 30_000 });
+    const scoring = { ...running, crawlSession: { ...running.crawlSession, stage: "scoring", progress: 88 } };
+    expect(auditProgressView(scoring, true, T0)).toMatchObject({ percent: 88, labelKey: "sites.audit.stage.scoring", pages: null });
+  });
+
+  it("never reports 100% while running and does not invent progress a runner does not report", () => {
+    const view = auditProgressView({ status: "running", createdAt: base.createdAt, crawlSession: crawl({ status: "running", stage: "ingest", progress: 150 }) }, true, T0);
+    expect(view).toMatchObject({ percent: 99 });
+    expect(auditProgressView({ status: "running", createdAt: base.createdAt, crawlSession: crawl({ status: "running" }) }, true, T0)).toMatchObject({ kind: "running", percent: null, labelKey: "sites.audit.stage.starting" });
+    expect(auditProgressView({ status: "running", createdAt: base.createdAt, crawlSession: crawl({ status: "running", stage: "crawl", pagesCrawled: 9, pagesTotal: 4 }) }, true, T0)).toMatchObject({ pages: { done: 4, total: 4 } });
+  });
+
+  it("formats elapsed time", () => {
+    const durations = [0, 5_000, 59_999, 125_000, 3_780_000];
+    expect(durations.map((ms) => formatDuration(ms, tEn))).toEqual(["0 s", "5 s", "59 s", "2 min 05 s", "1 h 03 min"]);
+    expect(durations.map((ms) => formatDuration(ms, tTr))).toEqual(["0 sn", "5 sn", "59 sn", "2 dk 05 sn", "1 sa 03 dk"]);
   });
 });

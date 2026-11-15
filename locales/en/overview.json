@@ -54,5 +54,7 @@
   "overview.audits.status.completed": "Completed",
   "overview.audits.status.failed": "Failed",
   "overview.audits.status.pending": "Queued",
-  "overview.audits.status.running": "Running"
+  "overview.audits.status.running": "Running",
+  "overview.empty.cancelled": "The last audit was cancelled",
+  "overview.audits.status.cancelled": "Cancelled"
 }

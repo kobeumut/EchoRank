@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { auditProgressView } from "@/lib/dashboard/audit-progress";
 import { useT } from "@/lib/i18n/provider";
 import { apiFetch, ApiError, errorMessage, useApi } from "./api";
+import { AuditProgressPanel, useNow } from "./audit-progress";
 import { useToast } from "./toast";
-import type { AuditRow, SiteSummary } from "./types";
-import { Badge, Button, cx, EmptyState, ErrorState, RichText, Skeleton, Spinner } from "./ui";
+import type { AuditList, AuditRow, SiteSummary } from "./types";
+import { Badge, Button, cx, EmptyState, ErrorState, Skeleton, Spinner } from "./ui";
 import { useFormat } from "./use-format";
 
 type SiteCtx = {
@@ -40,6 +42,7 @@ const TABS = [
   { href: "/visibility", labelKey: "sites.tabs.visibility" },
   { href: "/competitors", labelKey: "sites.tabs.competitors" },
   { href: "/distribution", labelKey: "sites.tabs.distribution" },
+  { href: "/chat", labelKey: "sites.tabs.chat" },
 ];
 
 const ACTIVE_CRAWL = new Set(["queued", "running"]);
@@ -65,19 +68,30 @@ export function SiteShellSkeleton() {
   );
 }
 
-function AuditStatus({ audit }: { audit: AuditRow | null }) {
+function AuditStatus({ audit, runner }: { audit: AuditRow | null; runner: boolean | undefined }) {
   const { t, timeAgo } = useFormat();
+  const active = isAuditActive(audit);
+  const now = useNow(active ? 5000 : null);
   if (!audit) return <Badge>{t("sites.shell.status.none")}</Badge>;
-  const crawl = audit.crawlSession;
-  if (isAuditActive(audit)) {
-    const running = crawl?.status === "running" || audit.status === "running";
+  if (active) {
+    const view = auditProgressView(audit, runner, now);
+    if (view.kind === "no-runner")
+      return (
+        <Badge tone="warning" icon>
+          {t("sites.shell.status.noRunner")}
+        </Badge>
+      );
     return (
       <span className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
         <Spinner className="h-3 w-3" />
-        {running ? (crawl?.pagesCrawled ? t("sites.shell.status.runningPages", { count: crawl.pagesCrawled }) : t("sites.shell.status.running")) : t("sites.shell.status.queued")}
+        {view.kind === "running"
+          ? view.percent != null ? t("sites.shell.status.runningPercent", { percent: view.percent }) : t("sites.shell.status.running")
+          : t("sites.shell.status.starting")}
       </span>
     );
   }
+  if (audit.status === "cancelled")
+    return <Badge>{t("sites.shell.status.cancelled", { time: timeAgo(audit.crawlSession?.finishedAt ?? audit.createdAt) })}</Badge>;
   if (audit.status === "failed")
     return (
       <Badge tone="critical" icon>
@@ -96,17 +110,19 @@ export function SiteShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const toast = useToast();
-  const { t, formatDate } = useFormat();
+  const { t } = useFormat();
   const [version, setVersion] = useState(0);
   const [startingAudit, setStartingAudit] = useState(false);
+  const [cancelingAudit, setCancelingAudit] = useState(false);
 
   const site = useApi<SiteSummary>(`/api/sites/${id}`, { version });
-  const audits = useApi<{ items: AuditRow[] }>(`/api/sites/${id}/audit`, {
-    // Poll only while an audit is in flight (slower while it just sits in the queue).
+  const audits = useApi<AuditList>(`/api/sites/${id}/audit`, {
+    // Poll only while an audit is in flight: quickly while it runs or is about to start, slowly when nothing executes it.
     pollMs: (d) => {
       const a = d?.items[0];
       if (!isAuditActive(a)) return 0;
-      return a?.crawlSession?.status === "queued" ? 10_000 : 4_000;
+      if (a?.crawlSession?.status !== "queued") return 3_000;
+      return d?.runner === false ? 10_000 : 3_000;
     },
     onData: (prev, next) => {
       // Announce completion and refresh every page that depends on audit output.
@@ -115,6 +131,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
       if (!before || !after || before.id !== after.id || !isAuditActive(before) || isAuditActive(after)) return;
       if (after.status === "completed") toast.push("success", t("sites.shell.toast.completed"));
       else if (after.status === "failed") toast.push("error", t("sites.shell.toast.failed", { error: after.error ?? t("shared.unknownError") }));
+      else if (after.status === "cancelled") toast.push("info", t("sites.shell.toast.cancelled"));
       setVersion((v) => v + 1);
     },
   });
@@ -122,6 +139,20 @@ export function SiteShell({ children }: { children: ReactNode }) {
   const active = isAuditActive(latest);
 
   const bump = useCallback(() => setVersion((v) => v + 1), []);
+  const cancelAudit = useCallback(async () => {
+    const target = audits.data?.items[0];
+    if (!target) return;
+    setCancelingAudit(true);
+    try {
+      await apiFetch(`/api/sites/${id}/audit/${target.id}/cancel`, { method: "POST" });
+    } catch (err) {
+      // 409: it finished or was cancelled elsewhere a moment ago; the refresh below shows the real state.
+      if (!(err instanceof ApiError && err.status === 409)) toast.push("error", errorMessage(err));
+    } finally {
+      await audits.reload(); // the data hook announces the cancellation and refreshes the pages
+      setCancelingAudit(false);
+    }
+  }, [id, toast, audits]);
   const startAudit = useCallback(async () => {
     setStartingAudit(true);
     try {
@@ -190,7 +221,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
                 <a href={ctx.site.url} target="_blank" rel="noopener noreferrer" className="truncate hover:text-indigo-600">
                   {ctx.site.url} ↗
                 </a>
-                <AuditStatus audit={latest} />
+                <AuditStatus audit={latest} runner={audits.data?.runner} />
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -215,14 +246,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
               </Button>
             </div>
           </div>
-          {active && latest?.crawlSession?.status === "queued" && (
-            <p className="mt-3 rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-200">
-              <RichText
-                message={t("sites.shell.queuedHint", { date: formatDate(latest.createdAt) })}
-                slots={{ bin: <code>GEO_AUDIT_BIN</code>, path: <code>/api/sites/:id/audit/:auditId/result</code> }}
-              />
-            </p>
-          )}
+          {active && latest && <AuditProgressPanel audit={latest} runner={audits.data?.runner} canceling={cancelingAudit} onCancel={() => void cancelAudit()} />}
           <nav aria-label={t("sites.shell.tabs")} className="-mb-px mt-5 flex gap-1 overflow-x-auto">
             {TABS.map((tab) => {
               const href = `${base}${tab.href}`;

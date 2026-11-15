@@ -13,4 +13,5 @@ export function req(path: string, init: { method?: string; body?: unknown; token
 export async function resetDb() {
   // Cascades remove all child rows.
   await prisma.site.deleteMany();
+  await prisma.appSetting.deleteMany();
 }

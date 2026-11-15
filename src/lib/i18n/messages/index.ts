@@ -13,6 +13,7 @@ import en_autogeo from "@locales/en/autogeo.json";
 import en_bot_simulator from "@locales/en/bot_simulator.json";
 import en_bots from "@locales/en/bots.json";
 import en_botsim from "@locales/en/botsim.json";
+import en_chat from "@locales/en/chat.json";
 import en_common from "@locales/en/common.json";
 import en_competitors from "@locales/en/competitors.json";
 import en_distribution from "@locales/en/distribution.json";
@@ -29,6 +30,7 @@ import en_reports from "@locales/en/reports.json";
 import en_schema_rules from "@locales/en/schema_rules.json";
 import en_seo from "@locales/en/seo.json";
 import en_services from "@locales/en/services.json";
+import en_settings from "@locales/en/settings.json";
 import en_shared from "@locales/en/shared.json";
 import en_signals from "@locales/en/signals.json";
 import en_sites from "@locales/en/sites.json";
@@ -44,6 +46,7 @@ import tr_autogeo from "@locales/tr/autogeo.json";
 import tr_bot_simulator from "@locales/tr/bot_simulator.json";
 import tr_bots from "@locales/tr/bots.json";
 import tr_botsim from "@locales/tr/botsim.json";
+import tr_chat from "@locales/tr/chat.json";
 import tr_common from "@locales/tr/common.json";
 import tr_competitors from "@locales/tr/competitors.json";
 import tr_distribution from "@locales/tr/distribution.json";
@@ -60,6 +63,7 @@ import tr_reports from "@locales/tr/reports.json";
 import tr_schema_rules from "@locales/tr/schema_rules.json";
 import tr_seo from "@locales/tr/seo.json";
 import tr_services from "@locales/tr/services.json";
+import tr_settings from "@locales/tr/settings.json";
 import tr_shared from "@locales/tr/shared.json";
 import tr_signals from "@locales/tr/signals.json";
 import tr_sites from "@locales/tr/sites.json";
@@ -76,6 +80,7 @@ export const en = {
   ...en_bot_simulator,
   ...en_bots,
   ...en_botsim,
+  ...en_chat,
   ...en_common,
   ...en_competitors,
   ...en_distribution,
@@ -92,6 +97,7 @@ export const en = {
   ...en_schema_rules,
   ...en_seo,
   ...en_services,
+  ...en_settings,
   ...en_shared,
   ...en_signals,
   ...en_sites,
@@ -109,6 +115,7 @@ export const tr: Record<keyof typeof en, string> = {
   ...tr_bot_simulator,
   ...tr_bots,
   ...tr_botsim,
+  ...tr_chat,
   ...tr_common,
   ...tr_competitors,
   ...tr_distribution,
@@ -125,6 +132,7 @@ export const tr: Record<keyof typeof en, string> = {
   ...tr_schema_rules,
   ...tr_seo,
   ...tr_services,
+  ...tr_settings,
   ...tr_shared,
   ...tr_signals,
   ...tr_sites,
