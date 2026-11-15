@@ -12,6 +12,7 @@ import httpx
 
 from .classifier import classify_page
 from .models import CrawlResult, PageData
+from .netguard import GUARD_HOOKS
 from .parser import parse_html
 from .sitemap import RobotsInfo, discover_sitemap_urls, fetch_robots
 from .urls import is_crawlable_resource, is_internal, normalize_url
@@ -83,6 +84,7 @@ class SiteCrawler:
         if self._client is None:
             self._client = httpx.AsyncClient(
                 follow_redirects=True,
+                event_hooks=GUARD_HOOKS,  # SSRF: refuse private addresses, including redirect targets
                 timeout=self.config.timeout,
                 headers={"User-Agent": self.config.user_agent, "Accept": "text/html,application/xhtml+xml"},
                 limits=httpx.Limits(max_connections=self.config.concurrency * 2),

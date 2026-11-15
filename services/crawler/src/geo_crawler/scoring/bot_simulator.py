@@ -44,6 +44,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from ..i18n import DEFAULT_LANG, Translator, get_translator, normalize_lang
+from ..netguard import GUARD_HOOKS
 from ..parser import parse_html
 from ..urls import normalize_url
 from . import snippets as sn
@@ -979,7 +980,7 @@ async def simulate_bots(
     def client_for(_identity: str) -> httpx.AsyncClient:
         if client is not None:
             return client
-        c = httpx.AsyncClient(follow_redirects=True, max_redirects=10, timeout=timeout)
+        c = httpx.AsyncClient(follow_redirects=True, max_redirects=10, timeout=timeout, event_hooks=GUARD_HOOKS)  # SSRF guard
         owned.append(c)
         return c
 

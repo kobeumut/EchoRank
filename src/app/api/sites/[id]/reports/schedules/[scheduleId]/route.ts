@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { handle, HttpError, json, parseBody, requireApiToken } from "@/lib/http";
-import { computeNextRun } from "@/lib/services/reports";
+import { computeNextRun, serializeSchedule } from "@/lib/services/reports";
 
 type Ctx = { params: Promise<{ id: string; scheduleId: string }> };
 /** Disable or resume without changing destinations; claimed work must first finish. */
@@ -18,6 +18,6 @@ export const PATCH = handle<Ctx>(async (request, { params }) => {
       data: { enabled, nextRunAt: enabled ? computeNextRun(schedule.frequency as "daily" | "weekly") : null },
     });
     if (!changed.count) throw new HttpError(409, "Schedule was claimed concurrently");
-    return tx.scheduledReport.findUniqueOrThrow({ where: { id: scheduleId } });
+    return serializeSchedule(await tx.scheduledReport.findUniqueOrThrow({ where: { id: scheduleId } }));
   }));
 });

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import * as result from "@/app/api/sites/[id]/audit/[auditId]/result/route";
 import * as actions from "@/app/api/sites/[id]/actions/route";
@@ -121,6 +121,31 @@ describe("POST /api/sites/[id]/audit/[auditId]/result", () => {
 });
 
 describe("geo-audit CLI runner", () => {
+  // The runner refuses private targets; keep the suite offline (no DNS) except in the dedicated test below.
+  beforeEach(() => {
+    vi.stubEnv("ALLOW_PRIVATE_NETWORK_TARGETS", "true");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("refuses to crawl internal addresses (SSRF guard) and marks the audit failed", async () => {
+    vi.stubEnv("ALLOW_PRIVATE_NETWORK_TARGETS", "false");
+    const dir = mkdtempSync(path.join(tmpdir(), "fake-geo-audit-"));
+    const bin = path.join(dir, "geo-audit");
+    writeFileSync(bin, `#!/usr/bin/env node\nrequire("fs").writeFileSync(${JSON.stringify(path.join(dir, "ran"))}, "1");\n`);
+    chmodSync(bin, 0o755);
+    process.env.GEO_AUDIT_BIN = bin;
+    registerAuditRunner(defaultAuditRunner());
+    const site = await prisma.site.create({ data: { url: "http://169.254.169.254", title: "Metadata" } });
+    const job = await startAudit(site.id, { trigger: "manual" });
+    await executeAudit(job);
+    const audit = await prisma.geoAudit.findUniqueOrThrow({ where: { id: job.audit.id } });
+    expect(audit.status).toBe("failed");
+    expect(audit.error).toMatch(/private network/i);
+    expect(() => readFileSync(path.join(dir, "ran"))).toThrow();
+  });
+
   it("runs GEO_AUDIT_BIN and ingests its output", async () => {
     // Fake geo-audit: copies the fixture split into --db-records / --crawl-records outputs.
     const dir = mkdtempSync(path.join(tmpdir(), "fake-geo-audit-"));

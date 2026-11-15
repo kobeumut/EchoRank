@@ -6,10 +6,14 @@ import type { CreateSiteInput, UpdateSiteInput } from "../validation";
 
 type Integrations = Record<string, string>;
 
-/** Masks secrets: "abcd1234efgh" -> "abcd…efgh" (short values fully masked). */
+/**
+ * Masks secrets for API responses: only a short tail of long values is shown, so the user can recognise a key
+ * without the response revealing a usable part of it. "abcdefghijklmnop1234" -> "…1234"; values shorter than
+ * 16 characters (and anything JSON-like, e.g. a Google service-account file) are fully masked.
+ */
 export function maskSecret(value: string): string {
-  if (value.length <= 8) return "••••";
-  return `${value.slice(0, 4)}…${value.slice(-4)}`;
+  if (value.length < 16 || /^\s*[{[]/.test(value)) return "••••";
+  return `…${value.slice(-4)}`;
 }
 
 export function serializeSite(site: Site) {

@@ -23,3 +23,9 @@ def fake_site():
 async def indexed(fake_site):
     cfg = CrawlConfig(max_depth=3, max_pages=50, concurrency=4, requests_per_second=0)
     return await index_site(BASE + "/", cfg)
+
+
+@pytest.fixture(autouse=True)
+def _allow_private_targets_for_mocked_hosts(monkeypatch):
+    """Tests use respx-mocked fake hosts; keep them hermetic (no DNS). SSRF-guard tests unset this explicitly."""
+    monkeypatch.setenv("ALLOW_PRIVATE_NETWORK_TARGETS", "true")

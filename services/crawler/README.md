@@ -171,3 +171,12 @@ as English ones (page classification, keywords and AutoGEO detect the page langu
 - Keywords: weighted TF-IDF (title×3, headings×2, body), TR+EN stopwords, terms on >50% of pages dropped as boilerplate.
 - JS-rendered (SPA) sites need a headless renderer — not included in this stage. The scorer detects them
   (empty `#root/#app/#__next` + scripts, little server text) and reports it, since AI crawlers do not run JS either.
+
+## Security
+
+- **SSRF guard.** The crawler, `geo-botsim` and the URL fetch of `geo-autogeo` refuse to connect to loopback, private,
+  link-local, CGNAT, reserved or multicast addresses and to internal-looking names (`localhost`, `*.local`, `*.internal`).
+  The check runs on the first request and on every redirect hop (`geo_crawler/netguard.py`). Set
+  `ALLOW_PRIVATE_NETWORK_TARGETS=true` to crawl local or private hosts during development. Name resolution happens twice
+  (check, then connect), so also use network-level egress filtering for fully untrusted targets.
+- Snippets in generated reports embed crawled page text (titles, headings): escape it if you render the output as HTML.

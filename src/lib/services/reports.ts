@@ -99,12 +99,31 @@ export async function getSiteReport(siteId: string, days: number) {
   };
 }
 
+/**
+ * API view of a schedule: webhook URLs usually embed a secret (Slack/Discord tokens), so only the origin is
+ * returned, and the worker's internal claim fields are dropped.
+ */
+export function serializeSchedule<T extends { webhookUrl: string | null; claimId?: string | null }>(schedule: T) {
+  const { claimId: _claimId, ...rest } = schedule;
+  let webhookUrl = schedule.webhookUrl;
+  if (webhookUrl) {
+    try {
+      webhookUrl = `${new URL(webhookUrl).origin}/…`;
+    } catch {
+      webhookUrl = "…";
+    }
+  }
+  return { ...rest, webhookUrl, running: !!schedule.claimId };
+}
+
 export async function createSchedule(
   siteId: string,
   input: { frequency: ReportFrequency; recipients: string[]; enabled: boolean; webhookUrl?: string },
 ) {
   await getSiteOrThrow(siteId);
-  return prisma.scheduledReport.create({
-    data: { siteId, ...input, nextRunAt: input.enabled ? computeNextRun(input.frequency) : null },
-  });
+  return serializeSchedule(
+    await prisma.scheduledReport.create({
+      data: { siteId, ...input, nextRunAt: input.enabled ? computeNextRun(input.frequency) : null },
+    }),
+  );
 }

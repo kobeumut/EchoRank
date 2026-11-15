@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { INTL_LOCALES, LOCALE_COOKIE, type Locale } from "./config";
 import { createTranslator, type Messages, type Translator } from "./translate";
@@ -15,6 +15,10 @@ const I18nContext = createContext<I18nValue | null>(null);
  */
 export function I18nProvider({ locale, messages, children }: { locale: Locale; messages: Messages; children: ReactNode }) {
   const router = useRouter();
+  // The static root layout renders <html lang="en">; keep it in sync with the active locale.
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
   const setLocale = useCallback(
     (next: Locale) => {
       document.cookie = `${LOCALE_COOKIE}=${next}; path=/; max-age=31536000; samesite=lax`;

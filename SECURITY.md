@@ -58,12 +58,17 @@ following before exposing an instance to a network.
   (HTTP 503) until a token is configured.
 - The token is a **single shared secret**: there are no user accounts, roles or per-site permissions. Anyone who holds it can read
   and modify every site, trigger paid provider calls and cause outbound requests. Do not share it with untrusted users.
-- The dashboard session cookie (`aiv_session`) contains a SHA-256 digest derived from the token, so rotating `API_TOKEN` invalidates
-  all sessions. The cookie is `HttpOnly` and `SameSite=Strict`, and `Secure` when `NODE_ENV=production`: serve the app **only over HTTPS**
-  (terminate TLS in a reverse proxy) and run it with `NODE_ENV=production`.
-- There is no built-in rate limiting or lockout on `/api/auth` or any other route. Add rate limiting at the reverse proxy / WAF.
-- The app does not set security headers such as `Content-Security-Policy`, `Strict-Transport-Security` or `X-Frame-Options`.
-  Set them at the reverse proxy.
+- The dashboard session cookie (`aiv_session`) is `v2.<expiry>.<HMAC-SHA-256>`: it expires after 7 days on the server side, cannot be
+  extended or forged without the signing key, and never contains the token. The key is derived from `API_TOKEN` and the optional
+  `SESSION_SECRET` (set it to a random value so a weak `API_TOKEN` cannot be guessed offline from a leaked cookie); rotating either one
+  invalidates all sessions. The cookie is `HttpOnly` and `SameSite=Strict`, and `Secure` when `NODE_ENV=production`: serve the app
+  **only over HTTPS** (terminate TLS in a reverse proxy) and run it with `NODE_ENV=production`.
+- `POST /api/auth` locks a client out for up to 15 minutes after 10 wrong tokens (plus a global cap of 200 failures per window). The
+  counters are in memory and per process, and the client is identified by `X-Forwarded-For`, so also rate-limit at the reverse proxy / WAF
+  and make sure the proxy overwrites that header.
+- The app sets baseline security headers on every response (`X-Content-Type-Options`, `X-Frame-Options: DENY`, a `frame-ancestors 'none'`
+  Content-Security-Policy, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`) and removes `X-Powered-By`. It does not
+  set `Strict-Transport-Security` (set it at the TLS-terminating proxy) or a full script-src CSP.
 - Restrict `/api/distribution/run` (the cron hook) and the other state-changing routes at the network level as well, and call
   them only with the bearer token.
 
@@ -71,14 +76,17 @@ following before exposing an instance to a network.
 
 The platform makes requests to URLs that users supply: sites to crawl, webhooks, IndexNow key files and report targets.
 
-- Keep `ALLOW_PRIVATE_NETWORK_TARGETS` unset or `false` in production. When it is `false`, syndication / "Apply to CMS" webhooks, IndexNow
-  key verification and the persisted bot simulation (`/simulation/bots`) refuse targets that resolve to loopback, private, link-local
-  or other internal addresses. Scheduled-report webhooks are always restricted to public addresses with a DNS-pinned connection,
-  must use HTTPS, and do not follow redirects.
-- **Known limitation:** the Python crawler (started through `GEO_AUDIT_BIN`) and the on-demand `POST /api/sites/:id/bot-simulator`
-  fetch the site URLs that an authenticated caller registers and do not apply this private-network guard. Treat site registration as a
-  privileged action and run the application where it cannot reach internal services: use egress filtering, block cloud metadata endpoints
-  (for example `169.254.169.254`), and keep databases and admin interfaces on networks the app host cannot reach.
+- Keep `ALLOW_PRIVATE_NETWORK_TARGETS` unset or `false` in production. When it is `false`:
+  - registering a site whose URL is `localhost`, a private IP literal or an internal-looking name (`.local`, `.internal`, …) is rejected;
+  - the audit runner, the Python crawler / `geo-botsim` / `geo-autogeo` clients, `POST /api/sites/:id/bot-simulator`, the persisted bot
+    simulation (`/simulation/bots`), syndication / "Apply to CMS" webhooks, IndexNow submissions and key verification refuse targets that
+    resolve to loopback, private, link-local, CGNAT, reserved or other internal addresses — **including every redirect hop**;
+  - the service-account `token_uri` is only honoured for Google's own HTTPS endpoints (anything else is replaced by the default);
+  - scheduled-report webhooks are always restricted to public addresses with a DNS-pinned connection, must use HTTPS, and do not follow
+    redirects.
+- **Residual risk:** outside the report webhooks the name is resolved once for the check and again by the HTTP client, so a hostile DNS
+  server could still rebind it (DNS rebinding). For fully untrusted targets also use egress filtering, block cloud metadata endpoints
+  (for example `169.254.169.254`) and keep databases and admin interfaces on networks the app host cannot reach.
 - `GEO_AUDIT_BIN` and `GEO_AUDIT_ARGS` are executed with `execFile` (no shell) and must only be set by the operator.
   Run the audit engine as an unprivileged user, preferably in a container with limited network access.
 
@@ -90,7 +98,8 @@ The platform makes requests to URLs that users supply: sites to crawl, webhooks,
   `CRUNCHBASE_API_KEY`, Google service-account credentials and `API_TOKEN` are read on the server only. Use dedicated, least-privilege
   keys with spending limits, and rotate them if they may have leaked.
 - Per-site integration secrets (IndexNow key, Google service account JSON, webhook secrets) are stored **unencrypted** in the database
-  (`Site.integrations`) and masked in API responses. Restrict database access, encrypt storage and backups, and use PostgreSQL with a
+  (`Site.integrations`). API responses mask them down to the last four characters (values shorter than 16 characters and JSON
+  credentials are fully masked); scheduled-report webhook URLs are returned as their origin only. Restrict database access, encrypt storage and backups, and use PostgreSQL with a
   least-privilege role in production (SQLite is intended for development).
 - Visibility checks store queries, answer excerpts and source URLs as application data. Do not submit secrets or personal data as
   prompts, and apply your own retention policy to the database.

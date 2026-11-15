@@ -369,8 +369,12 @@ describe("site API", () => {
   beforeEach(async () => {
     await resetDb();
     siteId = (await prisma.site.create({ data: { url: ORIGIN, title: "Botsim" } })).id;
+    vi.stubEnv("ALLOW_PRIVATE_NETWORK_TARGETS", "true"); // no DNS in tests; the guard has its own test below
   });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
   afterAll(async () => {
     await resetDb();
     await prisma.$disconnect();
@@ -402,6 +406,24 @@ describe("site API", () => {
     expect((await run(base, { cookie: "locale=tr" })).findings[0].title).toBe("1 AI botu sunucu/WAF tarafından reddediliyor");
     expect((await run(base, { "accept-language": "tr-TR,tr;q=0.9,en;q=0.8" })).findings[0].title).toBe("1 AI botu sunucu/WAF tarafından reddediliyor");
     expect((await run(`${base}?lang=en`, { cookie: "locale=tr" })).findings[0].title).toBe("1 AI bot is rejected by the server/WAF");
+  });
+
+  it("the default transport refuses internal addresses and redirects into them (SSRF guard)", async () => {
+    vi.stubEnv("ALLOW_PRIVATE_NETWORK_TARGETS", "false");
+    const seen: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      seen.push(String(url));
+      return new Response(null, { status: 302, headers: { location: "http://169.254.169.254/latest/meta-data/" } });
+    }));
+    const metadata = (await prisma.site.create({ data: { url: "http://169.254.169.254", title: "Metadata" } })).id;
+    const direct = await (await route.POST(req(`/api/sites/${metadata}/bot-simulator`, { method: "POST", body: { bots: ["GPTBot"] } }), ctx(metadata))).json();
+    expect(JSON.stringify(direct)).toMatch(/private network/i);
+    expect(seen).toEqual([]); // nothing was requested
+
+    const redirected = await prisma.site.create({ data: { url: "https://8.8.8.8", title: "Redirects" } });
+    const report = await (await route.POST(req(`/api/sites/${redirected.id}/bot-simulator`, { method: "POST", body: { bots: ["GPTBot"] } }), ctx(redirected.id))).json();
+    expect(JSON.stringify(report)).toMatch(/private network/i);
+    expect(seen.every((u) => u.startsWith("https://8.8.8.8"))).toBe(true); // the internal hop was never fetched
   });
 
   it("POST refuses URLs outside the site and invalid input", async () => {

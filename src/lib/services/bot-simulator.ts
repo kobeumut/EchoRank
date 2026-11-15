@@ -13,6 +13,7 @@
 import { gzipSync } from "node:zlib";
 import { z } from "zod";
 import { prisma } from "../db";
+import { fetchPublic } from "../distribution/net";
 import { HttpError } from "../http";
 import { DEFAULT_LOCALE, type Locale } from "../i18n/config";
 import { serverT } from "../i18n/request";
@@ -971,7 +972,8 @@ export async function simulateBots(urls: string[], opts: SimulateOptions = {}): 
   const unknown = tokens.filter((token) => !BOT_PROFILES[token]);
   if (unknown.length) throw new HttpError(400, `Unknown bot: ${unknown.join(", ")}`);
   const profiles = tokens.map((token) => BOT_PROFILES[token]);
-  const fetchImpl = opts.fetchImpl ?? ((u, init) => fetch(u, init));
+  // Default transport re-validates every redirect hop against private networks (SSRF); tests inject their own.
+  const fetchImpl = opts.fetchImpl ?? ((u, init) => fetchPublic(u, init));
   const timeoutMs = opts.timeoutMs ?? 15_000;
   const delay = opts.delayMs ?? 250;
   const get = async (url: string, headers: Record<string, string>) => {

@@ -182,7 +182,8 @@ Copy `.env.example` to `.env`. Next.js loads it automatically; the `reports:*` s
 | `INDEXNOW_KEY` | empty | Fallback IndexNow key for single-site deployments (per-site keys are generated through the API) |
 | `INDEXNOW_ENDPOINT` | `https://api.indexnow.org/indexnow` | IndexNow endpoint |
 | `GOOGLE_SERVICE_ACCOUNT_JSON`, `GOOGLE_SERVICE_ACCOUNT_FILE` | empty | Google Search Console / Indexing API service account (JSON content or key file path), used when a site has no `googleServiceAccount` integration |
-| `ALLOW_PRIVATE_NETWORK_TARGETS` | `false` | Lets syndication / "Apply to CMS" webhooks, IndexNow key checks and `/simulation/bots` reach localhost and private networks. Development only. Scheduled-report webhooks always require public addresses |
+| `ALLOW_PRIVATE_NETWORK_TARGETS` | `false` | Disables the SSRF guard: lets site URLs, the crawler / simulators, webhooks and IndexNow checks reach localhost and private networks. Development only. Scheduled-report webhooks always require public addresses |
+| `SESSION_SECRET` | empty | Optional extra secret for signing dashboard session cookies. Generate with `openssl rand -hex 32` |
 | `GEO_AUDIT_BIN` | empty | Path to the `geo-audit` executable. Empty: audits stay `queued` for an external worker |
 | `GEO_AUDIT_ARGS` | empty | Extra flags for `geo-audit`, split on whitespace (for example `--rps 2 --no-ua-probe`) |
 | `CRAWLER_MAX_PAGES` | `500` | Default page cap for audits whose site settings do not set `maxPages` |
@@ -204,8 +205,9 @@ When `API_TOKEN` is set:
 
 - `/api/*` accepts `Authorization: Bearer <API_TOKEN>` (machine clients) or the dashboard session cookie. `/api/health` and
   `/api/auth` are public. Dashboard pages redirect to `/login`.
-- `POST /api/auth {"token": "..."}` exchanges the token for an `HttpOnly; SameSite=Strict` cookie (`aiv_session`, 30 days)
-  that holds a SHA-256 digest of the token, never the token itself. `DELETE /api/auth` logs out and
+- `POST /api/auth {"token": "..."}` exchanges the token for an `HttpOnly; SameSite=Strict` cookie (`aiv_session`, 7 days)
+  that carries an expiry and an HMAC signature, never the token itself (optionally keyed with `SESSION_SECRET`; repeated wrong tokens
+  are rate-limited). `DELETE /api/auth` logs out and
   `GET /api/auth` reports `{ required, authenticated }`.
 - Cookie-authenticated unsafe requests must be same-origin (CSRF guard). The scheduled-report endpoints require the bearer
   header and ignore the cookie.

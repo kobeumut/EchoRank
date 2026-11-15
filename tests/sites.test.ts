@@ -37,7 +37,7 @@ describe("/api/sites CRUD", () => {
     const created = await createRes.json();
     expect(created.url).toBe("https://shop.example.com");
     expect(created.title).toBe("shop.example.com");
-    expect(created.integrations.indexnow).toBe("abcd…7890"); // masked
+    expect(created.integrations.indexnow).toBe("…7890"); // masked: only the tail is revealed
 
     const list = await (await sites.GET(req("/api/sites"), undefined as never)).json();
     expect(list.total).toBe(1);
@@ -56,7 +56,7 @@ describe("/api/sites CRUD", () => {
       )
     ).json();
     expect(patched.title).toBe("Shop");
-    expect(patched.integrations).toEqual({ gsc: "toke…3456" });
+    expect(patched.integrations).toEqual({ gsc: "…3456" });
     // Raw secret stays intact in the DB.
     const raw = await prisma.site.findUniqueOrThrow({ where: { id: created.id } });
     expect(raw.integrations).toEqual({ gsc: "token-xyz-123456" });

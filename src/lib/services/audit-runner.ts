@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { prisma } from "../db";
+import { assertPublicHttpUrl } from "../distribution/net";
 import { DEFAULT_LOCALE } from "../i18n/config";
 import type { AuditJob, AuditRunner } from "./audit";
 import { applyAuditResult, auditResultSchema } from "./audit-results";
@@ -40,6 +41,9 @@ export function createCliAuditRunner(bin: string, opts: CliRunnerOptions = {}): 
       prisma.crawlSession.update({ where: { id: job.crawlSession.id }, data: { status: "running", startedAt: now } }),
       prisma.geoAudit.update({ where: { id: job.audit.id }, data: { status: "running" } }),
     ]);
+    // The crawler fetches whatever the stored URL resolves to today: refuse internal addresses (SSRF).
+    // A failure here propagates like any runner error, so the audit is marked failed without starting the CLI.
+    await assertPublicHttpUrl(job.site.url);
     const dir = await mkdtemp(path.join(tmpdir(), "geo-audit-"));
     const files = { audit: path.join(dir, "audit.json"), rows: path.join(dir, "rows.json"), crawl: path.join(dir, "crawl.json") };
     try {
