@@ -38,7 +38,7 @@ WIKIDATA_SPARQL = "https://query.wikidata.org/sparql"
 WIKIDATA_ENTITY_URL = "https://www.wikidata.org/wiki/{}"
 CRUNCHBASE_API = "https://api.crunchbase.com/api/v4/autocompletes"
 # Wikimedia's User-Agent policy requires a descriptive agent with a contact URL.
-USER_AGENT = "geo-crawler/0.1 (+https://github.com/kobeumut/ai-visibility) httpx"
+USER_AGENT = "geo-crawler/0.1 (+https://github.com/kobeumut/EchoRank) httpx"
 
 AUTO_ACCEPT = 0.8
 REVIEW = 0.55

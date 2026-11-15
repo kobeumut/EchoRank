@@ -20,8 +20,8 @@ public issues or pull requests.
 Prerequisites: Node.js 22 or newer with npm, and Python 3.10 or newer for the crawler / scoring engine.
 
 ```bash
-git clone https://github.com/kobeumut/ai-visibility.git echorank
-cd echorank
+git clone https://github.com/kobeumut/EchoRank.git
+cd EchoRank
 
 # Web app and API
 npm ci                      # also runs `prisma generate`
@@ -146,4 +146,4 @@ docs shows the English default; mention `?lang=tr` or `--lang tr` where the lang
 
 ## Questions
 
-Open a GitHub issue on https://github.com/kobeumut/ai-visibility. Thank you for contributing!
+Open a GitHub issue on https://github.com/kobeumut/EchoRank. Thank you for contributing!

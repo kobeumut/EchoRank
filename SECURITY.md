@@ -6,7 +6,7 @@
 
 Use GitHub's private vulnerability reporting instead:
 
-1. Open the repository at https://github.com/kobeumut/ai-visibility.
+1. Open the repository at https://github.com/kobeumut/EchoRank.
 2. Go to the **Security** tab and choose **Report a vulnerability**.
 3. Describe the issue, the affected version or commit, the impact, and steps to reproduce (a minimal proof of concept
    helps). Do not include real credentials, tokens or other people's data.

@@ -9,9 +9,10 @@ updates reach AI crawlers quickly.
 The project is a monorepo: a Next.js 16 application (dashboard + REST API + database) and a Python crawler / scoring
 engine (`services/crawler`) that the web app can run for every audit.
 
-> **Formerly "AI Visibility".** The project was renamed to EchoRank. Existing installations keep working: the HTTP
-> contracts that integrations depend on (the `x-aiv-*` webhook headers and the `aiv_session` cookie) and the Python
-> package / CLI names (`geo-crawler`, `geo-audit`, ...) are unchanged.
+> **Formerly "AI Visibility".** The project and its repository (previously `kobeumut/ai-visibility`) were renamed to
+> EchoRank; GitHub redirects the old URL. Existing installations keep working: the HTTP contracts that integrations
+> depend on (the `x-aiv-*` webhook headers and the `aiv_session` cookie) and the Python package / CLI names
+> (`geo-crawler`, `geo-audit`, ...) are unchanged.
 
 - [Features](#features)
 - [Architecture](#architecture)
@@ -76,7 +77,7 @@ to `/api/sites/:id/audit/:auditId/result` (see [`docs/geo-scoring.md`](docs/geo-
 ### Project layout
 
 ```
-echorank/
+EchoRank/
 ├── src/
 │   ├── app/                   # App Router pages and REST API route handlers (src/app/api)
 │   ├── components/dashboard/  # Client UI: site shell, overview, actions, studio, graph, bots, visibility, distribution
@@ -119,7 +120,7 @@ echorank/
 ### 1. Web application and API
 
 ```bash
-git clone https://github.com/kobeumut/ai-visibility.git echorank && cd echorank
+git clone https://github.com/kobeumut/EchoRank.git && cd EchoRank
 npm ci                       # installs dependencies and runs `prisma generate`
 cp .env.example .env         # review the values, see "Configuration"
 npm run db:migrate           # creates prisma/dev.db (SQLite), applies migrations and, on a fresh database, loads the demo data
@@ -484,7 +485,7 @@ material for commercial purposes, so check that your use case is permitted befor
 
 - **Attribution (BY):** give appropriate credit to the original author, **Umut ADALI**
   ([@kobeumut](https://github.com/kobeumut)), link to the license and to the original repository
-  (https://github.com/kobeumut/ai-visibility), and indicate if changes were made.
+  (https://github.com/kobeumut/EchoRank), and indicate if changes were made.
 - **Non-commercial (NC):** you may not sell, rent, lease, license or sublicense the software or derivative works for
   monetary compensation or direct commercial advantage.
 - **Share-alike (SA):** if you remix, transform or build upon the material, you must distribute your contributions under the same license.
