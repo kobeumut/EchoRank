@@ -16,8 +16,9 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
-  // Preserve native __dirname resolution for pdfmake’s bundled Unicode fonts.
-  serverExternalPackages: ["pdfmake"],
+  // Preserve native __dirname resolution for pdfmake’s bundled Unicode fonts; load undici (the DNS-pinned
+  // outbound dispatcher in src/lib/distribution/net.ts) from node_modules instead of bundling it.
+  serverExternalPackages: ["pdfmake", "undici"],
   outputFileTracingIncludes: {
     "/api/sites/*/reports/runs/*": ["./node_modules/pdfmake/fonts/Roboto/*.ttf"],
   },

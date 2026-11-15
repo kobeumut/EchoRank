@@ -174,9 +174,12 @@ as English ones (page classification, keywords and AutoGEO detect the page langu
 
 ## Security
 
-- **SSRF guard.** The crawler, `geo-botsim` and the URL fetch of `geo-autogeo` refuse to connect to loopback, private,
-  link-local, CGNAT, reserved or multicast addresses and to internal-looking names (`localhost`, `*.local`, `*.internal`).
-  The check runs on the first request and on every redirect hop (`geo_crawler/netguard.py`). Set
-  `ALLOW_PRIVATE_NETWORK_TARGETS=true` to crawl local or private hosts during development. Name resolution happens twice
-  (check, then connect), so also use network-level egress filtering for fully untrusted targets.
+- **SSRF guard.** The crawler, the site-signal probes, `geo-botsim` and the URL fetch of `geo-autogeo` refuse to connect to
+  loopback, private, link-local, CGNAT, reserved or multicast addresses and to internal-looking names (`localhost`, `*.local`,
+  `*.internal`). The check runs on the first request and on every redirect hop, inside an httpx transport
+  (`PinnedAsyncTransport` / `PinnedTransport`, built by `guarded_async_client()` / `guarded_client()` in `geo_crawler/netguard.py`):
+  the name is resolved once, every address must be public, and the connection goes to exactly the checked IP while the `Host`
+  header and TLS server name stay the original host, so DNS rebinding cannot switch it to an internal address. Set
+  `ALLOW_PRIVATE_NETWORK_TARGETS=true` to crawl local or private hosts during development. Network-level egress filtering is
+  still recommended for fully untrusted targets.
 - Snippets in generated reports embed crawled page text (titles, headings): escape it if you render the output as HTML.

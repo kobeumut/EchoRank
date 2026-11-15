@@ -45,7 +45,7 @@ from urllib.parse import urlsplit
 from ..blocks import ContentBlock, blocks_from_html, blocks_from_markdown
 from ..i18n import DEFAULT_LANG, Translator, get_translator, normalize_lang
 from ..keywords import STOPWORDS
-from ..netguard import SYNC_GUARD_HOOKS
+from ..netguard import guarded_client
 from ..models import PageData, PageType
 from . import text as tx
 from .base import clamp
@@ -1077,10 +1077,9 @@ def main(argv: list[str] | None = None) -> int:
 
     src, url = args.source, args.url
     if src.startswith(("http://", "https://")):
-        import httpx
-        # SSRF guard: refuses private/internal addresses on the first request and on every redirect hop
-        with httpx.Client(follow_redirects=True, timeout=20, headers={"User-Agent": "geo-autogeo/1.0"},
-                          event_hooks=SYNC_GUARD_HOOKS) as http:
+        # SSRF guard: refuses private/internal addresses on the first request and on every redirect hop, and
+        # connects to the validated IP (DNS-pinned)
+        with guarded_client(follow_redirects=True, timeout=20, headers={"User-Agent": "geo-autogeo/1.0"}) as http:
             resp = http.get(src)
         content, url = resp.text, url or str(resp.url)
     elif src == "-":

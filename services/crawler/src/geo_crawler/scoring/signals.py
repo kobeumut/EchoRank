@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 
 from ..i18n import DEFAULT_LANG, get_translator
+from ..netguard import guarded_async_client
 from ..urls import normalize_url
 from .robots import PROBE_USER_AGENTS
 
@@ -125,7 +126,8 @@ async def collect_site_signals(
     parts = httpx.URL(root)
     sig = SiteSignals(origin=root, https=parts.scheme == "https")
     own = client is None
-    client = client or httpx.AsyncClient(follow_redirects=True, timeout=timeout, headers={"User-Agent": BROWSER_UA})
+    # SSRF guard: the site's llms.txt / robots / UA probes may redirect anywhere; check and pin every hop
+    client = client or guarded_async_client(follow_redirects=True, timeout=timeout, headers={"User-Agent": BROWSER_UA})
     try:
         try:
             home = await client.get(root)

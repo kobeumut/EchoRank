@@ -437,3 +437,14 @@ model SyntheticQuery {
   @@unique([siteId, fingerprint])
   @@index([siteId, intent, status])
 }
+
+/// Failed dashboard logins per client (and one global bucket), shared by every app instance (POST /api/auth).
+/// `key` is a SHA-256 hash of the limiter scope and client key, so client IPs are not stored in clear text.
+model LoginThrottle {
+  key         String   @id
+  failures    Int      @default(0)
+  windowStart DateTime
+  updatedAt   DateTime @updatedAt
+
+  @@index([windowStart])
+}

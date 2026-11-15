@@ -1,6 +1,7 @@
 import type { Prisma, Site } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../db";
+import { asIntegrationRecord, readIntegrationSecret, sealIntegrations } from "../secrets";
 import { SYNDICATION_FREQUENCIES } from "../constants";
 
 // Distribution settings live under `Site.settings.distribution`. Secrets (IndexNow key, Google
@@ -116,13 +117,14 @@ export async function updateDistributionSettings(site: Site, patch: z.infer<type
   return next;
 }
 
+/** Decrypted integration secret (see lib/secrets.ts); undefined when unset. */
 export function getIntegration(site: Pick<Site, "integrations">, key: string): string | undefined {
-  const value = ((site.integrations ?? {}) as Record<string, string>)[key];
-  return value ? String(value) : undefined;
+  return readIntegrationSecret(site.integrations, key);
 }
 
+/** Stores one integration secret; the whole record is re-sealed, so legacy plaintext values get encrypted too. */
 export async function setIntegration(site: Site, key: string, value: string) {
-  const integrations = { ...((site.integrations ?? {}) as Record<string, string>), [key]: value };
+  const integrations = sealIntegrations({ ...asIntegrationRecord(site.integrations), [key]: value });
   await prisma.site.update({ where: { id: site.id }, data: { integrations } });
 }
 

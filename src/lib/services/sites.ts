@@ -2,6 +2,7 @@ import type { Prisma, Site } from "@prisma/client";
 import { prisma } from "../db";
 import { HttpError, notFound } from "../http";
 import { DEFAULT_LOCALE, toLocale, type Locale } from "../i18n/config";
+import { asIntegrationRecord, openIntegrations, sealIntegrations } from "../secrets";
 import type { CreateSiteInput, UpdateSiteInput } from "../validation";
 
 type Integrations = Record<string, string>;
@@ -16,11 +17,11 @@ export function maskSecret(value: string): string {
   return `…${value.slice(-4)}`;
 }
 
+/** API shape of a site: integration secrets are decrypted only to mask them (undecryptable ones are fully masked). */
 export function serializeSite(site: Site) {
-  const integrations = (site.integrations ?? {}) as Integrations;
   return {
     ...site,
-    integrations: Object.fromEntries(Object.entries(integrations).map(([k, v]) => [k, maskSecret(String(v))])),
+    integrations: Object.fromEntries(Object.entries(openIntegrations(site.integrations)).map(([k, v]) => [k, v === null ? "••••" : maskSecret(v)])),
   };
 }
 
@@ -85,7 +86,7 @@ export async function createSite(input: CreateSiteInput) {
       description: input.description,
       settings: (input.settings ?? {}) as Prisma.InputJsonValue,
       targetKeywords: input.targetKeywords ?? [],
-      integrations: input.integrations ?? {},
+      integrations: sealIntegrations(input.integrations ?? {}),
     },
   });
   return serializeSite(site);
@@ -95,11 +96,12 @@ export async function updateSite(id: string, input: UpdateSiteInput) {
   const site = await getSiteOrThrow(id);
   let integrations: Integrations | undefined;
   if (input.integrations) {
-    integrations = { ...((site.integrations ?? {}) as Integrations) };
+    integrations = asIntegrationRecord(site.integrations);
     for (const [k, v] of Object.entries(input.integrations)) {
       if (v === null) delete integrations[k];
       else integrations[k] = v;
     }
+    integrations = sealIntegrations(integrations); // encrypted at rest (legacy plaintext values are upgraded too)
   }
   const updated = await prisma.site.update({
     where: { id },
