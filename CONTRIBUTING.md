@@ -1,6 +1,6 @@
-# Contributing to AI Visibility
+# Contributing to EchoRank
 
-Thank you for your interest in improving AI Visibility. This guide explains how to set up the project, how changes
+Thank you for your interest in improving EchoRank. This guide explains how to set up the project, how changes
 are reviewed, and the conventions we follow, in particular for internationalization.
 
 By contributing you agree that your contribution is licensed under the project license, **CC BY-NC-SA 4.0** (see
@@ -20,8 +20,8 @@ public issues or pull requests.
 Prerequisites: Node.js 22 or newer with npm, and Python 3.10 or newer for the crawler / scoring engine.
 
 ```bash
-git clone https://github.com/kobeumut/ai-visibility.git
-cd ai-visibility
+git clone https://github.com/kobeumut/ai-visibility.git echorank
+cd echorank
 
 # Web app and API
 npm ci                      # also runs `prisma generate`

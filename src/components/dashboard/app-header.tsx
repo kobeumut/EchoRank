@@ -40,9 +40,9 @@ export function AppHeaderFallback() {
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-4 px-4 sm:px-6">
         <span className="flex items-center gap-2 font-semibold text-zinc-900 dark:text-zinc-100">
           <span aria-hidden className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-xs font-bold text-white">
-            AI
+            ER
           </span>
-          <span className="hidden sm:inline">AI Visibility</span>
+          <span className="hidden sm:inline">EchoRank</span>
         </span>
       </div>
     </header>
@@ -63,9 +63,9 @@ export function AppHeader() {
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-4 px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-2 font-semibold text-zinc-900 dark:text-zinc-100">
           <span aria-hidden className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-xs font-bold text-white">
-            AI
+            ER
           </span>
-          <span className="hidden sm:inline">AI Visibility</span>
+          <span className="hidden sm:inline">EchoRank</span>
         </Link>
         <nav className="flex items-center gap-1 text-sm">
           <Link

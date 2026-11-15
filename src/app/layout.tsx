@@ -22,7 +22,7 @@ const geistMono = Geist_Mono({
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
   return {
-    title: { default: "AI Visibility — GEO & SEO", template: "%s · AI Visibility" },
+    title: { default: "EchoRank — GEO & SEO", template: "%s · EchoRank" },
     description: t("common.meta.description"),
   };
 }

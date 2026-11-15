@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "geo-crawler"
 version = "0.1.0"
-description = "Async web crawler, entity extraction, knowledge-graph (graphify) and GEO / SEO / E-E-A-T scoring engine for the AI Visibility platform"
+description = "Async web crawler, entity extraction, knowledge-graph (graphify) and GEO / SEO / E-E-A-T scoring engine for the EchoRank platform"
 readme = "README.md"
 authors = [{ name = "Umut ADALI", email = "kobeumut@gmail.com" }]
 license = { text = "CC-BY-NC-SA-4.0" }
-keywords = ["geo", "generative-engine-optimization", "seo", "crawler", "knowledge-graph", "llms-txt", "ai-visibility"]
+keywords = ["geo", "generative-engine-optimization", "seo", "crawler", "knowledge-graph", "llms-txt", "echorank"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",

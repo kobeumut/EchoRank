@@ -45,7 +45,7 @@ that you do not operate and have not been authorized to test.
 
 ## Deployment hardening
 
-AI Visibility is a single-tenant tool for operators. Its defaults are meant for local development, so review the
+EchoRank is a single-tenant tool for operators. Its defaults are meant for local development, so review the
 following before exposing an instance to a network.
 
 ### Authentication

@@ -43,7 +43,7 @@ function mockWikidata() {
   vi.stubGlobal("fetch", vi.fn(async (input: URL | string, init?: RequestInit) => {
     const url = new URL(String(input));
     const q = Object.fromEntries(url.searchParams);
-    expect((init?.headers as Record<string, string>)["user-agent"]).toMatch(/ai-visibility/);
+    expect((init?.headers as Record<string, string>)["user-agent"]).toMatch(/echorank/);
     if (url.hostname === "query.wikidata.org") {
       calls.push("sparql");
       if (sparqlDown) return new Response("busy", { status: 503 });

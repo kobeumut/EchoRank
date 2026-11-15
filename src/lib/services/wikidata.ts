@@ -26,7 +26,7 @@ export const REVIEW = 0.55;
 export const PERSON_UNCORROBORATED_CAP = 0.7;
 const WIKIDATA_API = "https://www.wikidata.org/w/api.php";
 const WIKIDATA_SPARQL = "https://query.wikidata.org/sparql";
-const USER_AGENT = "ai-visibility/0.1 (+https://github.com/kobeumut/ai-visibility)";
+const USER_AGENT = "echorank/0.1 (+https://github.com/kobeumut/ai-visibility)";
 const MANUAL = new Set(["verified", "rejected"]);
 /** Properties owned by reconciliation (carried over from a manual decision on re-crawl). */
 const RECONCILIATION_KEYS = [

@@ -156,7 +156,7 @@ describe("durable scheduler", () => {
       expect.objectContaining({ name: "indexnow", status: "skipped", detail: "Geçerli bir IndexNow anahtarı yapılandırılmamış" }),
     ]));
     const email = JSON.parse(fetchMock.mock.calls[0][1].body);
-    expect(email.subject).toMatch(/^Yapay zeka görünürlüğü: /);
+    expect(email.subject).toMatch(/^EchoRank: /);
     expect(email.html).toContain("Yönetici özeti");
     // Operator-facing delivery diagnostics stay English.
     expect(run?.deliveries).toEqual([{ channel: "email", status: "sent", detail: "Resend HTTP 200" }]);
@@ -166,7 +166,7 @@ describe("durable scheduler", () => {
     await prisma.site.update({ where: { id: s.siteId }, data: { settings: { locale: "de" } } });
     const run = await runSchedule(s.id);
     expect(run?.snapshot).toMatchObject({ locale: "en" });
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body).subject).toMatch(/^AI visibility: /);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).subject).toMatch(/^EchoRank: /);
   });
   it("flushes only enabled IndexNow queues and marks deferred submissions partial", async () => {
     vi.stubEnv("ALLOW_PRIVATE_NETWORK_TARGETS", "true");

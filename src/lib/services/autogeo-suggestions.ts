@@ -312,7 +312,7 @@ export async function applySuggestionToCms(siteId: string, suggestionId: string,
         redirect: "manual",
         headers: {
           "content-type": "application/json",
-          "user-agent": "AIVisibility-AutoGEO/1.0",
+          "user-agent": "EchoRank-AutoGEO/1.0",
           "x-aiv-event": CMS_APPLY_EVENT,
           "x-aiv-timestamp": timestamp,
           ...(secret && { "x-aiv-signature": signWebhook(secret, timestamp, body) }),

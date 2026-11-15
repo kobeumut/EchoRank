@@ -1,5 +1,5 @@
 {
-  "name": "ai-visibility",
+  "name": "echorank",
   "version": "0.1.0",
   "private": true,
   "description": "Self-hosted GEO & SEO platform: track how AI answer engines cite your site, score AI-crawler readiness and E-E-A-T, build an entity knowledge graph and distribute updates to search indexes.",
@@ -7,7 +7,7 @@
     "geo",
     "generative-engine-optimization",
     "seo",
-    "ai-visibility",
+    "echorank",
     "llm",
     "knowledge-graph",
     "llms-txt",

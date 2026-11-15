@@ -1,6 +1,6 @@
-# AI Visibility — GEO & SEO Platform
+# EchoRank — GEO & SEO Platform
 
-AI Visibility is a self-hosted platform for **Generative Engine Optimization (GEO)** and SEO. It measures how a website
+EchoRank is a self-hosted platform for **Generative Engine Optimization (GEO)** and SEO. It measures how a website
 appears in AI answer engines (ChatGPT, Google Gemini, Anthropic Claude, Perplexity), scores how well the site can be
 crawled, understood and trusted by those engines, builds an entity knowledge graph from the crawl, and tells you
 exactly what to fix. It also notifies search indexes (IndexNow, Google) and publishes `llms.txt` and feeds so that
@@ -8,6 +8,10 @@ updates reach AI crawlers quickly.
 
 The project is a monorepo: a Next.js 16 application (dashboard + REST API + database) and a Python crawler / scoring
 engine (`services/crawler`) that the web app can run for every audit.
+
+> **Formerly "AI Visibility".** The project was renamed to EchoRank. Existing installations keep working: the HTTP
+> contracts that integrations depend on (the `x-aiv-*` webhook headers and the `aiv_session` cookie) and the Python
+> package / CLI names (`geo-crawler`, `geo-audit`, ...) are unchanged.
 
 - [Features](#features)
 - [Architecture](#architecture)
@@ -72,7 +76,7 @@ to `/api/sites/:id/audit/:auditId/result` (see [`docs/geo-scoring.md`](docs/geo-
 ### Project layout
 
 ```
-ai-visibility/
+echorank/
 ├── src/
 │   ├── app/                   # App Router pages and REST API route handlers (src/app/api)
 │   ├── components/dashboard/  # Client UI: site shell, overview, actions, studio, graph, bots, visibility, distribution
@@ -115,6 +119,7 @@ ai-visibility/
 ### 1. Web application and API
 
 ```bash
+git clone https://github.com/kobeumut/ai-visibility.git echorank && cd echorank
 npm ci                       # installs dependencies and runs `prisma generate`
 cp .env.example .env         # review the values, see "Configuration"
 npm run db:migrate           # creates prisma/dev.db (SQLite), applies migrations and, on a fresh database, loads the demo data
@@ -122,7 +127,7 @@ npm run dev                  # http://localhost:3000
 ```
 
 Useful scripts: `npm run db:seed` (re-create the demo site: graph, audits, visibility checks and actions),
-`npm run db:studio` (browse the database), `npm run build && npm start` (production build),
+`npm run db:deploy` (apply committed migrations without prompting, for CI / production), `npm run db:studio` (browse the database), `npm run build && npm start` (production build),
 `npm test` (Vitest), `npm run lint`, `npm run typecheck`.
 
 ### 2. Crawler and scoring engine (optional but recommended)
@@ -330,7 +335,7 @@ own crawler plus Bing), so the engine makes sure those indexes learn about chang
 - **`llms.txt` and feeds.** Generates `llms.txt`, `llms-full.txt`, `sitemap-ai.xml` and rotating RSS / Atom / JSON feeds
   that you serve from your own site (the endpoints above return the content).
 - **Webhook syndication.** Pushes each period's rotation, and applied AutoGEO suggestions, to signed webhooks
-  (`x-aiv-signature` HMAC-SHA256).
+  (`x-aiv-signature` HMAC-SHA256; the `aiv` prefix is kept from the project's former name so existing receivers keep working).
 
 Call `POST /api/distribution/run` from cron to flush queues and publish due periods.
 
