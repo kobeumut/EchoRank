@@ -1,4 +1,6 @@
-// Presentation helpers shared by dashboard components (pure, no React).
+// Presentation helpers shared by dashboard components (pure, no React). Labels come from the i18n catalogs.
+
+import type { Translator } from "@/lib/i18n/translate";
 
 export type Tone = "good" | "warning" | "serious" | "critical" | "neutral";
 
@@ -11,98 +13,62 @@ export function scoreTone(score: number | null | undefined): Tone {
   return "critical";
 }
 
-export function scoreLabel(score: number | null | undefined): string {
-  return { good: "İyi", warning: "Orta", serious: "Zayıf", critical: "Kritik", neutral: "Veri yok" }[scoreTone(score)];
+export function scoreLabel(score: number | null | undefined, t: Translator): string {
+  return t(`labels.score.${scoreTone(score)}`);
 }
 
-export const MODEL_LABELS: Record<string, string> = {
-  chatgpt: "ChatGPT",
-  gemini: "Gemini",
-  claude: "Claude",
-  perplexity: "Perplexity",
-  copilot: "Copilot",
-  other: "Diğer",
-};
+/** Display order of the AI models in the visibility checks (labels: `labels.model.*`). */
 export const VISIBILITY_MODEL_ORDER = ["chatgpt", "gemini", "claude", "perplexity"] as const;
 
-export const CITATION_LABELS: Record<string, string> = { cited: "Atıf (kaynak)", mentioned: "Bahsedildi", none: "Yer almadı" };
-
-/** "Ne Yapılmalı?" tiers mapped from ActionItem.impact. */
-export const TIERS = [
-  { impact: "high", label: "Kritik", tone: "critical" as Tone },
-  { impact: "medium", label: "Önemli", tone: "serious" as Tone },
-  { impact: "low", label: "İyileştirme", tone: "good" as Tone },
-] as const;
-export function tierFor(impact: string) {
-  return TIERS.find((t) => t.impact === impact) ?? TIERS[2];
+/**
+ * Localised label for a stored enum value, from the `labels.<group>.<value>` catalog entries.
+ * Unknown values are shown as-is rather than as a missing-key placeholder.
+ */
+export type LabelGroup = "model" | "citation" | "category" | "effort" | "actionStatus" | "entity" | "platform";
+export function labelFor(t: Translator, group: LabelGroup, value: string): string {
+  const key = `labels.${group}.${value}`;
+  const label = t(key);
+  return label === key ? value : label;
 }
 
-export const CATEGORY_LABELS: Record<string, string> = {
-  crawler: "AI Bot Erişimi",
-  schema: "Yapısal Veri",
-  content: "İçerik",
-  authority: "Otorite / E-E-A-T",
-  technical: "Teknik",
-};
-export const EFFORT_LABELS: Record<string, string> = { high: "Yüksek efor", medium: "Orta efor", low: "Düşük efor" };
-export const ACTION_STATUS_LABELS: Record<string, string> = {
-  open: "Açık",
-  in_progress: "Üzerinde çalışılıyor",
-  resolved: "Çözüldü",
-  dismissed: "Yok sayıldı",
-};
+/** "What should be done?" tiers mapped from ActionItem.impact. */
+export const TIERS = [
+  { impact: "high", tone: "critical" as Tone },
+  { impact: "medium", tone: "serious" as Tone },
+  { impact: "low", tone: "good" as Tone },
+] as const;
+export function tierFor(impact: string, t: Translator) {
+  const tier = TIERS.find((x) => x.impact === impact) ?? TIERS[2];
+  return { ...tier, label: t(`labels.tier.${tier.impact}`) };
+}
 
-export const ENTITY_LABELS: Record<string, string> = {
-  Page: "Sayfa",
-  Product: "Ürün",
-  Category: "Kategori",
-  FAQ: "SSS",
-  Question: "SSS",
-  Organization: "Kurum",
-  Author: "Yazar",
-  Person: "Yazar",
-  Brand: "Marka",
-  Article: "Makale",
-  Concept: "Kavram",
-  Offer: "Teklif",
-  WebSite: "Web sitesi",
-};
+export const DEFAULT_INTL_LOCALE = "en-US";
 
-export const PLATFORM_LABELS: Record<string, string> = {
-  indexnow: "IndexNow",
-  google_indexing: "Google Indexing API",
-  google_search_console: "Search Console",
-  webhook: "Webhook",
-};
-
-const dateFmt = new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium", timeStyle: "short" });
-const dayFmt = new Intl.DateTimeFormat("tr-TR", { day: "2-digit", month: "short" });
-
-export function formatDate(value: string | Date | null | undefined): string {
+export function formatDate(value: string | Date | null | undefined, intlLocale: string = DEFAULT_INTL_LOCALE): string {
   if (!value) return "—";
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "—" : dateFmt.format(d);
+  return Number.isNaN(d.getTime()) ? "—" : new Intl.DateTimeFormat(intlLocale, { dateStyle: "medium", timeStyle: "short" }).format(d);
 }
 
-export function formatDay(value: string | Date): string {
-  return dayFmt.format(new Date(value));
+export function formatDay(value: string | Date, intlLocale: string = DEFAULT_INTL_LOCALE): string {
+  return new Intl.DateTimeFormat(intlLocale, { day: "2-digit", month: "short" }).format(new Date(value));
 }
 
-/** "3 dk önce", "2 gün önce" … */
-export function timeAgo(value: string | Date | null | undefined, now = Date.now()): string {
+/** "3 min ago", "2 days ago" … (catalog keys `labels.time.*`) */
+export function timeAgo(value: string | Date | null | undefined, t: Translator, now = Date.now()): string {
   if (!value) return "—";
   const sec = Math.round((now - new Date(value).getTime()) / 1000);
   if (Number.isNaN(sec)) return "—";
-  if (sec < 45) return "az önce";
+  if (sec < 45) return t("labels.time.justNow");
   const min = Math.round(sec / 60);
-  if (min < 60) return `${min} dk önce`;
+  if (min < 60) return t("labels.time.minutesAgo", { count: min });
   const hour = Math.round(min / 60);
-  if (hour < 24) return `${hour} saat önce`;
+  if (hour < 24) return t("labels.time.hoursAgo", { count: hour });
   const day = Math.round(hour / 24);
-  if (day < 30) return `${day} gün önce`;
+  if (day < 30) return t("labels.time.daysAgo", { count: day });
   const month = Math.round(day / 30);
-  if (month < 12) return `${month} ay önce`;
-  return `${Math.round(month / 12)} yıl önce`;
+  if (month < 12) return t("labels.time.monthsAgo", { count: month });
+  return t("labels.time.yearsAgo", { count: Math.round(month / 12) });
 }
 
 export function hostOf(url: string): string {

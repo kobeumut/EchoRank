@@ -3,10 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useT } from "@/lib/i18n/provider";
 import { apiFetch } from "./api";
+import { LanguageSwitcher } from "./language-switcher";
 import { Button } from "./ui";
 
 function ThemeToggle() {
+  const t = useT();
   const [dark, setDark] = useState<boolean | null>(null);
   useEffect(() => {
     // Read the class applied by the inline theme script (external DOM state).
@@ -17,7 +20,7 @@ function ThemeToggle() {
     <Button
       variant="ghost"
       size="sm"
-      aria-label={dark ? "Açık temaya geç" : "Koyu temaya geç"}
+      aria-label={dark ? t("common.theme.switchToLight") : t("common.theme.switchToDark")}
       onClick={() => {
         const next = !document.documentElement.classList.contains("dark");
         document.documentElement.classList.toggle("dark", next);
@@ -47,6 +50,7 @@ export function AppHeaderFallback() {
 }
 
 export function AppHeader() {
+  const t = useT();
   const pathname = usePathname();
   const [auth, setAuth] = useState<{ required: boolean; authenticated: boolean } | null>(null);
   useEffect(() => {
@@ -68,10 +72,11 @@ export function AppHeader() {
             href="/"
             className={`rounded-md px-2.5 py-1.5 ${pathname === "/" ? "bg-zinc-100 font-medium text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100" : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"}`}
           >
-            Siteler
+            {t("common.nav.sites")}
           </Link>
         </nav>
         <div className="ml-auto flex items-center gap-1">
+          <LanguageSwitcher />
           <ThemeToggle />
           {auth?.required && auth.authenticated && (
             <Button
@@ -82,7 +87,7 @@ export function AppHeader() {
                 window.location.assign("/login");
               }}
             >
-              Çıkış
+              {t("auth.logout")}
             </Button>
           )}
         </div>

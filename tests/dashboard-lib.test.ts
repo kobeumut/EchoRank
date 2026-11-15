@@ -1,25 +1,44 @@
 import { describe, expect, it } from "vitest";
 import fixture from "./fixtures/geo-audit-result.json";
 import { aggregateCompetitors } from "@/lib/dashboard/competitors";
-import { scoreTone, tierFor, timeAgo } from "@/lib/dashboard/format";
+import { labelFor, scoreLabel, scoreTone, tierFor, timeAgo } from "@/lib/dashboard/format";
 import { graphIssues, issueCounts } from "@/lib/dashboard/graph-insights";
 import { highlightSegments, siteTerms } from "@/lib/dashboard/highlight";
 import { aiAccessScore, readPillars } from "@/lib/dashboard/pillars";
+import { getMessages } from "@/lib/i18n/messages";
+import { createTranslator } from "@/lib/i18n/translate";
+
+const tEn = createTranslator(getMessages("en"), "en");
+const tTr = createTranslator(getMessages("tr"), "tr", getMessages("en"));
 
 describe("format", () => {
   it("bands scores and maps impact to tiers", () => {
     expect([scoreTone(85), scoreTone(60), scoreTone(45), scoreTone(10), scoreTone(null)]).toEqual(["good", "warning", "serious", "critical", "neutral"]);
-    expect(tierFor("high").label).toBe("Kritik");
-    expect(tierFor("medium").label).toBe("Önemli");
-    expect(tierFor("low").label).toBe("İyileştirme");
+    expect(tierFor("high", tEn).label).toBe("Critical");
+    expect(tierFor("medium", tEn).label).toBe("Important");
+    expect(tierFor("low", tEn).label).toBe("Improvement");
+    expect(tierFor("high", tTr).label).toBe("Kritik");
+    expect(scoreLabel(85, tEn)).toBe("Good");
+    expect(scoreLabel(null, tTr)).toBe("Veri yok");
   });
-  it("formats relative time in Turkish", () => {
+  it("localises enum labels and falls back to the raw value", () => {
+    expect(labelFor(tEn, "model", "chatgpt")).toBe("ChatGPT");
+    expect(labelFor(tEn, "category", "schema")).toBe("Structured Data");
+    expect(labelFor(tTr, "category", "schema")).toBe("Yapısal Veri");
+    expect(labelFor(tEn, "category", "something-new")).toBe("something-new");
+  });
+  it("formats relative time in English and Turkish", () => {
     const now = Date.parse("2026-11-08T12:00:00Z");
-    expect(timeAgo("2026-11-08T11:59:50Z", now)).toBe("az önce");
-    expect(timeAgo("2026-11-08T11:30:00Z", now)).toBe("30 dk önce");
-    expect(timeAgo("2026-11-08T09:00:00Z", now)).toBe("3 saat önce");
-    expect(timeAgo("2026-11-01T12:00:00Z", now)).toBe("7 gün önce");
-    expect(timeAgo(null, now)).toBe("—");
+    expect(timeAgo("2026-11-08T11:59:50Z", tEn, now)).toBe("just now");
+    expect(timeAgo("2026-11-08T11:30:00Z", tEn, now)).toBe("30 min ago");
+    expect(timeAgo("2026-11-08T11:00:00Z", tEn, now)).toBe("1 hour ago");
+    expect(timeAgo("2026-11-08T09:00:00Z", tEn, now)).toBe("3 hours ago");
+    expect(timeAgo("2026-11-01T12:00:00Z", tEn, now)).toBe("7 days ago");
+    expect(timeAgo("2026-11-08T11:59:50Z", tTr, now)).toBe("az önce");
+    expect(timeAgo("2026-11-08T11:30:00Z", tTr, now)).toBe("30 dk önce");
+    expect(timeAgo("2026-11-08T09:00:00Z", tTr, now)).toBe("3 saat önce");
+    expect(timeAgo("2026-11-01T12:00:00Z", tTr, now)).toBe("7 gün önce");
+    expect(timeAgo(null, tEn, now)).toBe("—");
   });
 });
 
