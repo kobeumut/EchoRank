@@ -6,7 +6,7 @@
 
 Use GitHub's private vulnerability reporting instead:
 
-1. Open the repository at https://github.com/kobeumut/ai-visibility.
+1. Open the repository at https://github.com/kobeumut/EchoRank.
 2. Go to the **Security** tab and choose **Report a vulnerability**.
 3. Describe the issue, the affected version or commit, the impact, and steps to reproduce (a minimal proof of concept
    helps). Do not include real credentials, tokens or other people's data.
@@ -45,7 +45,7 @@ that you do not operate and have not been authorized to test.
 
 ## Deployment hardening
 
-AI Visibility is a single-tenant tool for operators. Its defaults are meant for local development, so review the
+EchoRank is a single-tenant tool for operators. Its defaults are meant for local development, so review the
 following before exposing an instance to a network.
 
 ### Authentication

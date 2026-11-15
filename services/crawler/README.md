@@ -1,6 +1,6 @@
 # geo-crawler
 
-Async web crawler + entity extraction + knowledge graph ("graphify") engine for the AI visibility / GEO & SEO platform.
+Async web crawler + entity extraction + knowledge graph ("graphify") engine for the EchoRank GEO & SEO platform.
 
 ```
 URL ─► robots.txt + sitemap(index/gz) ─► async BFS crawler (depth, page cap, concurrency, req/s, robots, crawl-delay)

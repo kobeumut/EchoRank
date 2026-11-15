@@ -309,7 +309,7 @@ export async function publishSyndication(siteId: string, opts: { force?: boolean
         redirect: "manual",
         headers: {
           "content-type": "application/json",
-          "user-agent": "AIVisibility-Syndication/1.0",
+          "user-agent": "EchoRank-Syndication/1.0",
           "x-aiv-event": "syndication.published",
           "x-aiv-timestamp": timestamp,
           ...(secret && { "x-aiv-signature": signWebhook(secret, timestamp, body) }),

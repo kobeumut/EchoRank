@@ -1,4 +1,4 @@
-// AI Visibility / GEO & SEO platform — core data model.
+// EchoRank / GEO & SEO platform — core data model.
 //
 // Development uses SQLite. For production switch `provider` to "postgresql"
 // and point DATABASE_URL to Postgres; the model only uses portable types

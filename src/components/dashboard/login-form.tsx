@@ -36,9 +36,9 @@ export function LoginForm() {
     >
       <div className="mb-5 flex items-center gap-2">
         <span aria-hidden className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-xs font-bold text-white">
-          AI
+          ER
         </span>
-        <h1 className="text-lg font-semibold">AI Visibility</h1>
+        <h1 className="text-lg font-semibold">EchoRank</h1>
       </div>
       <p className="mb-4 text-sm text-zinc-500">{t("auth.login.intro", { token: "API_TOKEN" })}</p>
       <Field label={t("auth.login.tokenLabel")}>
