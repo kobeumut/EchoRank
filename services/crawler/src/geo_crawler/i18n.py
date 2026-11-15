@@ -1,8 +1,7 @@
 """Message catalogs for the human-readable text the scoring engine produces (check details, action cards, fixes).
 
+Single source of truth is the JSON catalog directory in ``locales/<lang>/<namespace>.json``.
 English (``en``) is the default and the fallback; Turkish (``tr``) is the second supported language.
-
-Catalogs live in ``geo_crawler/locales/<lang>/<namespace>.py``; each module exposes ``MESSAGES: dict[str, str]``.
 Keys are globally unique dotted strings prefixed by the namespace (``"actions.robots.title"``). Values use
 ``str.format`` style ``{placeholders}``. Plural forms: ``key_one`` / ``key_other`` selected by ``count=``.
 
@@ -10,19 +9,50 @@ Keys are globally unique dotted strings prefixed by the namespace (``"actions.ro
     t = get_translator("tr")
     t("actions.robots.title", count=3)
 
-To add a language: create ``locales/<code>/`` with the same modules as ``locales/en/``, add the code to
-``SUPPORTED_LANGS`` and run the tests (``tests/test_i18n.py`` checks key and placeholder parity).
+To add a language: create ``locales/<code>/`` with the JSON namespace files matching ``locales/en/`` and run
+the tests (``tests/test_i18n.py`` checks key and placeholder parity against the single source).
 """
 from __future__ import annotations
 
-import importlib
-import pkgutil
+import json
+import os
+from pathlib import Path
 import string
 from functools import lru_cache
 from typing import Callable
 
 DEFAULT_LANG = "en"
-SUPPORTED_LANGS = ("en", "tr")
+
+
+def get_locales_dir() -> Path:
+    """Locate the shared locales directory (environment variable > repo root > package fallback)."""
+    env_dir = os.environ.get("LOCALES_DIR")
+    if env_dir:
+        p = Path(env_dir)
+        if p.is_dir():
+            return p
+    current = Path(__file__).resolve().parent
+    for parent in [current, *current.parents]:
+        cand = parent / "locales"
+        if cand.is_dir() and (cand / "en").is_dir():
+            return cand
+    return current / "locales"
+
+
+def get_supported_languages() -> tuple[str, ...]:
+    locales_dir = get_locales_dir()
+    if locales_dir.is_dir():
+        langs = [
+            d.name
+            for d in locales_dir.iterdir()
+            if d.is_dir() and not d.name.startswith(".") and any(d.glob("*.json"))
+        ]
+        if "en" in langs:
+            return ("en", *sorted(l for l in langs if l != "en"))
+    return ("en", "tr")
+
+
+SUPPORTED_LANGS = get_supported_languages()
 
 Translator = Callable[..., str]
 
@@ -30,20 +60,27 @@ Translator = Callable[..., str]
 def normalize_lang(value: str | None) -> str:
     """'tr-TR', 'TR', 'en_GB' → a supported code; anything else → the default (English)."""
     base = (value or "").strip().lower().replace("_", "-").split("-")[0]
-    return base if base in SUPPORTED_LANGS else DEFAULT_LANG
+    supported = get_supported_languages()
+    return base if base in supported else DEFAULT_LANG
 
 
 @lru_cache(maxsize=None)
 def catalog(lang: str) -> dict[str, str]:
-    """All messages of one language (every ``locales/<lang>/*.py`` module merged)."""
-    package = importlib.import_module(f"{__package__}.locales.{lang}")
+    """All messages of one language (every ``locales/<lang>/*.json`` module merged)."""
+    code = normalize_lang(lang)
+    locales_dir = get_locales_dir()
+    target_dir = locales_dir / code
+    if not target_dir.is_dir():
+        target_dir = locales_dir / DEFAULT_LANG
     merged: dict[str, str] = {}
-    for info in pkgutil.iter_modules(package.__path__):
-        module = importlib.import_module(f"{package.__name__}.{info.name}")
-        overlap = merged.keys() & module.MESSAGES.keys()
-        if overlap:
-            raise ValueError(f"duplicate message keys in locales/{lang}/{info.name}.py: {sorted(overlap)[:5]}")
-        merged.update(module.MESSAGES)
+    if target_dir.is_dir():
+        for json_file in sorted(target_dir.glob("*.json")):
+            with open(json_file, encoding="utf-8") as f:
+                data: dict[str, str] = json.load(f)
+                overlap = merged.keys() & data.keys()
+                if overlap:
+                    raise ValueError(f"duplicate message keys in {json_file.name}: {sorted(overlap)[:5]}")
+                merged.update(data)
     return merged
 
 

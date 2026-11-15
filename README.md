@@ -86,10 +86,11 @@ ai-visibility/
 │   │   ├── validation.ts      # Zod request validators
 │   │   └── db.ts              # Prisma client singleton
 │   └── proxy.ts               # API token / dashboard session guard
+├── locales/                   # Canonical single source of truth for all translations (locales/{en,tr}/*.json)
 ├── prisma/                    # Schema, SQLite migrations, demo seed
 ├── scripts/                   # Report worker and sample report renderer
 ├── services/crawler/          # Python 3.10+ crawler, graph, scoring and simulation engine (geo-crawler package)
-│   ├── src/geo_crawler/       # crawler, parser, extractor, graph, scoring/, locales/{en,tr}/
+│   ├── src/geo_crawler/       # crawler, parser, extractor, graph, scoring/ (consumes shared root locales/)
 │   └── tests/                 # pytest suite (respx-mocked HTTP)
 ├── tests/                     # Vitest suite (API, services, i18n parity)
 └── docs/                      # Feature and API documentation
@@ -388,20 +389,30 @@ Turkish morphology (`src/lib/text/turkish.ts`), Turkish query-template variants,
 recognize Turkish web content (privacy / returns / shipping pages), plus the Turkish sample content in tests that exercises
 those paths. Each occurrence carries an English comment explaining why.
 
-### Adding a language
+### How to add or edit a translation
 
-1. **Web app.** Create `src/lib/i18n/messages/<lang>/` with one file per namespace, copying the structure of
-   `messages/tr/` (`export const common: Record<keyof typeof en, string> = {...}`: TypeScript enforces key parity).
-   Register them in `src/lib/i18n/messages/index.ts` (import each namespace, merge them into one catalog and add it to
-   `catalogs`), and add the code to `LOCALES`, `LOCALE_NAMES` and `INTL_LOCALES` in `src/lib/i18n/config.ts`.
-2. **Python engine.** Create `services/crawler/src/geo_crawler/locales/<lang>/` with the same modules as `locales/en/`
-   (each exposes `MESSAGES: dict[str, str]`) and add the code to `SUPPORTED_LANGS` in `src/geo_crawler/i18n.py`.
-3. **Run the parity tests**, which fail on missing keys or mismatched `{placeholders}`:
+All translations across the web application and Python engine live in **one single place**: `locales/{en,tr}/<namespace>.json`.
+
+1. **Editing an existing message:** Locate the namespace file under `locales/en/<namespace>.json` and `locales/tr/<namespace>.json`. Update the string, preserving any `{name}` placeholders and plural suffix conventions (`_one` / `_other`).
+2. **Adding a new message:** Add the key and its value to `locales/en/<namespace>.json` and the corresponding translated value to `locales/tr/<namespace>.json`. TypeScript derives `MessageKey` statically from the English catalogs, giving immediate compile-time type safety in `t("...")` calls, while Python loads the exact same JSON files dynamically.
+
+### Adding a new language
+
+1. **Create the locale directory.** Add `locales/<lang>/` containing the matching JSON namespace files (`actions.json`, `overview.json`, etc.).
+2. **Web app.** Register the new locale in `src/lib/i18n/config.ts` (`LOCALES`, `LOCALE_NAMES`, `INTL_LOCALES`) and register its imports in `src/lib/i18n/messages/index.ts`.
+3. **Python engine.** Discovers all locale folders in `locales/` automatically without code changes.
+4. **Run the parity tests**, which verify key parity and placeholder alignment against the single source:
 
    ```bash
-   npx vitest run tests/i18n.test.ts
-   cd services/crawler && .venv/bin/python -m pytest -q tests/test_i18n.py
+   npm test tests/i18n.test.ts
+   cd services/crawler && pytest tests/test_i18n.py
    ```
+
+### Stored content on language switch
+
+- **UI & Dashboard:** Switching languages re-renders all static and dynamically looked-up labels, navigation items, filters, toasts, and action badges immediately.
+- **Action items:** Recommendations store their rendered text in the generation locale as a baseline, but also include `ruleId` and `details.title_key` / `details.title_params` where feasible. When a translation key exists, the dashboard retranslates the card title dynamically into the active language on switch.
+- **Reports & Historical Snapshots:** Report runs (`ReportRun` / `ReportSnapshot`) and audit evidence records are immutable point-in-time audit certificates. They store their prose in the generation locale to prevent template bit-rot or wording divergence across software versions.
 
 Catalog conventions: flat dotted keys prefixed by the namespace (`"actions.empty.noOpen"`), `{name}` placeholders, plural
 variants `key_one` / `key_other` selected by `count`. User-facing strings must never be hard-coded; see

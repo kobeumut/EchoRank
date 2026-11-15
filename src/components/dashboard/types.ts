@@ -57,6 +57,8 @@ export type ActionDetails = {
   affected_urls?: string[];
   affected_count?: number;
   snippet?: Snippet;
+  title_key?: string;
+  title_params?: Record<string, unknown>;
 };
 export type ActionItem = {
   id: string;
