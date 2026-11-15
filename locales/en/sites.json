@@ -7,6 +7,7 @@
   "sites.tabs.visibility": "LLM Visibility",
   "sites.tabs.competitors": "Share of Model & Competitors",
   "sites.tabs.distribution": "AI Distribution",
+  "sites.tabs.chat": "Assistant",
   "sites.shell.breadcrumb": "Breadcrumb",
   "sites.shell.tabs": "Site sections",
   "sites.shell.delete": "Delete",

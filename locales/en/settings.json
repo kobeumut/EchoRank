@@ -1,0 +1,23 @@
+{
+  "settings.title": "Settings",
+  "settings.subtitle": "LLM connection settings that apply server-wide.",
+  "settings.cli.title": "CLI models",
+  "settings.cli.subtitle": "Which model each CLI answers with when the connection type is CLI (key-less, with a subscription sign-in). LLM visibility tests and the site assistant use this choice; if left empty, *_CLI_MODEL from .env applies, and otherwise the CLI's default.",
+  "settings.cli.refresh": "Refresh list",
+  "settings.cli.note": "Changing the model also changes the cache key, so the same query is asked again with the new model instead of hitting the 24-hour cache. Perplexity has no CLI and only works with an API key.",
+  "settings.cli.save": "Save",
+  "settings.cli.cancel": "Cancel",
+  "settings.cli.saved": "CLI model settings saved.",
+  "settings.cli.saveFailed": "Could not be saved.",
+  "settings.cli.installed": "Installed",
+  "settings.cli.notFound": "Not found",
+  "settings.cli.answers": "Answers the “{column}” column",
+  "settings.cli.model": "Model",
+  "settings.cli.listError": "The model list could not be fetched from the CLI; you can enter the model name by hand.",
+  "settings.cli.agyHint": "Choose a Gemini model so the Gemini column is really Gemini.",
+  "settings.cli.defaultEnv": "Default (.env: {model})",
+  "settings.cli.defaultCli": "Default (the CLI's own model)",
+  "settings.cli.custom": "Other (enter by hand)…",
+  "settings.cli.customPlaceholder": "model name, e.g. claude-opus-5-5",
+  "settings.cli.customLabel": "{title} model name"
+}

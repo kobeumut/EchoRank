@@ -4,5 +4,6 @@
   "common.language": "Language",
   "common.theme.switchToLight": "Switch to light theme",
   "common.theme.switchToDark": "Switch to dark theme",
-  "common.nav.sites": "Sites"
+  "common.nav.sites": "Sites",
+  "common.nav.settings": "Settings"
 }

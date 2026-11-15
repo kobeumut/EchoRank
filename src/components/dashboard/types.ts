@@ -120,7 +120,7 @@ export type QuerySuggestion = {
 };
 export type TransportMode = "auto" | "api" | "cli";
 /** What each transport mode would use for a model right now (`null` = unavailable). */
-export type ProviderStatus = { model: string; cli: "claude" | "codex" | "agy" | null; resolved: Record<TransportMode, "api" | "cli" | null> };
+export type ProviderStatus = { model: string; cli: "claude" | "codex" | "agy" | null; cliModel?: string | null; resolved: Record<TransportMode, "api" | "cli" | null> };
 export type VisibilityList = {
   items: VisibilityRecord[];
   total: number;

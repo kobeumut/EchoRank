@@ -4,5 +4,6 @@
   "common.language": "Dil",
   "common.theme.switchToLight": "Açık temaya geç",
   "common.theme.switchToDark": "Koyu temaya geç",
-  "common.nav.sites": "Siteler"
+  "common.nav.sites": "Siteler",
+  "common.nav.settings": "Ayarlar"
 }

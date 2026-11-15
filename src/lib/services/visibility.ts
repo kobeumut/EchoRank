@@ -6,6 +6,7 @@ import { DEFAULT_LOCALE, type Locale } from "../i18n/config";
 import { analyzeAnswer, analyzeBrandSentiment, auditBrandClaims, visibilityAnalysisSettings, VISIBILITY_MODELS, type VisibilityModel } from "../visibility-analysis";
 import { cliMaxCalls } from "../visibility-cli";
 import { askSearchProvider, defaultTransportMode, providerAvailability, providerConfig, ProviderError, TRANSPORT_MODES } from "../visibility-providers";
+import { getCliModels } from "./app-settings";
 import { getSiteOrThrow } from "./sites";
 import { getSomAnalysis } from "./som-analysis";
 import { classifyIntent, generateSiteQueries, QUERY_INTENTS, QUERY_LANGUAGES, type GeneratedQuery, type QueryIntent, type QueryLanguage } from "./query-generator";
@@ -45,16 +46,25 @@ export async function suggestQueries(siteId: string) {
 
 export async function listVisibility(siteId: string, options: z.infer<typeof visibilityQuery>, locale: Locale = DEFAULT_LOCALE) {
   await getSiteOrThrow(siteId);
-  const [items, total, queries, analysis] = await Promise.all([
+  const [items, total, queries, analysis, cliModels] = await Promise.all([
     prisma.llmVisibilityRecord.findMany({ where: { siteId }, orderBy: [{ checkedAt: "desc" }, { id: "desc" }], take: options.limit, skip: options.offset }),
     prisma.llmVisibilityRecord.count({ where: { siteId } }),
     suggestQueryDetails(siteId, { limit: 40 }),
     getSomAnalysis(siteId, options.days, locale),
+    getCliModels(),
   ]);
   return {
     items, total, queries: queries.slice(0, MAX_AUTO_QUERIES).map((g) => g.text), querySuggestions: queries, analysis,
-    providers: providerAvailability(), defaultTransport: defaultTransportMode(), limits: { cliMaxCalls: cliMaxCalls() },
+    providers: providerAvailability(cliModels), defaultTransport: defaultTransportMode(), limits: { cliMaxCalls: cliMaxCalls() },
   };
+}
+
+/** Models this run would bill to an API key (the rest go through a CLI or are skipped as not configured). */
+export function paidModels(input: z.infer<typeof visibilityInput>): VisibilityModel[] {
+  const mode = input.transport ?? defaultTransportMode();
+  return [...new Set(input.models)].filter((model) => {
+    try { return providerConfig(model, mode).transport === "api"; } catch { return false; }
+  });
 }
 
 // ponytail: one batch per Node process, two requests at a time. Use a shared queue before multi-replica deployment.
@@ -73,8 +83,9 @@ export async function runVisibility(siteId: string, input: z.infer<typeof visibi
   const mode = input.transport ?? defaultTransportMode();
   const models = [...new Set(input.models)];
   const tasks = queries.flatMap((query) => models.map((model) => ({ query, model })));
+  const cliModels = await getCliModels();
   const configs = new Map(models.map((model) => {
-    try { return [model, providerConfig(model, mode)] as const; } catch { return [model, null] as const; }
+    try { return [model, providerConfig(model, mode, cliModels)] as const; } catch { return [model, null] as const; }
   }));
   // Agent CLIs answer in 15–50 s, so a batch stays inside the route's duration only up to this many calls.
   const cliCalls = tasks.filter((t) => configs.get(t.model)?.transport === "cli").length;
@@ -99,7 +110,7 @@ export async function runVisibility(siteId: string, input: z.infer<typeof visibi
         }
       }
       let answer;
-      try { answer = await askSearchProvider(model, query, mode); }
+      try { answer = await askSearchProvider(model, query, mode, cliModels); }
       catch (error) {
         return { query, model, error: error instanceof ProviderError ? error.code : "provider_error" };
       }

@@ -1,4 +1,3 @@
-import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { AuditProgressPanel } from "@/components/dashboard/audit-progress";
@@ -19,7 +18,9 @@ function audit(over: Partial<AuditRow> = {}, crawl: Partial<NonNullable<AuditRow
 }
 const render = (a: AuditRow, runner: boolean | undefined = true, canceling = false, locale: Locale = "tr") =>
   renderToStaticMarkup(
-    createElement(I18nProvider, { locale, messages: getMessages(locale) }, createElement(AuditProgressPanel, { audit: a, runner, canceling, onCancel: () => undefined })),
+    <I18nProvider locale={locale} messages={getMessages(locale)}>
+      <AuditProgressPanel audit={a} runner={runner} canceling={canceling} onCancel={() => undefined} />
+    </I18nProvider>,
   );
 
 describe("AuditProgressPanel", () => {

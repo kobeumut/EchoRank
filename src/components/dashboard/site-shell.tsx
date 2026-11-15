@@ -42,6 +42,7 @@ const TABS = [
   { href: "/visibility", labelKey: "sites.tabs.visibility" },
   { href: "/competitors", labelKey: "sites.tabs.competitors" },
   { href: "/distribution", labelKey: "sites.tabs.distribution" },
+  { href: "/chat", labelKey: "sites.tabs.chat" },
 ];
 
 const ACTIVE_CRAWL = new Set(["queued", "running"]);

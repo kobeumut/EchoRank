@@ -452,3 +452,10 @@ model LoginThrottle {
 
   @@index([windowStart])
 }
+
+/// Server-wide settings edited from the dashboard (key -> JSON value), e.g. `llm` = CLI model choices.
+model AppSetting {
+  key       String   @id
+  value     Json?
+  updatedAt DateTime @updatedAt
+}

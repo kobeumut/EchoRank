@@ -29,6 +29,12 @@ export const cliMaxCalls = () => 2 * Math.max(1, Math.floor(BATCH_BUDGET_MS / cl
 
 export const cliModelFromEnv = (cli: CliName) => process.env[`${ENV_PREFIX[cli]}_CLI_MODEL`]?.trim() || undefined;
 
+/** Per-CLI model chosen in the dashboard settings; wins over `<NAME>_CLI_MODEL`. Empty = env, then the CLI's default. */
+export type CliModels = Partial<Record<CliName, string>>;
+/** Becomes a CLI argument: no leading "-", so a stored value can never be read as a flag. */
+export const CLI_MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/@[\]-]{0,99}$/;
+export const cliModelFor = (cli: CliName, overrides?: CliModels) => overrides?.[cli]?.trim() || cliModelFromEnv(cli);
+
 /** Looks the binary up without running it (`<NAME>_CLI_BIN` may hold an absolute path). */
 export function resolveCli(cli: CliName): string | null {
   const configured = process.env[`${ENV_PREFIX[cli]}_CLI_BIN`]?.trim() || cli;
@@ -146,6 +152,41 @@ function run(bin: string, args: string[], { cwd, stdin, timeoutMs }: { cwd: stri
     child.on("close", (code) => finish(() => resolve({ stdout, stderr, code })));
     child.stdin.end(stdin ?? "");
   });
+}
+
+/** Claude Code has no list command: its aliases (latest of each tier) and the current full IDs. */
+const CLAUDE_MODELS = [
+  { id: "opus", label: "Opus (alias, latest)" },
+  { id: "sonnet", label: "Sonnet (alias, latest)" },
+  { id: "haiku", label: "Haiku (alias, latest)" },
+  { id: "claude-opus-5-5", label: "Claude Opus 5.5" },
+  { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5" },
+  { id: "claude-haiku-5-5", label: "Claude Haiku 5.5" },
+];
+export type CliModelOption = { id: string; label: string };
+
+const codexModels = z.object({ models: z.array(z.object({ slug: z.string(), display_name: z.string().optional(), visibility: z.string().optional() })) });
+export function parseCodexModels(stdout: string): CliModelOption[] {
+  const { models } = parse(codexModels, lastJson(stdout));
+  return models.filter((m) => !m.visibility || m.visibility === "list").map((m) => ({ id: m.slug, label: m.display_name ?? m.slug }));
+}
+/** `agy models` prints a banner, then one `<id>\t<label>` row per model. */
+export function parseAgyModels(stdout: string): CliModelOption[] {
+  return stdout.split("\n").flatMap((line) => {
+    const [id, label] = line.split("\t").map((part) => part.trim());
+    return id && label ? [{ id, label }] : [];
+  });
+}
+
+/** Models the installed CLI offers, asked from the CLI itself where it can list them (read-only, no prompt). */
+export async function listCliModels(cli: CliName, bin: string): Promise<CliModelOption[]> {
+  if (cli === "claude") return CLAUDE_MODELS;
+  const cwd = mkdtempSync(path.join(tmpdir(), "geo-cli-"));
+  try {
+    const { stdout, code } = await run(bin, cli === "codex" ? ["debug", "models"] : ["models"], { cwd, timeoutMs: 20_000 });
+    if (code !== 0) throw new ProviderError("provider_error");
+    return (cli === "codex" ? parseCodexModels(stdout) : parseAgyModels(stdout)).filter((m) => CLI_MODEL_PATTERN.test(m.id));
+  } finally { rmSync(cwd, { recursive: true, force: true }); }
 }
 
 export async function askCli(prompt: string, config: CliConfig): Promise<SearchAnswer> {

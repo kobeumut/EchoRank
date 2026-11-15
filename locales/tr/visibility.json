@@ -32,7 +32,7 @@
   "visibility.run.running": "Modeller sorgulanıyor; bu işlem birkaç dakika sürebilir. Sayfadan ayrılmayın.",
   "visibility.run.toast.done": "{successful}/{attempted} kontrol tamamlandı.",
   "visibility.run.toast.none": "Hiçbir kontrol tamamlanamadı.",
-  "visibility.run.error.503": "Ücretli görünürlük testleri için sunucuda API_TOKEN tanımlanmalı ve panele giriş yapılmalı.",
+  "visibility.run.error.503": "API anahtarıyla (ücretli) test için sunucuda API_TOKEN tanımlanmalı ve panele giriş yapılmalı. Anahtarsız çalıştırmak için bağlantı türünü “CLI (anahtarsız)” seçin.",
   "visibility.run.error.409": "Şu anda başka bir görünürlük testi çalışıyor. Bitince tekrar deneyin.",
   "visibility.run.result": "{successful}/{attempted} kontrol başarılı",
   "visibility.run.citationRate": "atıf oranı {rate}",
@@ -81,5 +81,7 @@
   "visibility.run.callSplit": "({api} ücretli API, {cli} CLI: abonelik kotası kullanır, API ücreti yok; önbellekteki sonuçlar hariç).",
   "visibility.run.skippedModels": "Kullanılamayan modeller atlanır: {models}.",
   "visibility.run.tooManyCli": "CLI ile tek seferde en fazla {max} kontrol yapılabilir; sorgu veya model sayısını azaltın.",
-  "visibility.run.runningCli": "Modeller sorgulanıyor; bu işlem birkaç dakika sürebilir (CLI yanıtları çağrı başına 15–50 sn). Sayfadan ayrılmayın."
+  "visibility.run.runningCli": "Modeller sorgulanıyor; bu işlem birkaç dakika sürebilir (CLI yanıtları çağrı başına 15–50 sn). Sayfadan ayrılmayın.",
+  "visibility.transport.cliModels": "CLI modelleri",
+  "visibility.transport.viaCliModel": "CLI · {cli} · {model}"
 }

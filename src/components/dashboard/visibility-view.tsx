@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { aggregateCompetitors } from "@/lib/dashboard/competitors";
 import { VISIBILITY_MODEL_ORDER } from "@/lib/dashboard/format";
@@ -223,6 +224,11 @@ export function RunPanel({ suggestions, details = [], providers, defaultTranspor
           <div className="mb-2 flex flex-wrap items-center gap-3">
             <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">{t("visibility.models")}</div>
             {providers && <Segmented label={t("visibility.transport.label")} value={transport} onChange={setTransport} options={TRANSPORT_MODES.map((o) => ({ value: o.value, label: t(o.labelKey) }))} />}
+            {providers && transport !== "api" && (
+              <Link href="/settings" className="text-xs text-indigo-600 hover:underline dark:text-indigo-400">
+                {t("visibility.transport.cliModels")}
+              </Link>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             {VISIBILITY_MODEL_ORDER.map((m) => (
@@ -309,7 +315,12 @@ export function RunPanel({ suggestions, details = [], providers, defaultTranspor
 /** Which route a model takes right now: API key, the vendor's CLI (claude / codex / agy), or neither. */
 function TransportHint({ provider, via }: { provider?: ProviderStatus; via: "api" | "cli" | null }) {
   const { t } = useFormat();
-  const text = via === "api" ? t("visibility.transport.viaApi") : via === "cli" ? t("visibility.transport.viaCli", { cli: provider?.cli ?? "" }) : provider?.cli ? t("visibility.transport.cliMissing", { cli: provider.cli }) : t("visibility.transport.noKey");
+  const text =
+    via === "api"
+      ? t("visibility.transport.viaApi")
+      : via === "cli"
+        ? provider?.cliModel ? t("visibility.transport.viaCliModel", { cli: provider.cli ?? "", model: provider.cliModel }) : t("visibility.transport.viaCli", { cli: provider?.cli ?? "" })
+        : provider?.cli ? t("visibility.transport.cliMissing", { cli: provider.cli }) : t("visibility.transport.noKey");
   return <span className={cx("ml-2 text-xs", via ? "text-zinc-500" : "text-amber-700 dark:text-amber-300")}>{text}</span>;
 }
 

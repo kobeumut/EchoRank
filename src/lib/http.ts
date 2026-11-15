@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { ZodError, type ZodType } from "zod";
-import { safeEqual } from "./auth";
+import { apiToken, isAuthorized, isSameOrigin, safeEqual } from "./auth";
 
 export class HttpError extends Error {
   constructor(
@@ -19,6 +19,22 @@ export function requireApiToken(request: Request) {
   const token = process.env.API_TOKEN;
   if (!token) throw new HttpError(503, "Configure API_TOKEN before using scheduled reports");
   if (!safeEqual(request.headers.get("authorization") ?? "", `Bearer ${token}`)) throw new HttpError(401, "Unauthorized");
+}
+
+/**
+ * Model calls (visibility checks, site assistant). With API_TOKEN: bearer or dashboard session, as everywhere.
+ * Without it the server is an open local install: calls billed to an API key are refused, while key-less CLI
+ * calls (subscription quota) are allowed, but only from the dashboard itself so another site cannot trigger them.
+ */
+export async function authorizeModelCalls(request: Request, paid: () => string[], what: string) {
+  const token = apiToken();
+  if (token) {
+    if (!(await isAuthorized(request, token))) throw new HttpError(401, "Unauthorized");
+    return;
+  }
+  const billed = paid();
+  if (billed.length) throw new HttpError(503, `Configure API_TOKEN before ${what} with API keys (${billed.join(", ")}); select the CLI transport to run without a token`, { code: "api_token_required" });
+  if (!isSameOrigin(request)) throw new HttpError(403, "Without API_TOKEN, CLI model calls are only accepted from the dashboard", { code: "same_origin_required" });
 }
 
 export function json(data: unknown, status = 200) {

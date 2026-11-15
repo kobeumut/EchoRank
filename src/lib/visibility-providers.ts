@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { VISIBILITY_MODELS, type SearchAnswer, type VisibilityModel } from "./visibility-analysis";
-import { askCli, CLI_FOR, cliModelFromEnv, resolveCli, type CliName } from "./visibility-cli";
+import { askCli, CLI_FOR, cliModelFor, resolveCli, type CliModels, type CliName } from "./visibility-cli";
 import { ProviderError } from "./visibility-errors";
 
 export { ProviderError };
@@ -26,28 +26,31 @@ function apiConfig(provider: VisibilityModel): ProviderConfig | null {
   return key && model ? { transport: "api", modelId: model, key, model } : null;
 }
 
-function cliConfig(provider: VisibilityModel): ProviderConfig | null {
+function cliConfig(provider: VisibilityModel, cliModels?: CliModels): ProviderConfig | null {
   const cli = CLI_FOR[provider];
   const bin = cli && resolveCli(cli);
   if (!cli || !bin) return null;
-  const model = cliModelFromEnv(cli);
+  const model = cliModelFor(cli, cliModels);
   return { transport: "cli", modelId: `cli:${cli}${model ? `:${model}` : ""}`, cli, bin, model };
 }
 
-export function providerConfig(provider: VisibilityModel, mode: TransportMode = defaultTransportMode()): ProviderConfig {
-  const config = mode === "api" ? apiConfig(provider) : mode === "cli" ? cliConfig(provider) : apiConfig(provider) ?? cliConfig(provider);
+/** `cliModels`: the dashboard's per-CLI model choice (see services/app-settings.ts); omitted -> `<NAME>_CLI_MODEL`. */
+export function providerConfig(provider: VisibilityModel, mode: TransportMode = defaultTransportMode(), cliModels?: CliModels): ProviderConfig {
+  const config = mode === "api" ? apiConfig(provider) : mode === "cli" ? cliConfig(provider, cliModels) : apiConfig(provider) ?? cliConfig(provider, cliModels);
   if (!config) throw new ProviderError("not_configured");
   return config;
 }
 
 /** What each transport mode would use per model right now. Names only: no keys, no filesystem paths. */
-export function providerAvailability() {
+export function providerAvailability(cliModels?: CliModels) {
   const resolve = (provider: VisibilityModel, mode: TransportMode) => {
     try { return providerConfig(provider, mode).transport; } catch { return null; }
   };
   return VISIBILITY_MODELS.map((model) => ({
     model,
     cli: CLI_FOR[model] ?? null,
+    /** Model the CLI is pinned to (settings, then env); null = the CLI's own default. */
+    cliModel: CLI_FOR[model] ? cliModelFor(CLI_FOR[model], cliModels) ?? null : null,
     resolved: { auto: resolve(model, "auto"), api: resolve(model, "api"), cli: resolve(model, "cli") },
   }));
 }
@@ -116,14 +119,18 @@ export function parseSearchAnswer(provider: VisibilityModel, data: unknown): Sea
 /** Same prompt for every transport. Do not insert the tracked site/brand: that would bias an organic visibility measurement. */
 const searchPrompt = (query: string) => `${query}\nSearch the web for current information. Cite source URLs. If recommending alternatives, use a numbered list.`;
 
-export async function askSearchProvider(provider: VisibilityModel, query: string, mode?: TransportMode): Promise<SearchAnswer> {
-  const config = providerConfig(provider, mode);
-  const prompt = searchPrompt(query);
-  return config.transport === "cli" ? askCli(prompt, config) : askApi(provider, prompt, config);
+export async function askSearchProvider(provider: VisibilityModel, query: string, mode?: TransportMode, cliModels?: CliModels): Promise<SearchAnswer> {
+  return askModel(provider, searchPrompt(query), mode, { cliModels });
+}
+
+/** One prompt, one answer over whichever transport `mode` resolves to (web search stays on, as for visibility checks). */
+export async function askModel(provider: VisibilityModel, prompt: string, mode?: TransportMode, opts: { timeoutMs?: number; cliModels?: CliModels } = {}): Promise<SearchAnswer> {
+  const config = providerConfig(provider, mode, opts.cliModels);
+  return config.transport === "cli" ? askCli(prompt, config) : askApi(provider, prompt, config, opts.timeoutMs);
 }
 
 /** Native fetch only. Never follows citation URLs or provider redirects; secrets stay server-side. */
-async function askApi(provider: VisibilityModel, prompt: string, { key, model }: { key: string; model: string }): Promise<SearchAnswer> {
+async function askApi(provider: VisibilityModel, prompt: string, { key, model }: { key: string; model: string }, timeoutMs = 20_000): Promise<SearchAnswer> {
   let url: string;
   let body: object;
   let headers: Record<string, string> = { "content-type": "application/json" };
@@ -149,7 +156,7 @@ async function askApi(provider: VisibilityModel, prompt: string, { key, model }:
       headers.Authorization = `Bearer ${key}`;
       body = { model, messages: [{ role: "user", content: prompt }], max_tokens: 2000 };
   }
-  const signal = AbortSignal.timeout(20_000);
+  const signal = AbortSignal.timeout(timeoutMs);
   try {
     const response = await fetch(url, { method: "POST", headers, body: JSON.stringify(body), signal, redirect: "error" });
     if (!response.ok) {

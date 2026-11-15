@@ -32,7 +32,7 @@
   "visibility.run.running": "Querying the models; this may take a few minutes. Do not leave the page.",
   "visibility.run.toast.done": "{successful}/{attempted} checks completed.",
   "visibility.run.toast.none": "No checks could be completed.",
-  "visibility.run.error.503": "Paid visibility tests require API_TOKEN to be set on the server and you must be signed in to the dashboard.",
+  "visibility.run.error.503": "Running paid checks with API keys requires API_TOKEN on the server and a signed-in dashboard. To run without one, choose the “CLI (key-less)” connection type.",
   "visibility.run.error.409": "Another visibility test is currently running. Try again when it finishes.",
   "visibility.run.result": "{successful}/{attempted} checks succeeded",
   "visibility.run.citationRate": "citation rate {rate}",
@@ -81,5 +81,7 @@
   "visibility.run.callSplit": "({api} paid API, {cli} CLI: uses the subscription quota, no API charge; cached results excluded).",
   "visibility.run.skippedModels": "Unavailable models are skipped: {models}.",
   "visibility.run.tooManyCli": "At most {max} checks can run through the CLI at once; reduce the number of queries or models.",
-  "visibility.run.runningCli": "Querying the models; this may take a few minutes (CLI answers take 15–50 s per call). Do not leave the page."
+  "visibility.run.runningCli": "Querying the models; this may take a few minutes (CLI answers take 15–50 s per call). Do not leave the page.",
+  "visibility.transport.cliModels": "CLI models",
+  "visibility.transport.viaCliModel": "CLI · {cli} · {model}"
 }

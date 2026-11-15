@@ -35,7 +35,9 @@ engine (`services/crawler`) that the web app can run for every audit.
 ## Features
 
 - **Multi-LLM visibility tracking.** Runs bounded, cached query checks against ChatGPT, Gemini, Claude and Perplexity
-  through their search-enabled APIs and records citations, mentions, positions and competing sources.
+  through their search-enabled APIs (or, with no API key at all, through the signed-in `claude`, `codex` and `agy` CLIs;
+  see [details](docs/visibility.md#key-less-cli-transport-claude-codex-agy)) and records citations, mentions, positions
+  and competing sources.
 - **Four-pillar GEO scoring** (0-100) with prioritized, copy-paste fixes:
   1. *AI crawler access*: robots.txt rules per AI bot (RFC 9309), WAF/CDN user-agent probes, render mode (SSR vs. client-side shell).
   2. *LLM readability*: FAQ and direct-answer blocks, information density, Schema.org coverage, `llms.txt`.
@@ -50,6 +52,11 @@ engine (`services/crawler`) that the web app can run for every audit.
 - **Competitor intelligence.** Share of Model against configured competitors, citation gaps, sentiment and brand-safety evidence.
 - **AI distribution.** IndexNow, Google Search Console / Indexing API, `llms.txt`, `llms-full.txt`, AI sitemap and
   RSS / Atom / JSON feeds, driven by a change queue.
+- **Site assistant.** A chatbot per site in the dashboard; answers are grounded in the platform's own data (scores, failing
+  checks, actions, pages, graph, visibility, competitors, bot access), through an API key or a CLI
+  ([details](docs/mcp.md#site-assistant-chatbot)).
+- **MCP server for coding agents.** Claude Code, Codex and any MCP client can read scores, prioritized fixes with ready-made
+  snippets, pages and AutoGEO rewrites, mark fixes resolved and re-run audits ([setup](docs/mcp.md)).
 - **Scheduled reports.** Daily and weekly reports (HTML / PDF / JSON) delivered by e-mail or webhook.
 - **English and Turkish UI**, with English as the default and fallback ([details](#internationalization)).
 
@@ -196,7 +203,9 @@ All CLIs are documented in [`services/crawler/README.md`](services/crawler/READM
 ### 3. First audit
 
 1. Open http://localhost:3000, add a site (for example `https://example.com`) and click **Add and audit**.
-2. Wait for the audit to finish. The header polls `GET /api/sites/:id/audit` and refreshes every screen when it completes.
+2. Wait for the audit to finish. The header polls `GET /api/sites/:id/audit`, shows an **estimated** percentage with the current
+   stage and elapsed time, and offers **Cancel audit**; every screen refreshes when the audit completes or is cancelled. When the
+   server has no runner (`GEO_AUDIT_BIN` unset) a queued audit says plainly that nothing is executing it.
 3. Open **What to Do?** for the prioritized fix list, and **AI Bot Diagnostics** to test live AI crawler access.
 
 Or use the API (`$API_TOKEN` only if you configured one):
@@ -229,6 +238,8 @@ Copy `.env.example` to `.env`. Next.js loads it automatically; the `reports:*` s
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | empty | Gemini visibility checks (`google_search` grounding) |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | empty | Claude visibility checks (`web_search` tool) |
 | `PERPLEXITY_API_KEY`, `PERPLEXITY_MODEL` | empty / `sonar` | Perplexity visibility checks |
+| `LLM_TRANSPORT` | `auto` | `auto` \| `api` \| `cli`: reach the models with API keys or with the signed-in `claude` / `codex` / `agy` CLIs (no key needed). See [docs/visibility.md](docs/visibility.md#key-less-cli-transport-claude-codex-agy) |
+| `CLAUDE_CLI_BIN`, `CODEX_CLI_BIN`, `AGY_CLI_BIN`, `*_CLI_MODEL`, `LLM_CLI_TIMEOUT_MS` | empty | CLI executables, default CLI models and the per-call timeout for the CLI transport |
 | `INDEXNOW_KEY` | empty | Fallback IndexNow key for single-site deployments (per-site keys are generated through the API) |
 | `INDEXNOW_ENDPOINT` | `https://api.indexnow.org/indexnow` | IndexNow endpoint |
 | `GOOGLE_SERVICE_ACCOUNT_JSON`, `GOOGLE_SERVICE_ACCOUNT_FILE` | empty | Google Search Console / Indexing API service account (JSON content or key file path), used when a site has no `googleServiceAccount` integration |
@@ -265,7 +276,9 @@ unrecoverable (re-enter them).
 ## Authentication
 
 Without `API_TOKEN` the API and dashboard are open, which is suitable for local development only. Paid operations
-(`POST /api/sites/:id/visibility`) and the scheduled-report endpoints stay disabled (HTTP 503) until a token is configured.
+(`POST /api/sites/:id/visibility` and the site assistant when billed to an API key) and the scheduled-report endpoints stay
+disabled (HTTP 503) until a token is configured. Runs that only use the key-less CLI transport are allowed from the dashboard's
+own origin.
 
 When `API_TOKEN` is set:
 
@@ -320,7 +333,8 @@ Route details and payloads: [`docs/geo-api.md`](docs/geo-api.md), [`docs/geo-sco
 | `GET` `POST` `DELETE` | `/api/auth` | Session status / exchange `API_TOKEN` for a cookie / log out |
 | `GET` `POST` | `/api/sites` | List tracked sites with their latest audit summary / register a site |
 | `GET` `PATCH` `DELETE` | `/api/sites/:id` | Site details / update settings and integrations / delete with all related data |
-| `GET` `POST` | `/api/sites/:id/audit` | Recent audits and crawl progress / queue a crawl + audit (`202`) |
+| `GET` `POST` | `/api/sites/:id/audit` | Recent audits with live progress (`crawlSession.progress` estimated 0-100, `stage`, `pagesCrawled` / `pagesTotal`) and `runner` (whether this server executes audits itself) / queue a crawl + audit (`202`) |
+| `POST` | `/api/sites/:id/audit/:auditId/cancel` | Cancel a queued or running audit: stops the engine process and frees the site for a new audit (`409` when it already finished) |
 | `POST` | `/api/sites/:id/audit/:auditId/result` | Ingest scoring output from an external worker |
 | `GET` | `/api/sites/:id/actions` | Prioritized action cards (`?status=&category=&impact=&limit=`) |
 | `PATCH` | `/api/sites/:id/actions/:actionId` | Set status `open` / `in_progress` / `resolved` / `dismissed` |
@@ -333,6 +347,8 @@ Route details and payloads: [`docs/geo-api.md`](docs/geo-api.md), [`docs/geo-sco
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | `GET` `POST` | `/api/sites/:id/visibility` | Query suggestions and history / bounded multi-model visibility checks ([usage](docs/visibility.md)) |
+| `GET` `POST` | `/api/sites/:id/chat` | Site assistant: available models / ask a question grounded in the site's data ([details](docs/mcp.md#site-assistant-chatbot)) |
+| `POST` | `/api/mcp` | Model Context Protocol endpoint (Streamable HTTP, stateless) for Claude Code / Codex ([setup](docs/mcp.md)) |
 | `GET` | `/api/sites/:id/queries` | Generated multi-intent test prompts ([details](docs/query-generator.md)) |
 | `GET` `POST` | `/api/sites/:id/queries/synthetic` | Stored test prompts: generate, add manually, archive |
 | `GET` `POST` | `/api/sites/:id/autogeo` | AutoGEO metrics and persisted suggestions / extract suggestions ([usage](docs/autogeo.md)) |
