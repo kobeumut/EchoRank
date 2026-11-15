@@ -64,8 +64,11 @@ following before exposing an instance to a network.
   invalidates all sessions. The cookie is `HttpOnly` and `SameSite=Strict`, and `Secure` when `NODE_ENV=production`: serve the app
   **only over HTTPS** (terminate TLS in a reverse proxy) and run it with `NODE_ENV=production`.
 - `POST /api/auth` locks a client out for up to 15 minutes after 10 wrong tokens (plus a global cap of 200 failures per window). The
-  counters are in memory and per process, and the client is identified by `X-Forwarded-For`, so also rate-limit at the reverse proxy / WAF
-  and make sure the proxy overwrites that header.
+  counters are stored in the database (`LoginThrottle`, keyed by a SHA-256 hash of the client key), so the limit is shared by every
+  instance that uses the same database. If a database call fails, that request falls back to per-process counters and the event is
+  logged; `LOGIN_RATE_LIMIT_STORE=memory` opts into per-process counters, and a custom shared store (for example Redis) can be registered
+  with `configureLoginLimiters`. The client is identified by `X-Forwarded-For`, so make sure the reverse proxy overwrites that header;
+  rate limiting at the proxy / WAF is still recommended as a first line.
 - The app sets baseline security headers on every response (`X-Content-Type-Options`, `X-Frame-Options: DENY`, a `frame-ancestors 'none'`
   Content-Security-Policy, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`) and removes `X-Powered-By`. It does not
   set `Strict-Transport-Security` (set it at the TLS-terminating proxy) or a full script-src CSP.
@@ -78,15 +81,21 @@ The platform makes requests to URLs that users supply: sites to crawl, webhooks,
 
 - Keep `ALLOW_PRIVATE_NETWORK_TARGETS` unset or `false` in production. When it is `false`:
   - registering a site whose URL is `localhost`, a private IP literal or an internal-looking name (`.local`, `.internal`, …) is rejected;
-  - the audit runner, the Python crawler / `geo-botsim` / `geo-autogeo` clients, `POST /api/sites/:id/bot-simulator`, the persisted bot
-    simulation (`/simulation/bots`), syndication / "Apply to CMS" webhooks, IndexNow submissions and key verification refuse targets that
-    resolve to loopback, private, link-local, CGNAT, reserved or other internal addresses — **including every redirect hop**;
+  - the audit runner, the Python crawler / site-signal probes / `geo-botsim` / `geo-autogeo` clients, `POST /api/sites/:id/bot-simulator`,
+    the persisted bot simulation (`/simulation/bots`), syndication / "Apply to CMS" webhooks, IndexNow submissions and key verification,
+    and the Google OAuth token request refuse targets that resolve to loopback, private, link-local, CGNAT, reserved or other internal
+    addresses — **including every redirect hop**;
+  - those connections are **DNS-pinned**: the name is resolved once, every address is checked, and the socket connects to exactly the
+    checked address (Node: an undici dispatcher with a guarded `lookup`, see `pinnedFetch` in `src/lib/distribution/net.ts`; Python: the
+    `PinnedAsyncTransport` / `PinnedTransport` httpx transports in `services/crawler/src/geo_crawler/netguard.py`). The original host name
+    is kept for the `Host` header, TLS SNI and certificate verification, so a DNS-rebinding answer cannot redirect the connection to an
+    internal address after the check;
   - the service-account `token_uri` is only honoured for Google's own HTTPS endpoints (anything else is replaced by the default);
   - scheduled-report webhooks are always restricted to public addresses with a DNS-pinned connection, must use HTTPS, and do not follow
     redirects.
-- **Residual risk:** outside the report webhooks the name is resolved once for the check and again by the HTTP client, so a hostile DNS
-  server could still rebind it (DNS rebinding). For fully untrusted targets also use egress filtering, block cloud metadata endpoints
-  (for example `169.254.169.254`) and keep databases and admin interfaces on networks the app host cannot reach.
+- Defence in depth for fully untrusted targets: use egress filtering, block cloud metadata endpoints (for example `169.254.169.254`) and
+  keep databases and admin interfaces on networks the app host cannot reach. An outbound HTTP proxy configured through the environment is
+  not used by the pinned clients.
 - `GEO_AUDIT_BIN` and `GEO_AUDIT_ARGS` are executed with `execFile` (no shell) and must only be set by the operator.
   Run the audit engine as an unprivileged user, preferably in a container with limited network access.
 
@@ -97,10 +106,13 @@ The platform makes requests to URLs that users supply: sites to crawl, webhooks,
 - Provider keys (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `PERPLEXITY_API_KEY`), `RESEND_API_KEY`,
   `CRUNCHBASE_API_KEY`, Google service-account credentials and `API_TOKEN` are read on the server only. Use dedicated, least-privilege
   keys with spending limits, and rotate them if they may have leaked.
-- Per-site integration secrets (IndexNow key, Google service account JSON, webhook secrets) are stored **unencrypted** in the database
-  (`Site.integrations`). API responses mask them down to the last four characters (values shorter than 16 characters and JSON
-  credentials are fully masked); scheduled-report webhook URLs are returned as their origin only. Restrict database access, encrypt storage and backups, and use PostgreSQL with a
-  least-privilege role in production (SQLite is intended for development).
+- Per-site integration secrets (IndexNow key, Google service account JSON, webhook secrets) are **encrypted at rest** in
+  `Site.integrations` with AES-256-GCM (random IV per value, the field name bound as authenticated data) using `SECRETS_ENCRYPTION_KEY`.
+  Set it in every deployment: with `NODE_ENV=production` the app refuses to store an integration secret without it. Keep the key outside
+  the database and its backups (a secret manager), encrypt existing plaintext rows once with `npm run secrets:encrypt`, and rotate it with
+  `SECRETS_ENCRYPTION_KEY_PREVIOUS` (see README, Configuration). API responses mask secrets down to the last four characters (values
+  shorter than 16 characters and JSON credentials are fully masked); scheduled-report webhook URLs are returned as their origin only.
+  Still restrict database access and use PostgreSQL with a least-privilege role in production (SQLite is intended for development).
 - Visibility checks store queries, answer excerpts and source URLs as application data. Do not submit secrets or personal data as
   prompts, and apply your own retention policy to the database.
 - Never paste real tokens, keys or customer data into issues, logs or pull requests.

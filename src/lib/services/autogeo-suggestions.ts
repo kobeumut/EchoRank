@@ -12,7 +12,7 @@ import { DEFAULT_LOCALE, type Locale } from "../i18n/config";
 import { serverT } from "../i18n/request";
 import { markdownToHtml } from "../autogeo/markdown";
 import { getDistributionSettings, getIntegration, INTEGRATION_KEYS } from "../distribution/config";
-import { assertPublicHttpUrl, OUTBOUND_TIMEOUT_MS, readSnippet } from "../distribution/net";
+import { OUTBOUND_TIMEOUT_MS, pinnedFetch, readSnippet } from "../distribution/net";
 import { signWebhook } from "../distribution/syndication";
 import { csvEnum } from "../validation";
 import {
@@ -307,8 +307,7 @@ export async function applySuggestionToCms(siteId: string, suggestionId: string,
     const timestamp = String(Math.floor(Date.now() / 1000));
     let d: CmsDelivery;
     try {
-      await assertPublicHttpUrl(hook.url);
-      const res = await fetch(hook.url, {
+      const res = await pinnedFetch(hook.url, { // validated, DNS-pinned connection; redirects are not followed
         method: "POST",
         redirect: "manual",
         headers: {

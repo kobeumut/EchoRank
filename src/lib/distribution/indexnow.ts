@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { Site } from "@prisma/client";
 import { getDistributionSettings, getIntegration, INTEGRATION_KEYS, setIntegration } from "./config";
-import { assertPublicHttpUrl, fetchPublic, OUTBOUND_TIMEOUT_MS, readSnippet } from "./net";
+import { assertPublicHttpUrl, fetchPublic, OUTBOUND_TIMEOUT_MS, pinnedFetch, readSnippet } from "./net";
 
 // IndexNow (https://www.indexnow.org/documentation): one POST notifies every participating
 // engine (Bing, Yandex, Seznam, Naver, ...). ChatGPT search is grounded on Bing's index, so this
@@ -55,7 +55,7 @@ export async function verifyKeyFile(site: Site, key: string) {
   const { keyLocation } = describeKeyFile(site, key);
   await assertPublicHttpUrl(keyLocation);
   try {
-    const res = await fetchPublic(keyLocation, { signal: AbortSignal.timeout(OUTBOUND_TIMEOUT_MS) }); // every redirect hop is re-checked
+    const res = await fetchPublic(keyLocation, { signal: AbortSignal.timeout(OUTBOUND_TIMEOUT_MS) }); // every hop is re-checked and DNS-pinned
     const body = (await readSnippet(res, 1_000)).replace(/^﻿/, "").trim();
     const valid = res.ok && body === key;
     return {
@@ -102,8 +102,8 @@ export async function submitIndexNow(site: Site, urls: string[], key: string): P
     const batch = urls.slice(i, i + INDEXNOW_MAX_URLS);
     const body = JSON.stringify({ host, key, ...(keyLocation ? { keyLocation } : {}), urlList: batch });
     try {
-      await assertPublicHttpUrl(endpoint); // the endpoint may come from per-site settings or the environment
-      const res = await fetch(endpoint, {
+      // the endpoint may come from per-site settings or the environment: connect only to a validated public address
+      const res = await pinnedFetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json; charset=utf-8" },
         body,

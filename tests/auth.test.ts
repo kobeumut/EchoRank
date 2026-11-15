@@ -15,11 +15,11 @@ function request(path: string, init: { method?: string; headers?: Record<string,
   });
 }
 
-afterEach(() => {
+afterEach(async () => {
   delete process.env.API_TOKEN;
   delete process.env.SESSION_SECRET;
-  loginLimiter.reset("local");
-  globalLoginLimiter.reset("*");
+  await loginLimiter.reset("local");
+  await globalLoginLimiter.reset("*");
 });
 
 describe("isAuthorized", () => {
@@ -71,7 +71,7 @@ describe("/api/auth", () => {
     for (let i = 0; i < 10; i++) expect((await attempt("wrong")).status).toBe(401);
     expect((await attempt("wrong")).status).toBe(429);
     expect((await attempt(TOKEN)).status).toBe(429); // even the right token waits while locked out
-    loginLimiter.reset("local");
+    await loginLimiter.reset("local");
     expect((await attempt(TOKEN)).status).toBe(200);
   });
 

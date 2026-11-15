@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../db";
-import { assertPublicHttpUrl, OUTBOUND_TIMEOUT_MS } from "../distribution/net";
+import { OUTBOUND_TIMEOUT_MS, pinnedFetch } from "../distribution/net";
 import { HttpError } from "../http";
 import { DEFAULT_LOCALE, type Locale } from "../i18n/config";
 import { serverT } from "../i18n/request";
@@ -166,8 +166,7 @@ export async function probe(url: string, botName: BotName, locale: Locale = DEFA
   let current = url;
   try {
     for (let hop = 0; ; hop++) {
-      await assertPublicHttpUrl(current);
-      const res = await fetch(current, {
+      const res = await pinnedFetch(current, { // every hop: validated, DNS-pinned connection
         redirect: "manual",
         signal: AbortSignal.timeout(OUTBOUND_TIMEOUT_MS),
         headers: { "user-agent": AI_BOTS[botName], accept: "text/html,application/xhtml+xml,*/*;q=0.8" },

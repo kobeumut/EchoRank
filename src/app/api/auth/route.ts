@@ -22,15 +22,14 @@ export const POST = handle(async (request) => {
   if (!token) return json({ required: false, authenticated: true });
   if (!isSameOrigin(request)) throw new HttpError(403, "Cross-origin login is not allowed");
   const client = clientKey(request);
-  const wait = Math.max(loginLimiter.retryAfter(client), globalLoginLimiter.retryAfter("*"));
+  const wait = Math.max(...(await Promise.all([loginLimiter.retryAfter(client), globalLoginLimiter.retryAfter("*")])));
   if (wait) throw new HttpError(429, `Too many failed attempts. Try again in ${Math.ceil(wait / 60)} minute(s).`);
   const body = await parseBody(request, loginSchema);
   if (!safeEqual(body.token, token)) {
-    loginLimiter.fail(client);
-    globalLoginLimiter.fail("*");
+    await Promise.all([loginLimiter.fail(client), globalLoginLimiter.fail("*")]);
     throw new HttpError(401, "Invalid token");
   }
-  loginLimiter.reset(client);
+  await loginLimiter.reset(client);
   const res = json({ required: true, authenticated: true });
   res.headers.append("set-cookie", cookie(await sessionValue(token), SESSION_MAX_AGE));
   return res;

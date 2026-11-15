@@ -2,7 +2,7 @@ import { createSign } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { Site } from "@prisma/client";
 import { getDistributionSettings, getIntegration, INTEGRATION_KEYS } from "./config";
-import { OUTBOUND_TIMEOUT_MS, readSnippet } from "./net";
+import { OUTBOUND_TIMEOUT_MS, pinnedFetch, readSnippet } from "./net";
 
 // Google has no IndexNow support and retired the anonymous sitemap "ping" endpoint in 2023.
 // What remains (and feeds the index Gemini grounds on):
@@ -80,7 +80,8 @@ export async function getAccessToken(sa: ServiceAccount, scope: string): Promise
   const cached = tokenCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
 
-  const res = await fetch(tokenUriFor(sa), {
+  // token_uri comes from a user-supplied service-account file: allow-listed host, validated + DNS-pinned connection
+  const res = await pinnedFetch(tokenUriFor(sa), {
     method: "POST",
     redirect: "error",
     headers: { "content-type": "application/x-www-form-urlencoded" },

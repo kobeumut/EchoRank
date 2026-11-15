@@ -184,6 +184,9 @@ Copy `.env.example` to `.env`. Next.js loads it automatically; the `reports:*` s
 | `GOOGLE_SERVICE_ACCOUNT_JSON`, `GOOGLE_SERVICE_ACCOUNT_FILE` | empty | Google Search Console / Indexing API service account (JSON content or key file path), used when a site has no `googleServiceAccount` integration |
 | `ALLOW_PRIVATE_NETWORK_TARGETS` | `false` | Disables the SSRF guard: lets site URLs, the crawler / simulators, webhooks and IndexNow checks reach localhost and private networks. Development only. Scheduled-report webhooks always require public addresses |
 | `SESSION_SECRET` | empty | Optional extra secret for signing dashboard session cookies. Generate with `openssl rand -hex 32` |
+| `SECRETS_ENCRYPTION_KEY` | empty | 32-byte key (base64 or 64 hex chars) that encrypts per-site integration secrets at rest with AES-256-GCM. **Required in production** (secrets are refused without it when `NODE_ENV=production`); without it, development stores them in plaintext with a warning. Generate with `openssl rand -base64 32` and keep it out of the database backups |
+| `SECRETS_ENCRYPTION_KEY_PREVIOUS` | empty | Comma-separated old keys, used only to decrypt during a key rotation (see below) |
+| `LOGIN_RATE_LIMIT_STORE` | `database` | Where `POST /api/auth` counts failed logins: `database` (the `LoginThrottle` table, shared by every instance) or `memory` (per process). See [Authentication](#authentication) |
 | `GEO_AUDIT_BIN` | empty | Path to the `geo-audit` executable. Empty: audits stay `queued` for an external worker |
 | `GEO_AUDIT_ARGS` | empty | Extra flags for `geo-audit`, split on whitespace (for example `--rps 2 --no-ua-probe`) |
 | `CRAWLER_MAX_PAGES` | `500` | Default page cap for audits whose site settings do not set `maxPages` |
@@ -192,7 +195,20 @@ Copy `.env.example` to `.env`. Next.js loads it automatically; the `reports:*` s
 | `CRAWLER_USER_AGENT`, `CRAWLER_CONCURRENCY`, `SMTP_*` | | Reserved: present in `.env.example` but not read by the current code |
 
 Per-site integration secrets (IndexNow key, Google service account, webhook secret) are stored in the database
-(`Site.integrations`) and masked in API output. See [`SECURITY.md`](SECURITY.md) before deploying.
+(`Site.integrations`) encrypted with `SECRETS_ENCRYPTION_KEY` (AES-256-GCM), and API responses show at most their last four
+characters. See [`SECURITY.md`](SECURITY.md) before deploying.
+
+**Encrypting existing data / rotating the key.** Rows written before the key was configured are plaintext. They stay readable
+and are encrypted on their next change; to encrypt all of them at once, set the key and run:
+
+```bash
+npm run secrets:encrypt -- --dry-run   # report how many sites would change
+npm run secrets:encrypt                # encrypt (idempotent; safe while the app is running)
+```
+
+To rotate, move the current key to `SECRETS_ENCRYPTION_KEY_PREVIOUS`, set a new `SECRETS_ENCRYPTION_KEY`, restart the app and run
+`npm run secrets:encrypt`; once it reports no failures, remove the old key. Losing the key makes the stored secrets
+unrecoverable (re-enter them).
 
 ---
 
@@ -206,9 +222,13 @@ When `API_TOKEN` is set:
 - `/api/*` accepts `Authorization: Bearer <API_TOKEN>` (machine clients) or the dashboard session cookie. `/api/health` and
   `/api/auth` are public. Dashboard pages redirect to `/login`.
 - `POST /api/auth {"token": "..."}` exchanges the token for an `HttpOnly; SameSite=Strict` cookie (`aiv_session`, 7 days)
-  that carries an expiry and an HMAC signature, never the token itself (optionally keyed with `SESSION_SECRET`; repeated wrong tokens
-  are rate-limited). `DELETE /api/auth` logs out and
-  `GET /api/auth` reports `{ required, authenticated }`.
+  that carries an expiry and an HMAC signature, never the token itself (optionally keyed with `SESSION_SECRET`). `DELETE /api/auth`
+  logs out and `GET /api/auth` reports `{ required, authenticated }`.
+- Repeated wrong tokens are rate-limited: 10 failures per client and 200 in total per 15 minutes. The counters are kept in the
+  database (`LoginThrottle`, hashed keys), so the limit holds across all instances that share it. If the database call fails,
+  that request falls back to per-process counters (logged once). `LOGIN_RATE_LIMIT_STORE=memory` keeps the counters per process;
+  another shared store (for example Redis) can be plugged in by implementing `FailureStore` and calling
+  `configureLoginLimiters` from `src/lib/rate-limit.ts` at startup.
 - Cookie-authenticated unsafe requests must be same-origin (CSRF guard). The scheduled-report endpoints require the bearer
   header and ignore the cookie.
 

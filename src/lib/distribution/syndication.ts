@@ -4,7 +4,7 @@ import { prisma } from "../db";
 import { getDistributionSettings, getIntegration, INTEGRATION_KEYS, type DistributionSettings } from "./config";
 import { loadSiteCatalog, type CatalogPage, type CatalogProduct, type SiteCatalog } from "./content";
 import { AI_PATHS, availabilityLabel, clip, formatPrice } from "./llms";
-import { assertPublicHttpUrl, OUTBOUND_TIMEOUT_MS, readSnippet } from "./net";
+import { OUTBOUND_TIMEOUT_MS, pinnedFetch, readSnippet } from "./net";
 import { xmlEscape } from "./sitemap";
 
 // Rotating content syndication. Each period (day / ISO-ish week) a deterministic, seeded pick of
@@ -304,8 +304,7 @@ export async function publishSyndication(siteId: string, opts: { force?: boolean
     const timestamp = String(Math.floor(Date.now() / 1000));
     let result: WebhookResult;
     try {
-      await assertPublicHttpUrl(hook.url);
-      const res = await fetch(hook.url, {
+      const res = await pinnedFetch(hook.url, { // validated, DNS-pinned connection; redirects are not followed
         method: "POST",
         redirect: "manual",
         headers: {
