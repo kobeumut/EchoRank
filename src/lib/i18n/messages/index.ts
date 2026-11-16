@@ -16,6 +16,7 @@ import en_botsim from "@locales/en/botsim.json";
 import en_chat from "@locales/en/chat.json";
 import en_common from "@locales/en/common.json";
 import en_competitors from "@locales/en/competitors.json";
+import en_context from "@locales/en/context.json";
 import en_distribution from "@locales/en/distribution.json";
 import en_eeat from "@locales/en/eeat.json";
 import en_engine from "@locales/en/engine.json";
@@ -49,6 +50,7 @@ import tr_botsim from "@locales/tr/botsim.json";
 import tr_chat from "@locales/tr/chat.json";
 import tr_common from "@locales/tr/common.json";
 import tr_competitors from "@locales/tr/competitors.json";
+import tr_context from "@locales/tr/context.json";
 import tr_distribution from "@locales/tr/distribution.json";
 import tr_eeat from "@locales/tr/eeat.json";
 import tr_engine from "@locales/tr/engine.json";
@@ -83,6 +85,7 @@ export const en = {
   ...en_chat,
   ...en_common,
   ...en_competitors,
+  ...en_context,
   ...en_distribution,
   ...en_eeat,
   ...en_engine,
@@ -118,6 +121,7 @@ export const tr: Record<keyof typeof en, string> = {
   ...tr_chat,
   ...tr_common,
   ...tr_competitors,
+  ...tr_context,
   ...tr_distribution,
   ...tr_eeat,
   ...tr_engine,

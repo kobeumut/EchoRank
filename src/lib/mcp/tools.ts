@@ -89,7 +89,7 @@ export const TOOLS = [
   tool({
     name: "list_actions",
     title: "Prioritized fixes",
-    description: "Prioritized recommendations (\"Ne Yapılmalı?\"), highest priority first. `details` holds the evidence, affected URLs and a ready-made snippet (JSON-LD, robots.txt, llms.txt, meta tags) with instructions — apply it in the site's codebase, then mark the action resolved with update_action_status.",
+    description: "Prioritized recommendations (the dashboard's \"What to Do?\" list), highest priority first. `details` holds the evidence, affected URLs and a ready-made snippet (JSON-LD, robots.txt, llms.txt, meta tags) with instructions — apply it in the site's codebase, then mark the action resolved with update_action_status.",
     input: z.object({
       site,
       status: z.array(z.enum(ACTION_STATUSES)).min(1).default(["open", "in_progress"]),

@@ -6,16 +6,14 @@
 // bounded, so a hostile page cannot flood the prompt. Callers must still frame it as data, never as instructions.
 import { prisma } from "../db";
 import { readPillars } from "../dashboard/pillars";
-import { getMessages } from "../i18n/messages";
-import { createTranslator } from "../i18n/translate";
+import { DEFAULT_LOCALE, type Locale } from "../i18n/config";
+import { serverT } from "../i18n/request";
 import { getSiteOrThrow } from "./sites";
 import { getSiteReport } from "./reports";
 import { listBotSimulations } from "./bot-simulations";
 
 export const SITE_CONTEXT_MAX_CHARS = 40_000;
 const REPORT_DAYS = 90;
-// The digest is written in Turkish, so the engine-independent pillar labels come from the Turkish catalog too.
-const tTr = createTranslator(getMessages("tr"), "tr");
 
 /** Single line, at most `max` characters. */
 export function clipLine(value: unknown, max = 200): string {
@@ -27,7 +25,12 @@ const day = (d: Date | string | null | undefined) => (d ? new Date(d).toISOStrin
 const signed = (n: number | null | undefined) => (n == null ? "" : n > 0 ? ` (+${n})` : n < 0 ? ` (${n})` : " (±0)");
 const keywords = (v: unknown) => (Array.isArray(v) ? v.filter((k): k is string => typeof k === "string").map((k) => clipLine(k, 80)) : []);
 
-export async function buildSiteContext(siteId: string) {
+/**
+ * Builds the digest in `locale` (English by default; `context.*` catalog keys). Text that was stored earlier
+ * (check details, action titles, AutoGEO titles) keeps the language it was generated in.
+ */
+export async function buildSiteContext(siteId: string, locale: Locale = DEFAULT_LOCALE) {
+  const t = serverT(locale);
   const site = await getSiteOrThrow(siteId);
   const since = new Date(Date.now() - REPORT_DAYS * 86_400_000);
   const [report, actions, pages, pageStats, entityTypes, verifiedEntities, records, competitors, bots, suggestions, suggestionCount] = await Promise.all([
@@ -74,83 +77,97 @@ export async function buildSiteContext(siteId: string) {
   const out: string[] = [];
   out.push(`# ${clipLine(site.title, 120)} (${site.url})`);
   out.push(`Site ID: ${site.id}`);
-  if (site.description) out.push(`Açıklama: ${clipLine(site.description, 400)}`);
+  if (site.description) out.push(t("context.description", { value: clipLine(site.description, 400) }));
   const kw = keywords(site.targetKeywords);
-  if (kw.length) out.push(`Hedef anahtar kelimeler: ${kw.slice(0, 20).join(", ")}`);
+  if (kw.length) out.push(t("context.keywords", { value: kw.slice(0, 20).join(", ") }));
 
-  out.push("", "## Skorlar");
+  out.push("", t("context.scores.heading"));
   if (report.scores) {
     const s = report.scores;
-    out.push(`Son tamamlanan analiz: ${day(s.auditedAt)}. GEO ${s.geo ?? "—"}${signed(s.delta.geo)}, SEO ${s.seo ?? "—"}${signed(s.delta.seo)}, E-E-A-T ${s.eeat ?? "—"}${signed(s.delta.eeat)} (0-100, parantez içi önceki analize göre fark).`);
-    for (const pillar of readPillars(s.metrics, tTr)) {
-      out.push(`- ${pillar.label}: ${pillar.score}${pillar.weight ? ` (ağırlık %${Math.round(pillar.weight * 100)})` : ""}`);
+    out.push(t("context.scores.summary", {
+      date: day(s.auditedAt),
+      geo: `${s.geo ?? "—"}${signed(s.delta.geo)}`,
+      seo: `${s.seo ?? "—"}${signed(s.delta.seo)}`,
+      eeat: `${s.eeat ?? "—"}${signed(s.delta.eeat)}`,
+    }));
+    for (const pillar of readPillars(s.metrics, t)) {
+      out.push(`- ${pillar.label}: ${pillar.score}${pillar.weight ? t("context.scores.weight", { percent: Math.round(pillar.weight * 100) }) : ""}`);
       const failing = pillar.checks.filter((c) => c.applicable && !c.passed).sort((a, b) => a.score - b.score).slice(0, 6);
       for (const c of failing) {
-        const urls = c.urls?.length ? ` — örnek URL: ${c.urls.slice(0, 2).join(", ")}${(c.url_count ?? c.urls.length) > 2 ? ` (+${(c.url_count ?? c.urls.length) - 2})` : ""}` : "";
-        out.push(`  - BAŞARISIZ ${clipLine(c.label, 100)} (${c.score})${c.detail ? `: ${clipLine(c.detail, 200)}` : ""}${urls}`);
+        const more = (c.url_count ?? c.urls?.length ?? 0) > 2 ? ` (+${(c.url_count ?? c.urls!.length) - 2})` : "";
+        const urls = c.urls?.length ? t("context.scores.exampleUrls", { urls: `${c.urls.slice(0, 2).join(", ")}${more}` }) : "";
+        out.push(`  - ${t("context.scores.failed")} ${clipLine(c.label, 100)} (${c.score})${c.detail ? `: ${clipLine(c.detail, 200)}` : ""}${urls}`);
       }
     }
     if (report.history.length > 1) {
-      out.push(`Skor geçmişi (son ${REPORT_DAYS} gün): ${report.history.slice(-6).map((h) => `${day(h.date)} GEO ${h.geo ?? "—"}`).join(" · ")}`);
+      out.push(t("context.scores.history", { days: REPORT_DAYS, items: report.history.slice(-6).map((h) => `${day(h.date)} GEO ${h.geo ?? "—"}`).join(" · ") }));
     }
   } else {
-    out.push("Henüz tamamlanmış analiz yok (kullanıcı \"Analizi Başlat\" ile bir analiz çalıştırmalı).");
+    out.push(t("context.scores.none"));
   }
 
-  out.push("", `## Açık aksiyonlar (${report.actions.open} açık; kritik ${report.actions.byImpact.high ?? 0}, önemli ${report.actions.byImpact.medium ?? 0}, iyileştirme ${report.actions.byImpact.low ?? 0})`);
-  if (!actions.length) out.push("Açık aksiyon yok.");
+  out.push("", t("context.actions.heading", {
+    open: report.actions.open, high: report.actions.byImpact.high ?? 0, medium: report.actions.byImpact.medium ?? 0, low: report.actions.byImpact.low ?? 0,
+  }));
+  if (!actions.length) out.push(t("context.actions.none"));
   for (const a of actions) {
     const details = a.details && typeof a.details === "object" && !Array.isArray(a.details) ? (a.details as Record<string, unknown>) : {};
-    const count = typeof details.affected_count === "number" ? `, ${details.affected_count} URL` : "";
-    out.push(`- [${a.impact}/${a.category}${a.effort ? `/efor ${a.effort}` : ""}] ${clipLine(a.title, 160)}${a.targetUrl ? ` — ${clipLine(a.targetUrl, 160)}` : ""}${count} (id: ${a.id}${a.status === "in_progress" ? ", devam ediyor" : ""})`);
+    const count = typeof details.affected_count === "number" ? t("context.actions.urlCount", { count: details.affected_count }) : "";
+    const effort = a.effort ? t("context.actions.effort", { effort: a.effort }) : "";
+    out.push(`- [${a.impact}/${a.category}${effort}] ${clipLine(a.title, 160)}${a.targetUrl ? ` — ${clipLine(a.targetUrl, 160)}` : ""}${count} (id: ${a.id}${a.status === "in_progress" ? t("context.actions.inProgress") : ""})`);
     if (a.description) out.push(`  ${clipLine(a.description, 260)}`);
   }
 
-  out.push("", `## Taranan sayfalar (${pageCount} sayfa; meta açıklaması eksik ${noMeta}, H1 eksik ${noH1}, 300 kelimeden kısa ${thin}, HTTP 4xx/5xx ${broken})`);
+  out.push("", t("context.pages.heading", { count: pageCount, noMeta, noH1, thin, broken }));
   for (const p of pages) {
-    out.push(`- ${clipLine(p.url, 160)} | ${p.pageType ?? "?"} | HTTP ${p.statusCode ?? "?"} | ${p.wordCount} kelime | başlık: ${clipLine(p.title, 90) || "—"}${p.metaDescription ? "" : " | meta yok"}${p.h1 ? "" : " | H1 yok"}`);
+    out.push(`- ${clipLine(p.url, 160)} | ${p.pageType ?? "?"} | HTTP ${p.statusCode ?? "?"} | ${t("context.pages.row", { words: p.wordCount, title: clipLine(p.title, 90) || "—" })}${p.metaDescription ? "" : t("context.pages.noMeta")}${p.h1 ? "" : t("context.pages.noH1")}`);
   }
-  if (pageCount > pages.length) out.push(`(… ${pageCount - pages.length} sayfa daha)`);
+  if (pageCount > pages.length) out.push(t("context.pages.more", { count: pageCount - pages.length }));
 
-  out.push("", "## Bilgi grafı");
+  out.push("", t("context.graph.heading"));
   out.push(entityTypes.length
-    ? `Varlıklar: ${entityTypes.sort((a, b) => b._count._all - a._count._all).map((t) => `${t.entityType} ${t._count._all}`).join(", ")}. Wikidata ile doğrulanmış: ${verifiedEntities}.`
-    : "Graf boş (henüz tarama yok).");
+    ? t("context.graph.entities", { items: entityTypes.sort((a, b) => b._count._all - a._count._all).map((e) => `${e.entityType} ${e._count._all}`).join(", "), verified: verifiedEntities })
+    : t("context.graph.empty"));
 
-  out.push("", `## LLM görünürlüğü (son ${REPORT_DAYS} gün)`);
+  out.push("", t("context.visibility.heading", { days: REPORT_DAYS }));
   const v = report.visibility;
-  if (!v.totalChecks) out.push("Kayıtlı görünürlük kontrolü yok (\"LLM Görünürlük\" ekranından çalıştırılabilir).");
+  if (!v.totalChecks) out.push(t("context.visibility.none"));
   else {
-    out.push(`${v.totalChecks} kontrol: atıf oranı %${v.citationRate}, görünürlük (atıf + bahsedilme) %${v.visibilityRate}.`);
-    for (const [model, m] of Object.entries(v.perModel)) out.push(`- ${model}: ${m.total} kontrol, atıf %${m.citationRate}, görünürlük %${m.visibilityRate}`);
-    out.push("Son kontroller:");
+    out.push(t("context.visibility.summary", { total: v.totalChecks, citation: v.citationRate, visibility: v.visibilityRate }));
+    for (const [model, m] of Object.entries(v.perModel)) out.push(t("context.visibility.perModel", { model, total: m.total, citation: m.citationRate, visibility: m.visibilityRate }));
+    out.push(t("context.visibility.latest"));
     for (const r of records) {
-      out.push(`- ${day(r.checkedAt)} ${r.model} | "${clipLine(r.query, 120)}" → ${r.citationStatus}${r.position ? ` (sıra ${r.position})` : ""}${r.excerpt ? ` | ${clipLine(r.excerpt, 160)}` : ""}`);
+      out.push(`- ${day(r.checkedAt)} ${r.model} | "${clipLine(r.query, 120)}" → ${r.citationStatus}${r.position ? t("context.visibility.position", { position: r.position }) : ""}${r.excerpt ? ` | ${clipLine(r.excerpt, 160)}` : ""}`);
     }
   }
 
-  out.push("", "## Rakipler (Model Payı)");
-  if (!competitors.length) out.push("Rakip analizi yok (ayarlarda rakip tanımlanıp görünürlük kontrolü yapılmalı).");
+  out.push("", t("context.competitors.heading"));
+  if (!competitors.length) out.push(t("context.competitors.none"));
   for (const c of competitors) {
-    out.push(`- ${clipLine(c.competitorName ?? c.competitorDomain, 80)} (${c.competitorDomain}): model payı %${Math.round(c.shareOfModel)}, atıf alan sorgu ${c.citedQueriesCount}, sitenin kaçırdığı sorgu ${c.gapQueriesCount}${c.sentimentScore != null ? `, duygu ${c.sentimentScore}` : ""}`);
+    out.push(t("context.competitors.row", {
+      name: clipLine(c.competitorName ?? c.competitorDomain, 80), domain: c.competitorDomain, share: Math.round(c.shareOfModel), cited: c.citedQueriesCount, gap: c.gapQueriesCount,
+      sentiment: c.sentimentScore != null ? t("context.competitors.sentiment", { score: c.sentimentScore }) : "",
+    }));
   }
 
-  out.push("", "## AI bot erişimi (son canlı test)");
-  if (!bots.summary) out.push("Canlı bot testi yapılmamış (\"AI Bot Teşhis\" ekranı).");
+  out.push("", t("context.bots.heading"));
+  if (!bots.summary) out.push(t("context.bots.none"));
   else {
-    out.push(`Test tarihi: ${day(bots.checkedAt)}`);
+    out.push(t("context.bots.date", { date: day(bots.checkedAt) }));
     for (const b of bots.summary.perBot) {
-      out.push(`- ${b.botName}: ${b.checked} URL, ${b.ok} sorunsuz, ${b.blocked} engelli${b.blockedBy.length ? ` (${b.blockedBy.join(", ")})` : ""}, ${b.csrShells} boş JS kabuğu, ort. ${b.avgTokens} token`);
+      out.push(t("context.bots.row", {
+        bot: b.botName, checked: b.checked, ok: b.ok, blocked: b.blocked, blockedBy: b.blockedBy.length ? ` (${b.blockedBy.join(", ")})` : "", shells: b.csrShells, tokens: b.avgTokens,
+      }));
     }
-    if (bots.summary.botOnlyBlocks.length) out.push(`Yalnızca botlara uygulanan engeller: ${bots.summary.botOnlyBlocks.slice(0, 5).map((b) => `${b.botName} @ ${clipLine(b.url, 100)}`).join("; ")}`);
+    if (bots.summary.botOnlyBlocks.length) out.push(t("context.bots.onlyBots", { items: bots.summary.botOnlyBlocks.slice(0, 5).map((b) => `${b.botName} @ ${clipLine(b.url, 100)}`).join("; ") }));
   }
 
-  out.push("", `## AutoGEO içerik önerileri (${suggestionCount} bekleyen)`);
+  out.push("", t("context.autogeo.heading", { count: suggestionCount }));
   for (const s of suggestions) {
-    out.push(`- ${clipLine(s.pageUrl, 140)} | ${s.ruleType} | beklenen kazanç %${Math.round(s.expectedGain)}${s.title ? ` | ${clipLine(s.title, 100)}` : ""}`);
+    out.push(`- ${clipLine(s.pageUrl, 140)} | ${s.ruleType} | ${t("context.autogeo.row", { gain: Math.round(s.expectedGain) })}${s.title ? ` | ${clipLine(s.title, 100)}` : ""}`);
   }
 
   let markdown = out.join("\n");
-  if (markdown.length > SITE_CONTEXT_MAX_CHARS) markdown = `${markdown.slice(0, SITE_CONTEXT_MAX_CHARS)}\n(… bağlam kısaltıldı)`;
+  if (markdown.length > SITE_CONTEXT_MAX_CHARS) markdown = `${markdown.slice(0, SITE_CONTEXT_MAX_CHARS)}\n${t("context.truncated")}`;
   return { site: { id: site.id, url: site.url, title: site.title }, markdown };
 }

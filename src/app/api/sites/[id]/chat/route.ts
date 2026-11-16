@@ -1,5 +1,6 @@
 import { apiToken } from "@/lib/auth";
 import { authorizeModelCalls, handle, json, parseBody } from "@/lib/http";
+import { localeFromRequest } from "@/lib/i18n/request";
 import { askSiteChat, chatOptions, paidChatProvider, siteChatInput } from "@/lib/services/site-chat";
 import { getSiteOrThrow } from "@/lib/services/sites";
 
@@ -19,5 +20,5 @@ export const GET = handle<Ctx>(async (_req, { params }) => {
 export const POST = handle<Ctx>(async (request, { params }) => {
   const input = await parseBody(request, siteChatInput);
   await authorizeModelCalls(request, () => paidChatProvider(input), "using the site assistant");
-  return json(await askSiteChat((await params).id, input));
+  return json(await askSiteChat((await params).id, input, localeFromRequest(request)));
 });
