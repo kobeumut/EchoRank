@@ -117,10 +117,11 @@ describe("MCP tools", () => {
     expect(isError).toBe(false);
     expect(text).toContain("# Acme (https://www.acme.test)");
     expect(text).toContain("GEO 62");
-    expect(text).toContain("BAŞARISIZ FAQPage şeması");
+    // The digest frame is English; the seeded check/action titles are stored text and keep their own (Turkish) language.
+    expect(text).toContain("FAILED FAQPage şeması");
     expect(text).toContain("FAQPage şeması ekle");
     expect(text).toContain("kahve makinesi");
-    expect(text).toMatch(/2 sayfa; meta açıklaması eksik 1, H1 eksik 1/);
+    expect(text).toMatch(/2 pages; missing meta description 1, missing H1 1/);
   });
 
   it("lists actions with snippets in priority order and updates their status", async () => {
